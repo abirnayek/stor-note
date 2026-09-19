@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Plus, Download, Undo, Mail, MessageCircle, Share2, Phone, Trash2, CheckCircle, Clock } from 'lucide-react';
+import { ArrowLeft, Save, Share2, Download, Printer, Plus, Trash2, Phone, X, Search } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
@@ -733,3 +733,4 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 };
 
 export default SalesMemoScreen;
+

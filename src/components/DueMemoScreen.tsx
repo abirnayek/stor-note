@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Plus, Trash2, Phone } from 'lucide-react';
+import { ArrowLeft, Save, Share2, Download, Printer, Plus, Trash2, Edit2 } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import SignatureCanvas from 'react-signature-canvas';
 import CallMenu from './CallMenu';
@@ -45,6 +45,7 @@ interface DueMemoState {
 
 const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueId, isPaid = false }) => {
   const { t, language } = useLanguage();
+  const memoRef = useRef<HTMLDivElement>(null);
   const sigPadReceiver = useRef<SignatureCanvas>(null);
   const sigPadSeller = useRef<SignatureCanvas>(null);
   
@@ -690,3 +691,4 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
 };
 
 export default DueMemoScreen;
+

@@ -186,6 +186,11 @@ export const translations = {
     writeHere: 'Write here...',
     totalPriceLabel: 'Total Price',
     totalCostLabel: 'Total Cost',
+    purchaseDue: 'Purchase Due',
+    totalBill: 'Total Bill',
+    deposit: 'Deposit',
+    currentDue: 'Current Due',
+    salesMemo: 'Sales Memo',
     calcCostPercent: 'Calculated Cost %',
     fishName: 'Fish Name',
     weightKg: 'Weight/Kg',
@@ -264,3 +269,4 @@ export const translations = {
     salesMemoTitle: 'Sales Account',
   }
 };
+

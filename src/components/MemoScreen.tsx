@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Plus, Download, Undo, Mail, MessageCircle, Share2, Phone, Trash2, Clock, X } from 'lucide-react';
+import { ArrowLeft, Save, Share2, Download, Printer, Plus, Trash2, Phone } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
@@ -600,3 +600,4 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
 };
 
 export default MemoScreen;
+
