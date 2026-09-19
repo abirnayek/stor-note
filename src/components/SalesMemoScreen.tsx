@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ArrowLeft, Save, Share2, Download, Printer, Plus, Trash2, Phone, X, Search } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, Undo, MessageCircle, Mail, Save, Share2, Download, Printer, Plus, Trash2, Phone, X, Search } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';

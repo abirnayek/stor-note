@@ -410,7 +410,7 @@ function App() {
             <button className="btn-icon-wrapper" onClick={() => setIsSettingsOpen(true)}>
               <Settings size={36} className="sidebar-icon" />
             </button>
-            <button className="btn-icon-wrapper" title={userEmail || "Login"} onClick={() => userEmail ? setIsUserMenuOpen(true) : handleLogin()}>
+            <button className="btn-icon-wrapper" title={(session?.user?.email || userEmail) || "Login"} onClick={() => (session?.user?.email || userEmail) ? setIsUserMenuOpen(true) : handleLogin()}>
               <User size={36} className="sidebar-icon" />
             </button>
           </div>
