@@ -212,7 +212,7 @@ function App() {
         <div className="header-left" onClick={() => handleNavigate('dashboard')} style={{ cursor: 'pointer' }}>
           <img src="./see fish logo.png" alt="Logo" className="logo" />
           <h1 className="title">{t('appTitle')}</h1>
-          <img src="/notebook_pen_favicon.jpg" alt="Notebook Icon" className="notebook-icon-header" />
+          <img src="./notebook_pen_favicon.jpg" alt="Notebook Icon" className="notebook-icon-header" />
         </div>
         <div className="header-right">
           <div className="search-container">
