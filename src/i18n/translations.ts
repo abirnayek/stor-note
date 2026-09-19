@@ -45,6 +45,7 @@ export const translations = {
     lotsList: 'লট তালিকা',
     lotPrefix: 'লট:',
     newLot: 'নতুন লট',
+    newMemo: 'নতুন মেমো',
 
     // Memo Screen
     purchaseMemo: 'ক্রয় মেমো',
@@ -182,6 +183,7 @@ export const translations = {
     lotsList: 'Lots List',
     lotPrefix: 'Lot:',
     newLot: 'New Lot',
+    newMemo: 'New Memo',
 
     // Memo Screen
     purchaseMemo: 'Purchase Memo',

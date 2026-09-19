@@ -198,7 +198,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
         <div className="lot-card add-lot-card" onClick={handleAddMemo}>
           <div className="add-lot-content">
             <Plus size={48} />
-            <h3>New Memo</h3>
+            <h3>{t('newMemo')}</h3>
           </div>
         </div>
       </div>

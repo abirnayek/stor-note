@@ -139,7 +139,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         <div className="lot-card add-lot-card" onClick={handleAddLot}>
           <div className="add-lot-content">
             <Plus size={48} />
-            <h3>{t('newLot')}</h3>
+            <h3>{t('newMemo')}</h3>
           </div>
         </div>
       </div>
