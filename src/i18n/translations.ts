@@ -39,6 +39,7 @@ export const translations = {
     forgotPassword: 'পাসওয়ার্ড ভুলে গেছেন?',
     resetSent: 'একটি রিসেট কোড আপনার জিমেইলে পাঠানো হয়েছে।',
     backBtn: 'ফিরে যান',
+    skipBtn: 'স্কিপ করুন',
 
     // Lots Screen
     lotsList: 'লট তালিকা',
@@ -169,6 +170,7 @@ export const translations = {
     forgotPassword: 'Forgot password?',
     resetSent: 'A reset code has been sent to your Gmail.',
     backBtn: 'Back',
+    skipBtn: 'Skip',
 
     // Lots Screen
     lotsList: 'Lots List',

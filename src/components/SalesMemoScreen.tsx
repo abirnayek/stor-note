@@ -33,6 +33,8 @@ interface MemoState {
   paidAmount: number | '';
   customerType?: 'regular' | 'permanent' | '';
   status?: 'due' | 'paid' | 'draft';
+  createdAt?: string;
+  updatedAt?: string;
   entries: FishEntry[];
 }
 
@@ -53,6 +55,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        if (!parsed.createdAt) parsed.createdAt = today;
         return {
           customerName: parsed.customerName || parsed.supplierName || '',
           address: parsed.address || '',
@@ -61,6 +64,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           paidAmount: parsed.paidAmount || '',
           customerType: parsed.customerType || '',
           status: parsed.status || 'draft',
+          createdAt: parsed.createdAt || today,
+          updatedAt: parsed.updatedAt,
           entries: parsed.entries || [{ id: Date.now().toString(), name: '', totalKg: '', profitPercent: 20 }]
         };
       } catch (e) {
@@ -75,116 +80,140 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       paidAmount: '',
       customerType: '',
       status: 'draft',
+      createdAt: today,
       entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', profitPercent: 20 }]
     };
   };
 
   const [memoState, setMemoState, undo, canUndo] = useHistory<MemoState>(getInitialState());
   const [saveStatus, setSaveStatus] = useState<string>('Saved');
-  const [showDueModal, setShowDueModal] = useState(false);
-  const [showPaidModal, setShowPaidModal] = useState(false);
   const [showBusinessCallMenu, setShowBusinessCallMenu] = useState(false);
   const [showBusinessCallMenu2, setShowBusinessCallMenu2] = useState(false);
   const [showCustomerCallMenu, setShowCustomerCallMenu] = useState(false);
 
+  const isMounted = useRef(false);
+
   // Auto-save
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
+
+    if (memoState.createdAt && memoState.createdAt !== today && memoState.updatedAt !== today) {
+      setMemoState(prev => ({ ...prev, updatedAt: today }));
+      return;
+    }
+
+    // Calculate due amount for auto-sync
+    let grandTotal = 0;
+    memoState.entries.forEach(entry => {
+      let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
+      let buyRateNum = Number(entry.buyRate) || 0;
+      let calculatedSaleRate = buyRateNum > 0 ? buyRateNum + (buyRateNum * currentProfitPercent / 100) : 0;
+      let saleRate = 0;
+      if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+        let manualRateNum = Number(entry.manualSaleRate);
+        saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+      } else {
+        saleRate = calculatedSaleRate;
+      }
+      let weightInKg = 0;
+      let totalKgNum = Number(entry.totalKg) || 0;
+      if (totalKgNum > 0) {
+        weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
+      }
+      if (weightInKg > 0 && saleRate > 0) {
+        grandTotal += weightInKg * saleRate;
+      }
+    });
+
+    const dueAmount = grandTotal - Number(memoState.paidAmount || 0);
+    let currentStatus = memoState.status || 'draft';
+
+    if (memoState.customerType) {
+      if (dueAmount > 0) {
+        currentStatus = 'due';
+      } else if (grandTotal > 0 && dueAmount <= 0) {
+        currentStatus = 'paid';
+      }
+    }
+
+    if (memoState.status !== currentStatus) {
+      setMemoState(prev => ({ ...prev, status: currentStatus }));
+      return;
+    }
+
+    // Sync to due accounts if customer type is selected
+    if (memoState.customerType) {
+      const type = memoState.customerType;
+      
+      const newDueData = {
+        id: memoId,
+        memoState: memoState,
+        date: memoState.createdAt || today,
+        name: memoState.customerName,
+        address: memoState.address,
+        mobile: memoState.mobile,
+        lotNumber: memoState.lotNumberInput,
+        deposit: memoState.paidAmount,
+        type: type,
+        entries: memoState.entries.map((e, i) => ({
+          id: e.id,
+          serialNo: (i+1).toString(),
+          name: e.name,
+          totalKg: e.totalKg,
+          weightUnit: e.weightUnit,
+          buyRate: e.buyRate || '',
+          profitPercent: e.profitPercent,
+          manualSaleRate: e.manualSaleRate
+        }))
+      };
+
+      if (currentStatus === 'due') {
+        localStorage.setItem(`due_memo_${memoId}`, JSON.stringify(newDueData));
+        
+        const existingDuesStr = localStorage.getItem(`dues_${type}`);
+        let existingDues: string[] = existingDuesStr ? JSON.parse(existingDuesStr) : [];
+        if (!existingDues.includes(memoId)) {
+          existingDues.push(memoId);
+          localStorage.setItem(`dues_${type}`, JSON.stringify(existingDues));
+        }
+
+        // Remove from paid if it was there
+        const existingPaidStr = localStorage.getItem(`paid_dues_${type}`);
+        let existingPaid: string[] = existingPaidStr ? JSON.parse(existingPaidStr) : [];
+        if (existingPaid.includes(memoId)) {
+          existingPaid = existingPaid.filter(id => id !== memoId);
+          localStorage.setItem(`paid_dues_${type}`, JSON.stringify(existingPaid));
+        }
+      } else if (currentStatus === 'paid') {
+        localStorage.setItem(`due_memo_${memoId}`, JSON.stringify({ ...newDueData, paidDate: Date.now() }));
+        
+        const existingPaidStr = localStorage.getItem(`paid_dues_${type}`);
+        let existingPaid: string[] = existingPaidStr ? JSON.parse(existingPaidStr) : [];
+        if (!existingPaid.includes(memoId)) {
+          existingPaid.push(memoId);
+          localStorage.setItem(`paid_dues_${type}`, JSON.stringify(existingPaid));
+        }
+
+        // Remove from dues if it was there
+        const existingDuesStr = localStorage.getItem(`dues_${type}`);
+        let existingDues: string[] = existingDuesStr ? JSON.parse(existingDuesStr) : [];
+        if (existingDues.includes(memoId)) {
+          existingDues = existingDues.filter(id => id !== memoId);
+          localStorage.setItem(`dues_${type}`, JSON.stringify(existingDues));
+        }
+      }
+    }
+
     localStorage.setItem(`sales_memo_lot_${lotNumber}_memo_${memoId}`, JSON.stringify(memoState));
     setSaveStatus('Saving...');
     const timer = setTimeout(() => setSaveStatus('Saved'), 500);
     return () => clearTimeout(timer);
   }, [memoState, lotNumber, memoId]);
 
-  const processMarkDue = (type: 'regular' | 'permanent') => {
-    updateMemoState('status', 'due');
-    const dueId = Date.now().toString();
-    const newDueData = {
-      id: dueId,
-      memoState: { ...memoState, status: 'due' },
-      date: today,
-      name: memoState.customerName,
-      address: memoState.address,
-      mobile: memoState.mobile,
-      lotNumber: memoState.lotNumberInput,
-      deposit: memoState.paidAmount,
-      type: type,
-      entries: memoState.entries.map(e => ({
-        id: e.id,
-        serialNo: e.serialNo || '',
-        name: e.name,
-        totalKg: e.totalKg,
-        weightUnit: e.weightUnit,
-        buyRate: e.buyRate || '',
-        profitPercent: e.profitPercent,
-        manualSaleRate: e.manualSaleRate
-      }))
-    };
-    
-    // Save to dues list
-    const existingDuesStr = localStorage.getItem(`dues_${type}`);
-    const existingDues = existingDuesStr ? JSON.parse(existingDuesStr) : [];
-    localStorage.setItem(`dues_${type}`, JSON.stringify([...existingDues, dueId]));
-    
-    // Save due memo data
-    localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(newDueData));
-    
-    alert(`Added to ${type === 'regular' ? 'Regular' : 'Permanent'} Due Account!`);
-    setShowDueModal(false);
-  };
 
-  const handleMarkDueClick = () => {
-    if (memoState.customerType) {
-      processMarkDue(memoState.customerType);
-    } else {
-      setShowDueModal(true);
-    }
-  };
-
-  const processMarkPaid = (type: 'regular' | 'permanent') => {
-    updateMemoState('status', 'paid');
-    const paidId = Date.now().toString();
-    const newPaidData = {
-      id: paidId,
-      memoState: { ...memoState, status: 'paid' },
-      date: today,
-      name: memoState.customerName,
-      address: memoState.address,
-      mobile: memoState.mobile,
-      lotNumber: memoState.lotNumberInput,
-      deposit: memoState.paidAmount,
-      type: type,
-      paidDate: Date.now(),
-      entries: memoState.entries.map(e => ({
-        id: e.id,
-        serialNo: e.serialNo || '',
-        name: e.name,
-        totalKg: e.totalKg,
-        weightUnit: e.weightUnit,
-        buyRate: e.buyRate || '',
-        profitPercent: e.profitPercent,
-        manualSaleRate: e.manualSaleRate
-      }))
-    };
-    
-    // Save to paid dues list
-    const existingPaidStr = localStorage.getItem(`paid_dues_${type}`);
-    const existingPaid = existingPaidStr ? JSON.parse(existingPaidStr) : [];
-    localStorage.setItem(`paid_dues_${type}`, JSON.stringify([...existingPaid, paidId]));
-    
-    // Save paid memo data
-    localStorage.setItem(`due_memo_${paidId}`, JSON.stringify(newPaidData));
-    
-    alert(`Added to ${type === 'regular' ? 'Regular' : 'Permanent'} Paid Account!`);
-    setShowPaidModal(false);
-  };
-
-  const handleMarkPaidClick = () => {
-    if (memoState.customerType) {
-      processMarkPaid(memoState.customerType);
-    } else {
-      setShowPaidModal(true);
-    }
-  };
 
   const updateMemoState = (field: keyof MemoState, value: any) => {
     setMemoState(prev => ({ ...prev, [field]: value }));
@@ -280,6 +309,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const shareUrl = window.location.href;
   const shareText = `Check out this Sales Memo (Lot: ${lotNumber})`;
 
+
+
   let grandTotal = 0;
   memoState.entries.forEach(entry => {
     let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
@@ -317,9 +348,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         <button className="btn-icon" onClick={() => onNavigate('sales-memo-list')}>
           <ChevronLeft size={24} />
         </button>
-        <div style={{display: 'flex', flexDirection: 'column'}}>
-          <h2>{t('salesAccount')} (Sales Memo)</h2>
-          <span style={{fontSize: '0.8rem', color: saveStatus === 'Saved' ? '#72be44' : '#fff', transition: 'color 0.3s'}}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <h2>{t('salesMemo')}</h2>
+          <span style={{ fontSize: '0.8rem', color: saveStatus === 'Saved' ? '#72be44' : '#fff', transition: 'color 0.3s' }}>
             {saveStatus === 'Saved' ? '✔ All changes saved' : 'Saving...'}
           </span>
         </div>
@@ -348,12 +379,13 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       </div>
 
       <div className="memo-wrapper">
-        <div className="memo-paper-dark" ref={memoRef}>
+        {/* The Paper has fixed width but dark theme styling */}
+        <div className="memo-paper-dark" ref={memoRef} >
           
           <div className="memo-dark-header">
             <div className="memo-logo-area-dark">
               <div className="memo-logo-rect-dark">
-                <img src="/see fish logo.png" alt="Logo" />
+                <img src="./see fish logo.png" alt="Logo" />
               </div>
               <h1>{t('appTitle')}</h1>
             </div>
@@ -418,9 +450,21 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
             </div>
             
             <div className="meta-item right-align" style={{ alignSelf: 'flex-start', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
-              <div>
-                <span className="memo-label-dark">{t('date')}: </span>
-                <span className="memo-value-dark">{today}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <span className="memo-label-dark">{t('date')}: </span>
+                  <input
+                    type="text"
+                    value={memoState.createdAt || today}
+                    onChange={e => updateMemoState('createdAt', e.target.value)}
+                    style={{ background: 'transparent', border: 'none', color: '#fff', width: '120px', marginLeft: 10, textAlign: 'center', fontSize: 'inherit', fontFamily: 'inherit', outline: 'none' }}
+                  />
+                </div>
+                {memoState.updatedAt && (
+                  <div style={{ fontSize: '0.75rem', color: '#ffb74d', marginTop: '2px' }}>
+                    পরিবর্তিত তারিখ: {memoState.updatedAt}
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span className="memo-label-dark" style={{ fontSize: '0.9rem' }}>Lot No:</span>
@@ -594,7 +638,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 <input 
                   type="number" 
                   className="supplier-input" 
-                  style={{ width: '100px', textAlign: 'right', padding: '0.3rem' }}
+                  style={{ width: '100%', textAlign: 'center', padding: '0.3rem' }}
                   value={memoState.paidAmount}
                   onChange={e => updateMemoState('paidAmount', e.target.value ? Number(e.target.value) : '')}
                   placeholder="0.00"
@@ -650,14 +694,6 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
             </div>
           </div>
 
-          <div className="sales-actions" data-html2canvas-ignore style={{ display: 'flex', justifyContent: 'center', gap: '1rem', width: '100%', marginTop: '2rem', marginBottom: '1rem' }}>
-            <button className="btn-primary btn-3d" style={{ background: '#72be44', padding: '0.5rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }} onClick={handleMarkPaidClick}>
-              <CheckCircle size={20} /> Paid
-            </button>
-            <button className="btn-primary btn-3d" style={{ background: '#ff9800', padding: '0.5rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }} onClick={handleMarkDueClick}>
-              <Clock size={20} /> Due
-            </button>
-          </div>
 
           <div className="memo-dark-footer">
             <div className="sig-box-dark">
@@ -691,34 +727,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           
         </div>
       </div>
-      
-      {showDueModal && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ background: 'var(--card-bg)', padding: '2rem', borderRadius: '12px', color: '#fff', textAlign: 'center' }}>
-            <h3>Select Due Type</h3>
-            <p>Where do you want to add this due?</p>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '1.5rem' }}>
-              <button className="btn-primary" onClick={() => { updateMemoState('customerType', 'regular'); processMarkDue('regular'); }}>{t('regularDue')}</button>
-              <button className="btn-primary" onClick={() => { updateMemoState('customerType', 'permanent'); processMarkDue('permanent'); }}>{t('permanentDue')}</button>
-            </div>
-            <button className="btn-icon" style={{ marginTop: '1rem' }} onClick={() => setShowDueModal(false)}>Cancel</button>
-          </div>
-        </div>
-      )}
 
-      {showPaidModal && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ background: 'var(--card-bg)', padding: '2rem', borderRadius: '12px', color: '#fff', textAlign: 'center' }}>
-            <h3>Select Paid Type</h3>
-            <p>Where do you want to save this paid memo?</p>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '1.5rem' }}>
-              <button className="btn-primary" onClick={() => { updateMemoState('customerType', 'regular'); processMarkPaid('regular'); }}>{t('regularDue')}</button>
-              <button className="btn-primary" onClick={() => { updateMemoState('customerType', 'permanent'); processMarkPaid('permanent'); }}>{t('permanentDue')}</button>
-            </div>
-            <button className="btn-icon" style={{ marginTop: '1rem' }} onClick={() => setShowPaidModal(false)}>Cancel</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

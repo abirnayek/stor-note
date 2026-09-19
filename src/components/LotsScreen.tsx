@@ -81,6 +81,23 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
     return lot.toString().includes(query) || supplierName.toLowerCase().includes(query);
   });
 
+  // Calculate total due across all purchase lots
+  const totalPurchaseDue = lots.reduce((total, lot) => {
+    const memoDataStr = localStorage.getItem(`memo_lot_${lot}`);
+    if (memoDataStr) {
+      try {
+        const memo = JSON.parse(memoDataStr);
+        const lotTotalAmount = Number(memo.totalPriceMain) || 0;
+        const lotPaidAmount = Number(memo.paidAmount) || 0;
+        const lotDue = lotTotalAmount - lotPaidAmount;
+        if (lotDue > 0) {
+          return total + lotDue;
+        }
+      } catch (e) {}
+    }
+    return total;
+  }, 0);
+
   return (
     <div className="lots-screen">
       <div className="screen-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -90,22 +107,31 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
           </button>
           <h2>{t('lotsList')}</h2>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.2rem 0.5rem', borderRadius: '8px' }}>
-          <Search size={18} opacity={0.7} />
-          <input 
-            type="text" 
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search Lots..."
-            style={{ 
-              background: 'transparent', 
-              color: '#fff', 
-              border: 'none', 
-              outline: 'none',
-              padding: '0.2rem',
-              width: '150px'
-            }}
-          />
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, justifyContent: 'flex-end' }}>
+          {totalPurchaseDue > 0 && (
+            <div style={{ border: '1px solid #ff5252', padding: '0.4rem 1rem', borderRadius: '4px', color: '#ff5252', fontWeight: 'bold', background: 'rgba(255, 82, 82, 0.1)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.9rem' }}>Total Due:</span> 
+              <span>{totalPurchaseDue.toFixed(2)}</span>
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.2rem 0.5rem', borderRadius: '8px' }}>
+            <Search size={18} opacity={0.7} />
+            <input 
+              type="text" 
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search Lots..."
+              style={{ 
+                background: 'transparent', 
+                color: '#fff', 
+                border: 'none', 
+                outline: 'none',
+                padding: '0.2rem',
+                width: '150px'
+              }}
+            />
+          </div>
         </div>
       </div>
 
@@ -113,10 +139,16 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
         {filteredLots.map(lot => {
           const memoDataStr = localStorage.getItem(`memo_lot_${lot}`);
           let supplierName = '';
+          let totalAmount = 0;
+          let paidAmount = 0;
+          let dueAmount = 0;
           if (memoDataStr) {
             try {
               const memo = JSON.parse(memoDataStr);
               supplierName = memo.supplierName || '';
+              totalAmount = Number(memo.totalPriceMain) || 0;
+              paidAmount = Number(memo.paidAmount) || 0;
+              dueAmount = totalAmount - paidAmount;
             } catch (e) {}
           }
 
@@ -155,10 +187,19 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
                   <div className="lot-card-body">
                     <h3>{t('lotPrefix')} {lot.toString().padStart(2, '0')}</h3>
                     {supplierName && (
-                      <div style={{ fontSize: '0.95rem', color: '#ffb74d', marginBottom: '0.5rem', fontWeight: 500 }}>
+                      <div style={{ fontSize: '0.95rem', color: '#ffb74d', marginBottom: '0.2rem', fontWeight: 500 }}>
                         {supplierName}
                       </div>
                     )}
+                    {(supplierName && totalAmount > 0) ? (
+                      <div style={{ marginBottom: '0.5rem' }}>
+                        {dueAmount <= 0 ? (
+                          <span style={{ display: 'inline-block', background: '#72be44', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>Paid</span>
+                        ) : (
+                          <span style={{ display: 'inline-block', background: '#ff5252', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>Due: {dueAmount.toFixed(2)}</span>
+                        )}
+                      </div>
+                    ) : null}
                     <div className="lot-date">
                       <Calendar size={14} /> 
                       <span>{today}</span>

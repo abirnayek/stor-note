@@ -38,6 +38,7 @@ interface InvestorMemo {
   balance?: number;
   investNumber?: string;
   totalInvestAmount?: string;
+  updatedAt?: string;
 }
 
 const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, investorId, memoId }) => {
@@ -94,7 +95,25 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
   const totalWithdrawn = memo.entries.filter(e => e.type === 'withdraw').reduce((s, e) => s + (Number(e.amount) || 0), 0);
   const balance = totalInvested + totalProfit - totalWithdrawn;
 
+  const todayStr = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
+
+  const isMounted = useRef(false);
+
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
+
+    if (memo.date && memo.date !== todayStr && memo.updatedAt !== todayStr) {
+      setMemo(prev => ({ ...prev, updatedAt: todayStr }));
+      return;
+    }
+
     // Autosave memo and update its totals
     const updatedMemo = {
       ...memo,
@@ -109,7 +128,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
     setSaveStatus('Saving...');
     const t = setTimeout(() => setSaveStatus('Saved'), 500);
     return () => clearTimeout(t);
-  }, [memo, memoId, totalInvested, totalProfit, totalWithdrawn, balance]);
+  }, [memo, memoId, totalInvested, totalProfit, totalWithdrawn, balance, language, todayStr]);
 
 
   const addEntry = () => {
@@ -186,6 +205,8 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
     return '#ff9800';
   };
 
+
+
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar" data-html2canvas-ignore>
@@ -206,12 +227,12 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
       </div>
 
       <div className="memo-wrapper">
-        <div className="memo-paper-dark" ref={memoRef}>
+        <div className="memo-paper-dark" ref={memoRef} >
 
           <div className="memo-dark-header">
             <div className="memo-logo-area-dark">
               <div className="memo-logo-rect-dark">
-                <img src="/see fish logo.png" alt="Logo" />
+                <img src="./see fish logo.png" alt="Logo" />
               </div>
               <h1>{t('appTitle')}</h1>
             </div>
@@ -274,19 +295,23 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
             </div>
             
             <div className="meta-item right-align" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span className="memo-label-dark">{t('dateLabel')}: </span>
-                <input 
-                  type="text" 
-                  className="supplier-input" 
-                  value={memo.date} 
-                  onChange={e => setMemo(prev => ({ ...prev, date: e.target.value, isEdited: true }))}
-                  style={{ width: '130px', padding: '4px 8px', fontSize: '0.9rem', textAlign: 'right' }}
-                />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="memo-label-dark">{t('dateLabel')}: </span>
+                  <input 
+                    type="text" 
+                    className="supplier-input" 
+                    value={memo.date} 
+                    onChange={e => setMemo(prev => ({ ...prev, date: e.target.value, isEdited: true }))}
+                    style={{ background: 'transparent', border: 'none', color: '#fff', width: '130px', padding: '4px 8px', fontSize: '0.9rem', textAlign: 'right', outline: 'none' }}
+                  />
+                </div>
+                {memo.updatedAt && (
+                  <div style={{ fontSize: '0.75rem', color: '#ffb74d', marginTop: '2px' }}>
+                    পরিবর্তিত তারিখ: {memo.updatedAt}
+                  </div>
+                )}
               </div>
-              {memo.isEdited && (
-                <span style={{ fontSize: '10px', color: '#ff9800', marginRight: '4px' }}>(edited)</span>
-              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                 <span className="memo-label-dark" style={{ fontSize: '0.85rem' }}>{t('investNo')}: </span>
                 <input 

@@ -34,6 +34,7 @@ interface DueMemoState {
   address: string;
   mobile?: string;
   date?: string;
+  updatedAt?: string;
   lotNumber?: string;
   deposit?: number | '';
   paidDate?: number;
@@ -62,6 +63,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
            parsed.entries = [{ id: Date.now().toString(), statement: '', amount: '' }];
         }
         if (!parsed.address) parsed.address = '';
+        if (!parsed.date) parsed.date = today;
         return parsed;
       } catch (e) {
         console.error('Failed to parse saved due memo');
@@ -73,6 +75,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
       mobile: '',
       lotNumber: '',
       deposit: '',
+      date: today,
       entries: [{ id: Date.now().toString(), serialNo: '', name: '', totalKg: '', weightUnit: 'kg', buyRate: '', profitPercent: 20 }]
     };
   };
@@ -87,8 +90,20 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
   const [msgCustomDate, setMsgCustomDate] = useState<string>('');
   const [msgType, setMsgType] = useState<'whatsapp' | 'sms'>('whatsapp');
 
+  const isMounted = useRef(false);
+
   // Auto-save
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
+
+    if (memoState.date && memoState.date !== today && memoState.updatedAt !== today) {
+      setMemoState(prev => ({ ...prev, updatedAt: today }));
+      return;
+    }
+
     localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(memoState));
     
     if (!isPaid) {
@@ -264,6 +279,8 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
     setMemoState(updated);
   };
 
+
+
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar" data-html2canvas-ignore>
@@ -279,12 +296,12 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
       </div>
 
       <div className="memo-wrapper">
-        <div className="memo-paper-dark">
+        <div className="memo-paper-dark" >
           
           <div className="memo-dark-header">
             <div className="memo-logo-area-dark">
               <div className="memo-logo-rect-dark">
-                <img src="/see fish logo.png" alt="Logo" />
+                <img src="./see fish logo.png" alt="Logo" />
               </div>
               <h1>{t('appTitle')}</h1>
             </div>
@@ -349,16 +366,28 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
               </div>
             </div>
             <div className="meta-item right-align" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
-              <div>
-                <span className="memo-label-dark">{t('dateLabel')}: </span>
-                <span className="memo-value-dark" style={{marginLeft: 10}}>{memoState.date || today}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <span className="memo-label-dark">{t('dateLabel')}: </span>
+                  <input
+                    type="text"
+                    value={memoState.date || today}
+                    onChange={e => updateMemoState('date', e.target.value)}
+                    style={{ background: 'transparent', border: 'none', color: '#fff', width: '120px', marginLeft: 10, textAlign: 'center', fontSize: 'inherit', fontFamily: 'inherit', outline: 'none' }}
+                  />
+                </div>
+                {memoState.updatedAt && (
+                  <div style={{ fontSize: '0.75rem', color: '#ffb74d', marginTop: '2px' }}>
+                    পরিবর্তিত তারিখ: {memoState.updatedAt}
+                  </div>
+                )}
               </div>
               <div className="supplier-input-dark" style={{ display: 'flex', alignItems: 'center' }}>
                 <span className="memo-label-dark" style={{ width: '80px' }}>Lot Number: </span>
                 <input 
                   type="text" 
                   className="supplier-input"
-                  style={{ width: '100px', textAlign: 'right' }}
+                  style={{ width: '100%', textAlign: 'center' }}
                   value={memoState.lotNumber || ''} 
                   onChange={e => updateMemoState('lotNumber', e.target.value)}
                   placeholder="e.g. 1"
@@ -484,7 +513,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                   value={memoState.deposit} 
                   onChange={e => updateMemoState('deposit', e.target.value ? Number(e.target.value) : '')}
                   placeholder="0.00"
-                  style={{ width: '100px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-color)', padding: '5px', borderRadius: '4px', textAlign: 'right', fontWeight: 'bold' }}
+                  style={{ width: '100%', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-color)', padding: '5px', borderRadius: '4px', textAlign: 'center', fontWeight: 'bold' }}
                 />
               </div>
               <div style={{ fontSize: '1.2rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>

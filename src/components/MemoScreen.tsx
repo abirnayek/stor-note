@@ -29,6 +29,8 @@ interface MemoState {
   totalCostMain: number | '';
   globalProfitPercent?: number | '';
   paidAmount?: number | '';
+  createdAt?: string;
+  updatedAt?: string;
   entries: FishEntry[];
 }
 
@@ -48,7 +50,11 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
     const saved = localStorage.getItem(`memo_lot_${lotNumber}`);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (!parsed.createdAt) {
+          parsed.createdAt = today;
+        }
+        return parsed;
       } catch (e) {
         console.error('Failed to parse saved memo');
       }
@@ -60,6 +66,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
       totalCostMain: '',
       globalProfitPercent: '',
       paidAmount: '',
+      createdAt: today,
       entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', totalPrice: '', profitPercent: 20 }]
     };
   };
@@ -107,8 +114,20 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
     setShowDueModal(false);
   };
 
+  const isMounted = useRef(false);
+
   // Auto-save
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
+
+    if (memoState.createdAt && memoState.createdAt !== today && memoState.updatedAt !== today) {
+      setMemoState(prev => ({ ...prev, updatedAt: today }));
+      return;
+    }
+
     localStorage.setItem(`memo_lot_${lotNumber}`, JSON.stringify(memoState));
     setSaveStatus('Saving...');
     const timer = setTimeout(() => setSaveStatus('Saved'), 500);
@@ -170,6 +189,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
   const shareUrl = window.location.href;
   const shareText = `Check out this Purchase Memo (Lot: ${lotNumber})`;
 
+
+
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar">
@@ -208,12 +229,12 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
 
       <div className="memo-wrapper">
         {/* The Paper has fixed width but dark theme styling */}
-        <div className="memo-paper-dark" ref={memoRef}>
+        <div className="memo-paper-dark" ref={memoRef} >
 
           <div className="memo-dark-header">
             <div className="memo-logo-area-dark">
               <div className="memo-logo-rect-dark">
-                <img src="/see fish logo.png" alt="Logo" />
+                <img src="./see fish logo.png" alt="Logo" />
               </div>
               <h1>{t('appTitle')}</h1>
             </div>
@@ -228,9 +249,21 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
               <span className="memo-label-dark">{t('lotNumber')}</span>
               <span className="memo-value-dark" style={{ marginLeft: 10 }}>{lotNumber?.toString().padStart(2, '0')}</span>
             </div>
-            <div className="meta-item text-center">
-              <span className="memo-label-dark">{t('date')}</span>
-              <span className="memo-value-dark" style={{ marginLeft: 10 }}>{today}</span>
+            <div className="meta-item text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <span className="memo-label-dark">{t('date')}</span>
+                <input
+                  type="text"
+                  value={memoState.createdAt || today}
+                  onChange={e => updateMemoState('createdAt', e.target.value)}
+                  style={{ background: 'transparent', border: 'none', color: '#fff', width: '120px', marginLeft: 10, textAlign: 'center', fontSize: 'inherit', fontFamily: 'inherit', outline: 'none' }}
+                />
+              </div>
+              {memoState.updatedAt && (
+                <div style={{ fontSize: '0.75rem', color: '#ffb74d', marginTop: '2px' }}>
+                  পরিবর্তিত তারিখ: {memoState.updatedAt}
+                </div>
+              )}
             </div>
             <div className="meta-item right-align" style={{ position: 'relative', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -430,6 +463,30 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
             </div>
           </div>
 
+          {/* New Due/Paid Summary */}
+          <div className="memo-summary-cards">
+             <div className="summary-card-dark" style={{ background: 'rgba(255,255,255,0.02)', flex: '1 1 200px' }}>
+              <span className="memo-label-dark">{t('totalBill') || 'মোট হিসাব'}</span>
+              <span className="calc-value" style={{ fontSize: '1.2rem' }}>{mainPrice.toFixed(2)}</span>
+            </div>
+            <div className="summary-card-dark" style={{ borderLeft: '4px solid #72be44', flex: '1 1 200px' }}>
+              <span className="memo-label-dark">{t('deposit') || 'জমা'}</span>
+              <input
+                type="number"
+                value={memoState.paidAmount !== undefined ? memoState.paidAmount : ''}
+                onChange={e => updateMemoState('paidAmount', e.target.value ? Number(e.target.value) : '')}
+                placeholder="0.00"
+                style={{ fontWeight: 'bold', background: 'transparent', border: 'none', color: '#fff', fontSize: '1.2rem', textAlign: 'center', width: '100%', outline: 'none' }}
+              />
+            </div>
+            <div className="summary-card-dark" style={{ borderLeft: '4px solid #ff5252', flex: '1 1 200px' }}>
+              <span className="memo-label-dark">{t('currentDue') || 'বর্তমান বাকি'}</span>
+              <span className="calc-value" style={{ fontSize: '1.2rem', color: (mainPrice - Number(memoState.paidAmount || 0)) > 0 ? '#ff5252' : '#72be44' }}>
+                {(mainPrice - Number(memoState.paidAmount || 0)).toFixed(2)}
+              </span>
+            </div>
+          </div>
+
           {/* Action buttons removed from here to be placed at the bottom */}
 
           <div className="memo-contact-info-dark" style={{ padding: '0 2rem', position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
@@ -474,11 +531,6 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
             </div>
           </div>
 
-          <div className="sales-actions" data-html2canvas-ignore style={{ display: 'flex', justifyContent: 'center', gap: '1rem', width: '100%', marginTop: '2rem', marginBottom: '1rem' }}>
-            <button className="btn-primary btn-3d" onClick={() => setShowDueModal(true)} style={{ background: '#ff9800', padding: '0.5rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
-              <Clock size={20} /> Mark as Due
-            </button>
-          </div>
 
           <div className="memo-dark-footer">
             <div className="sig-box-dark">

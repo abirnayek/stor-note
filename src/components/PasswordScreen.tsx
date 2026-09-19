@@ -196,9 +196,14 @@ const PasswordScreen: React.FC<PasswordScreenProps> = ({
             autoFocus
           />
           {error && <span className="error-text">{error}</span>}
-          <button type="submit" className="btn btn-primary submit-btn">
-            {t('enterBtn')} <ArrowRight size={18} />
-          </button>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '1rem', width: '100%' }}>
+            <button type="button" className="btn" style={{ flex: 1, backgroundColor: '#444', color: 'white', border: '1px solid #555' }} onClick={() => onSuccess()}>
+              {t('skipBtn') || 'Skip'}
+            </button>
+            <button type="submit" className="btn btn-primary submit-btn" style={{ flex: 2, marginTop: 0 }}>
+              {t('enterBtn')} <ArrowRight size={18} />
+            </button>
+          </div>
         </form>
 
         <div className="password-actions">

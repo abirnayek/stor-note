@@ -53,7 +53,7 @@ body {
   height: 100vh;
   flex-direction: column;
   position: relative;
-  overflow: hidden;
+  
   background-color: #022b1d;
   z-index: 1;
 }
@@ -217,7 +217,7 @@ body {
 .main-layout {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  
   z-index: 1;
   position: relative;
 }
@@ -758,6 +758,7 @@ body {
   background-color: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(20px);
   color: var(--text-color);
+  min-width: 850px;
   width: 100%;
   max-width: 1200px;
   border-radius: 12px;
@@ -766,7 +767,7 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   font-family: Arial, sans-serif;
   min-height: 800px;
 }
@@ -1152,32 +1153,29 @@ body {
 /* Add Row Button (Square Style) */
 .add-row-dark-btn {
   display: inline-flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
   background: rgba(255, 255, 255, 0.05);
   border: 1px dashed rgba(255, 255, 255, 0.3);
-  border-radius: 12px;
-  padding: 1rem;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
   color: #fff;
   cursor: pointer;
   transition: all 0.3s ease;
-  min-width: 120px;
-  min-height: 100px;
-  font-size: 0.85rem;
+  font-size: 1rem;
   font-weight: 500;
   text-align: center;
-  line-height: 1.3;
 }
 .add-row-dark-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.6);
 }
 .add-row-dark-btn svg {
-  width: 28px !important;
-  height: 28px !important;
-  opacity: 0.8;
+  width: 20px !important;
+  height: 20px !important;
+  opacity: 1;
 }
 
 /* MOBILE RESPONSIVE STYLES */
@@ -1327,10 +1325,30 @@ body {
   .meta-item.text-center { justify-content: flex-start; }
   .meta-item.right-align { justify-content: flex-start; }
   .supplier-input { width: 100%; margin-left: 0; margin-top: 0.5rem; font-size: 0.95rem; }
-  
-  .memo-summary-cards { flex-direction: column; gap: 0.5rem; padding: 0 0.5rem; }
-  .summary-card-dark { padding: 0.75rem; }
-  .summary-card-dark input, .calc-value { font-size: 1.2rem; }
+
+
+  .memo-summary-cards { 
+    flex-direction: row; 
+    flex-wrap: nowrap;
+    gap: 0.25rem; 
+    padding: 0; 
+  }
+  .summary-card-dark { 
+    padding: 0.5rem; 
+    flex: 1;
+    min-width: 0 !important; 
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+  .summary-card-dark .memo-label-dark {
+    font-size: 0.75rem;
+  }
+  .summary-card-dark input, .calc-value { 
+    font-size: 0.95rem; 
+    text-align: center;
+    width: 100%;
+  }
   
   /* Fit table on screen without horizontal scrolling */
   .table-responsive {
@@ -1398,6 +1416,9 @@ body {
     width: 100%;
     gap: 4px;
   }
+  .memo-dark-table td > div > select {
+    width: auto !important;
+  }
   
   .memo-dark-table .delete-btn {
     width: 100% !important;
@@ -1414,7 +1435,6 @@ body {
     height: 16px;
   }
 
-  /* Ensure the memo paper itself never expands beyond the screen */
   .memo-paper-dark { min-width: 0; max-width: 100vw; box-sizing: border-box; }
 
   /* Due Summary Bar Mobile Layout */
@@ -1478,3 +1498,13 @@ body {
   .memo-dark-footer { flex-direction: column; gap: 1rem; padding: 1rem 0.5rem; align-items: flex-start; }
   .sig-box-dark { width: 100%; align-items: flex-start; }
 }
+
+.memo-summary-cards {
+  padding: 0 2rem;
+  margin-top: 1.5rem;
+  justify-content: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
