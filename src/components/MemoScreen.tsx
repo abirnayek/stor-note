@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ArrowLeft, Save, Share2, Download, Printer, Plus, Trash2, Phone, Undo, MessageCircle, Mail, ChevronLeft, Lock } from 'lucide-react';
+import { Share2, Download, Plus, Trash2, Phone, Undo, MessageCircle, Mail, ChevronLeft, Lock, X } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
@@ -77,18 +77,10 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
   const [showBusinessCallMenu, setShowBusinessCallMenu] = useState(false);
   const [showBusinessCallMenu2, setShowBusinessCallMenu2] = useState(false);
   const [showDueModal, setShowDueModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
 
-  const handleSavePassword = () => {
-    if (lotNumber) {
-      localStorage.setItem(`lot_password_${lotNumber}`, newPassword);
-      alert(t('passwordSaved') || 'Password saved successfully!');
-      setShowPasswordModal(false);
-      setNewPassword('');
-    }
-  };
+
 
   const processMarkDue = () => {
     const dueId = Date.now().toString();

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ArrowLeft, ChevronLeft, Phone, Save, Share2, Download, Printer, Plus, Trash2, Edit2 } from 'lucide-react';
+import { ChevronLeft, Phone, Plus, Trash2 } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import SignatureCanvas from 'react-signature-canvas';
 import CallMenu from './CallMenu';
