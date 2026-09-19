@@ -93,13 +93,24 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
     onSelectMemo(newId);
   };
 
+  const totalInvestmentAmount = activeMemos.reduce((sum, memo) => sum + (Number(memo.totalInvest) || 0), 0);
+
   return (
     <div className="due-list-screen">
-      <div className="screen-header">
-        <button className="btn-icon" onClick={() => onNavigate('investor-list')}>
-          <ChevronLeft size={24} />
-        </button>
-        <h2>{profile.name || 'Investor'}{t('investorMemos')}</h2>
+      <div className="screen-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button className="btn-icon" onClick={() => onNavigate('investor-list')}>
+            <ChevronLeft size={24} />
+          </button>
+          <h2>{profile.name || 'Investor'}{t('investorMemos')}</h2>
+        </div>
+        
+        {totalInvestmentAmount > 0 && (
+          <div style={{ border: '1px solid #72be44', padding: '0.4rem 1rem', borderRadius: '4px', color: '#72be44', fontWeight: 'bold', background: 'rgba(114, 190, 68, 0.1)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.9rem' }}>মোট বিনিয়োগ (Total Investment):</span> 
+            <span>৳ {totalInvestmentAmount.toFixed(2)}</span>
+          </div>
+        )}
       </div>
 
       <div className="content-layout">

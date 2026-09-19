@@ -53,9 +53,9 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
     }
   };
 
-  const handlePasswordSubmit = (lot: number, e: React.FormEvent) => {
-    e.preventDefault();
-    if (password === '1234') { 
+  const handlePasswordSubmit = (lot: number, e?: React.FormEvent, forceSkip: boolean = false) => {
+    if (e) e.preventDefault();
+    if (forceSkip || password === '1234') { 
       onSelectLot(lot);
       setPassword('');
       setActiveLot(null);
@@ -79,8 +79,12 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
             key={lot} 
             className={`lot-card ${activeLot === lot ? 'active-lock' : ''}`} 
             onClick={() => {
-              setActiveLot(lot);
-              setPassword('');
+              if (localStorage.getItem('disableLotPassword') === 'true') {
+                onSelectLot(lot);
+              } else {
+                setActiveLot(lot);
+                setPassword('');
+              }
             }}
           >
             {activeLot === lot ? (
@@ -93,6 +97,9 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                      value={password}
                      onChange={(e) => setPassword(e.target.value)}
                    />
+                   <button type="button" onClick={() => handlePasswordSubmit(lot, undefined, true)} style={{ background: '#72be44', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', marginLeft: '5px', fontSize: '0.8rem' }}>
+                     Skip
+                   </button>
                 </div>
               </form>
             ) : (

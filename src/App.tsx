@@ -335,7 +335,7 @@ function App() {
             {session?.user?.email ? (
               <>
                 <span className="user-email-text" style={{ marginRight: '10px' }}>{session.user.email}</span>
-                <button className="btn-icon-wrapper" title={session.user.email} onClick={() => setIsSettingsOpen(true)}>
+                <button className="btn-icon-wrapper" title={session.user.email} onClick={() => setIsUserMenuOpen(true)}>
                   <User size={24} className="user-icon" />
                 </button>
               </>
@@ -586,6 +586,19 @@ function App() {
                 {theme === 'dark' ? t('darkMode') : t('lightMode')}
               </button>
             </div>
+
+            <div className="setting-item">
+              <span>লট পাসওয়ার্ড বাতিল করুন</span>
+              <button className="btn btn-secondary" onClick={() => {
+                const isDis = localStorage.getItem('disableLotPassword') === 'true';
+                localStorage.setItem('disableLotPassword', String(!isDis));
+                window.dispatchEvent(new Event('settingsChange'));
+                // force update component to reflect immediately
+                setCurrentScreen(prev => prev);
+              }} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                {localStorage.getItem('disableLotPassword') === 'true' ? 'চালু করুন (Enable)' : 'মুছে ফেলুন (Disable)'}
+              </button>
+            </div>
             
             <div className="setting-item">
               <span>{t('appVersion')}</span>
@@ -608,7 +621,7 @@ function App() {
 
             <div className="setting-item">
               <span>{t('email')}</span>
-              <span style={{ fontWeight: 600 }}>{userEmail}</span>
+              <span style={{ fontWeight: 600 }}>{session?.user?.email || userEmail}</span>
             </div>
 
             <div className="setting-item">

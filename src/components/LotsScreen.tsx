@@ -54,9 +54,9 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
     }
   };
 
-  const handlePasswordSubmit = (lot: number, e: React.FormEvent) => {
-    e.preventDefault();
-    if (password === '1234') { 
+  const handlePasswordSubmit = (lot: number, e?: React.FormEvent, forceSkip: boolean = false) => {
+    if (e) e.preventDefault();
+    if (forceSkip || password === '1234') { 
       onSelectLot(lot);
       setPassword('');
       setActiveLot(null);
@@ -157,20 +157,27 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
               key={lot} 
               className={`lot-card ${activeLot === lot ? 'active-lock' : ''}`} 
               onClick={() => {
-                setActiveLot(lot);
-                setPassword('');
+                if (localStorage.getItem('disableLotPassword') === 'true') {
+                  onSelectLot(lot);
+                } else {
+                  setActiveLot(lot);
+                  setPassword('');
+                }
               }}
             >
               {activeLot === lot ? (
                 <form onSubmit={(e) => handlePasswordSubmit(lot, e)} className="lot-password-form" onClick={(e) => e.stopPropagation()}>
                   <div className="password-input-wrapper">
                      <span className="password-label" style={{color: '#000'}}>PassWord:</span>
-                     <input 
-                       type="password" 
-                       autoFocus 
-                       value={password}
-                       onChange={(e) => setPassword(e.target.value)}
-                     />
+                       <input 
+                         type="password" 
+                         autoFocus 
+                         value={password}
+                         onChange={(e) => setPassword(e.target.value)}
+                       />
+                       <button type="button" onClick={() => handlePasswordSubmit(lot, undefined, true)} style={{ background: '#72be44', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', marginLeft: '5px', fontSize: '0.8rem' }}>
+                         Skip
+                       </button>
                   </div>
                 </form>
               ) : (
