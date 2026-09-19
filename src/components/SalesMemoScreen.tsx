@@ -112,9 +112,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       let buyRateNum = Number(entry.buyRate) || 0;
       let calculatedSaleRate = buyRateNum > 0 ? buyRateNum + (buyRateNum * currentProfitPercent / 100) : 0;
       let saleRate = 0;
-      if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-        let manualRateNum = Number(entry.manualSaleRate);
-        saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+      if (entry.manualSaleRate !== undefined) {
+        if (entry.manualSaleRate !== '') {
+          saleRate = Number(entry.manualSaleRate);
+        } else {
+          saleRate = 0;
+        }
       } else {
         saleRate = calculatedSaleRate;
       }
@@ -216,7 +219,13 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
 
   const updateMemoState = (field: keyof MemoState, value: any) => {
-    setMemoState(prev => ({ ...prev, [field]: value }));
+    setMemoState(prev => {
+      const newState = { ...prev, [field]: value };
+      if (field === 'lotNumberInput' && !value) {
+        newState.entries = newState.entries.map(e => ({ ...e, buyRate: 0 }));
+      }
+      return newState;
+    });
   };
 
   const updateEntry = (id: string, field: keyof FishEntry, value: any) => {
@@ -247,25 +256,29 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       }
       
       // Auto-fill logic by serialNo
-      if (field === 'serialNo' && prev.lotNumberInput && value) {
-        const lotMemoStr = localStorage.getItem(`memo_lot_${prev.lotNumberInput}`);
-        if (lotMemoStr) {
-          try {
-            const lotMemo = JSON.parse(lotMemoStr);
-            const index = Number(value) - 1;
-            if (index >= 0 && index < lotMemo.entries.length) {
-               const foundEntry = lotMemo.entries[index];
-               if (foundEntry.totalKg && foundEntry.totalPrice) {
-                 const autoRate = foundEntry.totalPrice / foundEntry.totalKg;
-                 let costPercent = 0;
-                 if (lotMemo.totalPriceMain && lotMemo.totalCostMain) {
-                     costPercent = (Number(lotMemo.totalCostMain) / Number(lotMemo.totalPriceMain)) * 100;
+      if (field === 'serialNo') {
+        if (prev.lotNumberInput && value) {
+          const lotMemoStr = localStorage.getItem(`memo_lot_${prev.lotNumberInput}`);
+          if (lotMemoStr) {
+            try {
+              const lotMemo = JSON.parse(lotMemoStr);
+              const index = Number(value) - 1;
+              if (index >= 0 && index < lotMemo.entries.length) {
+                 const foundEntry = lotMemo.entries[index];
+                 if (foundEntry.totalKg && foundEntry.totalPrice) {
+                   const autoRate = foundEntry.totalPrice / foundEntry.totalKg;
+                   let costPercent = 0;
+                   if (lotMemo.totalPriceMain && lotMemo.totalCostMain) {
+                       costPercent = (Number(lotMemo.totalCostMain) / Number(lotMemo.totalPriceMain)) * 100;
+                   }
+                   const investmentRate = autoRate + (autoRate * costPercent / 100);
+                   updatedEntries = updatedEntries.map(e => e.id === id ? { ...e, buyRate: Number(investmentRate.toFixed(2)), name: foundEntry.name } : e);
                  }
-                 const investmentRate = autoRate + (autoRate * costPercent / 100);
-                 updatedEntries = updatedEntries.map(e => e.id === id ? { ...e, buyRate: Number(investmentRate.toFixed(2)), name: foundEntry.name } : e);
-               }
-            }
-          } catch (err) {}
+              }
+            } catch (err) {}
+          }
+        } else if (!value) {
+          updatedEntries = updatedEntries.map(e => e.id === id ? { ...e, buyRate: 0 } : e);
         }
       }
 
@@ -322,9 +335,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     }
     
     let saleRate = 0;
-    if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-      let manualRateNum = Number(entry.manualSaleRate);
-      saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+    if (entry.manualSaleRate !== undefined) {
+      if (entry.manualSaleRate !== '') {
+        saleRate = Number(entry.manualSaleRate);
+      } else {
+        saleRate = 0;
+      }
     } else {
       saleRate = calculatedSaleRate;
     }
@@ -526,9 +542,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   }
                   
                   let saleRate = 0;
-                  if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-                    let manualRateNum = Number(entry.manualSaleRate);
-                    saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+                  if (entry.manualSaleRate !== undefined) {
+                    if (entry.manualSaleRate !== '') {
+                      saleRate = Number(entry.manualSaleRate);
+                    } else {
+                      saleRate = 0;
+                    }
                   } else {
                     saleRate = calculatedSaleRate;
                   }
@@ -587,7 +606,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                           type="number" 
                           placeholder="0.00"
                           value={entry.manualSaleRate !== undefined ? entry.manualSaleRate : (calculatedSaleRate > 0 ? calculatedSaleRate.toFixed(2) : '')}
-                          onChange={e => updateEntry(entry.id, 'manualSaleRate', e.target.value === '' ? undefined : Number(e.target.value))}
+                          onChange={e => updateEntry(entry.id, 'manualSaleRate', e.target.value === '' ? '' : Number(e.target.value))}
                           style={{ fontWeight: '500' }}
                         />
                       </td>
