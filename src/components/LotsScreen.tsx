@@ -1,0 +1,184 @@
+import React, { useState } from 'react';
+import { type Screen } from '../App';
+import { Plus, ChevronLeft, Package, Calendar, Trash2, Search } from 'lucide-react';
+import { useLanguage } from '../i18n/LanguageContext';
+import { moveToTrash } from '../utils/trashUtils';
+
+interface LotsScreenProps {
+  onNavigate: (screen: Screen) => void;
+  onSelectLot: (lotNumber: number) => void;
+}
+
+const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
+  const [lots, setLots] = useState<number[]>(() => {
+    const saved = localStorage.getItem('purchase_lots_list');
+    return saved ? JSON.parse(saved) : [1];
+  });
+  const [activeLot, setActiveLot] = useState<number | null>(null);
+  const [password, setPassword] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const { t, language } = useLanguage();
+  
+  const today = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
+
+  const handleAddLot = () => {
+    const nextLot = lots.length > 0 ? Math.max(...lots) + 1 : 1;
+    const newLots = [...lots, nextLot];
+    setLots(newLots);
+    localStorage.setItem('purchase_lots_list', JSON.stringify(newLots));
+    setActiveLot(nextLot);
+    setPassword('');
+  };
+
+  const handleDeleteLot = (lot: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this lot?')) {
+      const memoDataStr = localStorage.getItem(`memo_lot_${lot}`);
+      const memoData = memoDataStr ? JSON.parse(memoDataStr) : {};
+      
+      moveToTrash({
+        id: `lot_${lot}`,
+        type: 'purchase_lot',
+        title: `Purchase Lot ${lot}`,
+        data: memoData
+      });
+
+      const newLots = lots.filter(l => l !== lot);
+      setLots(newLots);
+      localStorage.setItem('purchase_lots_list', JSON.stringify(newLots));
+      localStorage.removeItem(`memo_lot_${lot}`);
+    }
+  };
+
+  const handlePasswordSubmit = (lot: number, e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === '1234') { 
+      onSelectLot(lot);
+      setPassword('');
+      setActiveLot(null);
+    } else {
+      alert(t('incorrectPassword') || 'Incorrect Password');
+    }
+  };
+
+  const filteredLots = lots.filter(lot => {
+    if (!searchQuery) return true;
+    
+    const memoDataStr = localStorage.getItem(`memo_lot_${lot}`);
+    let supplierName = '';
+    if (memoDataStr) {
+      try {
+        const memo = JSON.parse(memoDataStr);
+        supplierName = memo.supplierName || '';
+      } catch (e) {}
+    }
+    
+    const query = searchQuery.toLowerCase();
+    return lot.toString().includes(query) || supplierName.toLowerCase().includes(query);
+  });
+
+  return (
+    <div className="lots-screen">
+      <div className="screen-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button className="btn-icon" onClick={() => onNavigate('dashboard')}>
+            <ChevronLeft size={24} />
+          </button>
+          <h2>{t('lotsList')}</h2>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.2rem 0.5rem', borderRadius: '8px' }}>
+          <Search size={18} opacity={0.7} />
+          <input 
+            type="text" 
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search Lots..."
+            style={{ 
+              background: 'transparent', 
+              color: '#fff', 
+              border: 'none', 
+              outline: 'none',
+              padding: '0.2rem',
+              width: '150px'
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="lot-grid">
+        {filteredLots.map(lot => {
+          const memoDataStr = localStorage.getItem(`memo_lot_${lot}`);
+          let supplierName = '';
+          if (memoDataStr) {
+            try {
+              const memo = JSON.parse(memoDataStr);
+              supplierName = memo.supplierName || '';
+            } catch (e) {}
+          }
+
+          return (
+            <div 
+              key={lot} 
+              className={`lot-card ${activeLot === lot ? 'active-lock' : ''}`} 
+              onClick={() => {
+                setActiveLot(lot);
+                setPassword('');
+              }}
+            >
+              {activeLot === lot ? (
+                <form onSubmit={(e) => handlePasswordSubmit(lot, e)} className="lot-password-form" onClick={(e) => e.stopPropagation()}>
+                  <div className="password-input-wrapper">
+                     <span className="password-label" style={{color: '#000'}}>PassWord:</span>
+                     <input 
+                       type="password" 
+                       autoFocus 
+                       value={password}
+                       onChange={(e) => setPassword(e.target.value)}
+                     />
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="lot-card-header">
+                    <Package size={40} className="lot-icon" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span className="lot-status">{t('activeLot')}</span>
+                      <button className="btn-icon delete-btn" onClick={(e) => handleDeleteLot(lot, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="lot-card-body">
+                    <h3>{t('lotPrefix')} {lot.toString().padStart(2, '0')}</h3>
+                    {supplierName && (
+                      <div style={{ fontSize: '0.95rem', color: '#ffb74d', marginBottom: '0.5rem', fontWeight: 500 }}>
+                        {supplierName}
+                      </div>
+                    )}
+                    <div className="lot-date">
+                      <Calendar size={14} /> 
+                      <span>{today}</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+        
+        <div className="lot-card add-lot-card" onClick={handleAddLot}>
+          <div className="add-lot-content">
+            <Plus size={48} />
+            <h3>{t('newLot')}</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default LotsScreen;

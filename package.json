@@ -1,0 +1,67 @@
+{
+  "name": "stor-note",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "dev:electron": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build:electron": "npm run build && node --max-old-space-size=4096 ./node_modules/electron-builder/out/cli/cli.js"
+  },
+  "build": {
+    "appId": "com.abir.stornote",
+    "productName": "Stor Note",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/see fish logo.png"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "abirnayek",
+        "repo": "stor-note"
+      }
+    ]
+  },
+  "repository": "https://github.com/abirnayek/stor-note",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "@types/react-signature-canvas": "^1.0.7",
+    "electron-updater": "^6.8.9",
+    "firebase": "^12.19.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "lucide-react": "^1.46.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-signature-canvas": "^1.1.0-alpha.2",
+    "vite-plugin-pwa": "^1.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "electron": "^44.4.1",
+    "electron-builder": "^26.15.3",
+    "electron-packager": "^17.1.2",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "wait-on": "^9.1.0"
+  },
+  "description": "Stor Note Desktop App",
+  "author": "Abir"
+}
