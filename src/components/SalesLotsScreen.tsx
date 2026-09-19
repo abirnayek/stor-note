@@ -16,6 +16,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
   });
   const [activeLot, setActiveLot] = useState<number | null>(null);
   const [password, setPassword] = useState('');
+  const [showNewLotModal, setShowNewLotModal] = useState(false);
+  const [newLotPassword, setNewLotPassword] = useState('');
   const { t, language } = useLanguage();
   
   const today = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
@@ -25,12 +27,22 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
   });
 
   const handleAddLot = () => {
+    setShowNewLotModal(true);
+    setNewLotPassword('');
+  };
+
+  const confirmAddLot = (skipPassword = false) => {
     const nextLot = lots.length > 0 ? Math.max(...lots) + 1 : 1;
     const newLots = [...lots, nextLot];
     setLots(newLots);
     localStorage.setItem('sales_lots_list', JSON.stringify(newLots));
-    setActiveLot(nextLot);
-    setPassword('');
+    
+    if (!skipPassword && newLotPassword.trim() !== '') {
+      localStorage.setItem(`sales_lot_password_${nextLot}`, newLotPassword.trim());
+    }
+    
+    setShowNewLotModal(false);
+    onSelectLot(nextLot);
   };
 
   const handleDeleteLot = (lot: number, e: React.MouseEvent) => {
@@ -53,9 +65,10 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
     }
   };
 
-  const handlePasswordSubmit = (lot: number, e?: React.FormEvent, forceSkip: boolean = false) => {
+  const handlePasswordSubmit = (lot: number, e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (forceSkip || password === '1234') { 
+    const savedPassword = localStorage.getItem(`sales_lot_password_${lot}`);
+    if (password === savedPassword) { 
       onSelectLot(lot);
       setPassword('');
       setActiveLot(null);
@@ -79,7 +92,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
             key={lot} 
             className={`lot-card ${activeLot === lot ? 'active-lock' : ''}`} 
             onClick={() => {
-              if (localStorage.getItem('disableLotPassword') === 'true') {
+              const savedPassword = localStorage.getItem(`sales_lot_password_${lot}`);
+              if (localStorage.getItem('disableLotPassword') === 'true' || !savedPassword) {
                 onSelectLot(lot);
               } else {
                 setActiveLot(lot);
@@ -97,9 +111,6 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                      value={password}
                      onChange={(e) => setPassword(e.target.value)}
                    />
-                   <button type="button" onClick={() => handlePasswordSubmit(lot, undefined, true)} style={{ background: '#72be44', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', marginLeft: '5px', fontSize: '0.8rem' }}>
-                     Skip
-                   </button>
                 </div>
               </form>
             ) : (
@@ -132,6 +143,37 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
           </div>
         </div>
       </div>
+
+      {showNewLotModal && (
+        <div className="modal-overlay" onClick={() => setShowNewLotModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">লটের পাসওয়ার্ড সেট করুন</h2>
+            </div>
+            
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label>পাসওয়ার্ড (ঐচ্ছিক)</label>
+              <input 
+                type="password" 
+                value={newLotPassword}
+                onChange={(e) => setNewLotPassword(e.target.value)}
+                placeholder="নতুন পাসওয়ার্ড দিন..."
+                className="modal-input"
+                autoFocus
+              />
+            </div>
+            
+            <div className="modal-actions" style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+              <button className="btn btn-secondary" onClick={() => confirmAddLot(true)} style={{ flex: 1 }}>
+                Skip (পাসওয়ার্ড ছাড়া)
+              </button>
+              <button className="btn btn-primary" onClick={() => confirmAddLot(false)} style={{ flex: 1 }}>
+                লট তৈরি করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

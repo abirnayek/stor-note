@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Plus, Trash2, Filter } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, Filter, Lock } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { moveToTrash } from '../utils/trashUtils';
 
@@ -14,6 +14,8 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
   const [memos, setMemos] = useState<string[]>([]);
   const [filter, setFilter] = useState<'all' | 'paid' | 'due'>('all');
   const [customerTypeFilter, setCustomerTypeFilter] = useState<'all' | 'regular' | 'permanent'>('all');
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
   const { t } = useLanguage();
 
   useEffect(() => {
@@ -101,7 +103,14 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
           </button>
           <h2>{t('salesAccount')} {lotNumber} - Memos</h2>
         </div>
+        
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.2rem 0.5rem', borderRadius: '8px' }}>
+          <button className="btn-icon" onClick={() => setShowPasswordModal(true)} title="Set Password" style={{ margin: 0, padding: '4px' }}>
+            <Lock size={18} />
+          </button>
+          
+          <div style={{ width: '1px', height: '20px', background: 'rgba(255,255,255,0.2)', margin: '0 4px' }}></div>
+          
           <Filter size={18} opacity={0.7} />
           
           <select 
@@ -193,6 +202,45 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
           </div>
         </div>
       </div>
+
+      {showPasswordModal && (
+        <div className="modal-overlay" onClick={() => setShowPasswordModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>লটের পাসওয়ার্ড সেট করুন</h2>
+            </div>
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label>পাসওয়ার্ড (ঐচ্ছিক)</label>
+              <input 
+                type="password" 
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="নতুন পাসওয়ার্ড দিন..."
+                className="modal-input"
+                autoFocus
+              />
+            </div>
+            <div className="modal-actions" style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+              <button className="btn btn-secondary" onClick={() => {
+                localStorage.removeItem(`sales_lot_password_${lotNumber}`);
+                setShowPasswordModal(false);
+              }} style={{ flex: 1 }}>
+                রিমুভ করুন
+              </button>
+              <button className="btn btn-primary" onClick={() => {
+                if (newPassword.trim()) {
+                  localStorage.setItem(`sales_lot_password_${lotNumber}`, newPassword.trim());
+                } else {
+                  localStorage.removeItem(`sales_lot_password_${lotNumber}`);
+                }
+                setShowPasswordModal(false);
+              }} style={{ flex: 1 }}>
+                সেভ করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

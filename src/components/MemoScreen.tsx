@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ArrowLeft, Save, Share2, Download, Printer, Plus, Trash2, Phone } from 'lucide-react';
+import { ArrowLeft, Save, Share2, Download, Printer, Plus, Trash2, Phone, Undo, MessageCircle, Mail, ChevronLeft, Lock } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
@@ -77,6 +77,18 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
   const [showBusinessCallMenu, setShowBusinessCallMenu] = useState(false);
   const [showBusinessCallMenu2, setShowBusinessCallMenu2] = useState(false);
   const [showDueModal, setShowDueModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+
+  const handleSavePassword = () => {
+    if (lotNumber) {
+      localStorage.setItem(`lot_password_${lotNumber}`, newPassword);
+      alert(t('passwordSaved') || 'Password saved successfully!');
+      setShowPasswordModal(false);
+      setNewPassword('');
+    }
+  };
 
   const processMarkDue = () => {
     const dueId = Date.now().toString();
@@ -205,6 +217,9 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
         </div>
 
         <div className="header-actions">
+          <button className="btn-icon action-undo" onClick={() => setShowPasswordModal(true)} title="Set Password">
+            <Lock size={24} />
+          </button>
           <button className="btn-icon action-undo" onClick={undo} disabled={!canUndo} title="Undo">
             <Undo size={24} />
           </button>
@@ -595,6 +610,46 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
           </div>
         </div>
       )}
+
+      {showPasswordModal && (
+        <div className="modal-overlay" onClick={() => setShowPasswordModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>লটের পাসওয়ার্ড সেট করুন</h2>
+            </div>
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label>পাসওয়ার্ড (ঐচ্ছিক)</label>
+              <input 
+                type="password" 
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="নতুন পাসওয়ার্ড দিন..."
+                className="modal-input"
+                autoFocus
+              />
+            </div>
+            <div className="modal-actions" style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+              <button className="btn btn-secondary" onClick={() => {
+                localStorage.removeItem(`lot_password_${lotId}`);
+                setShowPasswordModal(false);
+              }} style={{ flex: 1 }}>
+                রিমুভ করুন
+              </button>
+              <button className="btn btn-primary" onClick={() => {
+                if (newPassword.trim()) {
+                  localStorage.setItem(`lot_password_${lotId}`, newPassword.trim());
+                } else {
+                  localStorage.removeItem(`lot_password_${lotId}`);
+                }
+                setShowPasswordModal(false);
+              }} style={{ flex: 1 }}>
+                সেভ করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
