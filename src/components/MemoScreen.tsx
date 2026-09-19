@@ -630,16 +630,16 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
             </div>
             <div className="modal-actions" style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
               <button className="btn btn-secondary" onClick={() => {
-                localStorage.removeItem(`lot_password_${lotId}`);
+                localStorage.removeItem(`lot_password_${lotNumber}`);
                 setShowPasswordModal(false);
               }} style={{ flex: 1 }}>
                 রিমুভ করুন
               </button>
               <button className="btn btn-primary" onClick={() => {
                 if (newPassword.trim()) {
-                  localStorage.setItem(`lot_password_${lotId}`, newPassword.trim());
+                  localStorage.setItem(`lot_password_${lotNumber}`, newPassword.trim());
                 } else {
-                  localStorage.removeItem(`lot_password_${lotId}`);
+                  localStorage.removeItem(`lot_password_${lotNumber}`);
                 }
                 setShowPasswordModal(false);
               }} style={{ flex: 1 }}>
