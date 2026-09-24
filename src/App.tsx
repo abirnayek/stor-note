@@ -22,6 +22,7 @@ import { useLanguage } from './i18n/LanguageContext';
 import { supabase } from './utils/supabaseClient';
 import LoginScreen from './components/LoginScreen';
 import DeviceManager from './components/DeviceManager';
+import { LotPasswordManager } from './components/LotPasswordManager';
 
 import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData } from './utils/syncEngine';
 
@@ -44,6 +45,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDeviceManagerOpen, setIsDeviceManagerOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isLotPasswordManagerOpen, setIsLotPasswordManagerOpen] = useState(false);
   const [userEmail] = useState<string | null>(localStorage.getItem('userEmail'));
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -103,6 +105,7 @@ function App() {
   const [currentLot, setCurrentLot] = useState<number | null>(null);
   const [currentSalesLot, setCurrentSalesLot] = useState<number | null>(null);
   const [currentSalesMemoId, setCurrentSalesMemoId] = useState<string | null>(null);
+  const [salesMemoReturnScreen, setSalesMemoReturnScreen] = useState<Screen>('sales-lots');
   const [currentDueType, setCurrentDueType] = useState<'regular' | 'permanent' | 'purchase'>('regular');
   const [currentDueId, setCurrentDueId] = useState<string | null>(null);
   const [isPaidDue, setIsPaidDue] = useState<boolean>(false);
@@ -542,6 +545,7 @@ function App() {
               onSelectMemo={(memoId, lotNumber) => {
                 if (lotNumber !== null) setCurrentSalesLot(lotNumber);
                 setCurrentSalesMemoId(memoId);
+                setSalesMemoReturnScreen('sales-lots');
                 handleNavigate('sales-memo');
               }}
             />
@@ -552,13 +556,15 @@ function App() {
               lotNumber={currentSalesLot}
               onSelectMemo={(memoId) => {
                 setCurrentSalesMemoId(memoId);
+                setSalesMemoReturnScreen('sales-memo-list');
                 handleNavigate('sales-memo');
               }}
             />
           )}
-          {currentScreen === 'sales-memo' && currentSalesLot !== null && currentSalesMemoId !== null && (
+          {currentScreen === 'sales-memo' && currentSalesMemoId !== null && (
             <SalesMemoScreen 
               onNavigate={handleNavigate} 
+              onBack={() => handleNavigate(salesMemoReturnScreen)}
               lotNumber={currentSalesLot} 
               memoId={currentSalesMemoId}
               onLotChange={(lot) => setCurrentSalesLot(lot)}
@@ -625,34 +631,34 @@ function App() {
               </button>
             </div>
 
+            {(localStorage.getItem('device_permission') === 'admin' || true) && (
+              <div className="setting-item">
+                <span>Devices & Permissions</span>
+                <button className="btn btn-primary" onClick={() => { setIsSettingsOpen(false); setIsDeviceManagerOpen(true); }} style={{ fontSize: '0.9rem' }}>
+                  Manage Devices
+                </button>
+              </div>
+            )}
+
             <div className="setting-item">
-              <span>লট পাসওয়ার্ড বাতিল করুন</span>
-              <button className="btn btn-secondary" onClick={() => {
-                const isDis = localStorage.getItem('disableLotPassword') === 'true';
-                localStorage.setItem('disableLotPassword', String(!isDis));
-                window.dispatchEvent(new Event('settingsChange'));
-                // force update component to reflect immediately
-                setCurrentScreen(prev => prev);
-              }} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                {localStorage.getItem('disableLotPassword') === 'true' ? 'চালু করুন (Enable)' : 'মুছে ফেলুন (Disable)'}
+              <span>Lot Passwords</span>
+              <button className="btn btn-secondary" onClick={() => { setIsSettingsOpen(false); setIsLotPasswordManagerOpen(true); }} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                Manage Lot Passwords
               </button>
             </div>
-            
             <div className="setting-item">
               <span>{t('appVersion')}</span>
               <span style={{ opacity: 0.7 }}>1.0.0 (PWA enabled)</span>
             </div>
             
-            {(localStorage.getItem('device_permission') === 'admin' || true) && (
-              <>
-                <div className="setting-item">
-                  <span>Devices & Permissions</span>
-                  <button className="btn btn-primary" onClick={() => { setIsSettingsOpen(false); setIsDeviceManagerOpen(true); }} style={{ fontSize: '0.9rem' }}>
-                    Manage Devices
-                  </button>
-                </div>
-              </>
-            )}
+          </div>
+        </div>
+      )}
+      {/* Lot Password Manager Modal */}
+      {isLotPasswordManagerOpen && (
+        <div className="modal-overlay" onClick={() => setIsLotPasswordManagerOpen(false)} style={{ zIndex: 9999 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ minWidth: '400px', maxWidth: '450px', background: 'var(--card-bg)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <LotPasswordManager onClose={() => setIsLotPasswordManagerOpen(false)} />
           </div>
         </div>
       )}
@@ -745,3 +751,4 @@ function App() {
 }
 
 export default App;
+

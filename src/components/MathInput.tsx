@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, type InputHTMLAttributes } from 'react';
+import React, { useState, useEffect, type InputHTMLAttributes } from 'react';
 
 interface MathInputProps extends InputHTMLAttributes<HTMLInputElement> {}
 
@@ -83,8 +83,11 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
       inputMode="text"
       value={localValue}
       onChange={(e) => {
-        setLocalValue(e.target.value);
-        if (onChange) onChange(e);
+        const val = e.target.value;
+        setLocalValue(val);
+        if (val === '' || !isNaN(Number(val))) {
+          triggerChange(val);
+        }
       }}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}

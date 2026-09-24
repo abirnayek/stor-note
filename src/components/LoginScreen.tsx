@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import { restoreFromCloud, setupRealtimeSync } from '../utils/syncEngine';
 import { CheckCircle } from 'lucide-react';
@@ -137,48 +137,59 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 opacity: loading ? 0.7 : 1
               }}
             >
-              {loading ? 'Sending Code...' : 'Send Verification Code'}
+              {loading ? 'Sending Link...' : 'Send Magic Link'}
             </button>
           </form>
         ) : (
           <form onSubmit={handleVerifyCode} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#72be44', marginBottom: '1rem' }}>
-              <CheckCircle size={16} />
-              <span style={{ fontSize: '0.9rem' }}>Code sent to {email}</span>
+            <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', color: '#72be44', marginBottom: '1rem' }}>
+                <CheckCircle size={48} />
+              </div>
+              <h3 style={{ marginBottom: '0.5rem' }}>ইমেইল চেক করুন!</h3>
+              <p style={{ opacity: 0.8, fontSize: '0.9rem' }}>
+                আমরা <strong>{email}</strong> ঠিকানায় একটি লগইন কোড পাঠিয়েছি।
+              </p>
             </div>
+            
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>6-Digit Verification Code</label>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>লগইন কোড (৬ সংখ্যার)</label>
               <input 
                 type="text" 
                 required 
                 value={code}
                 onChange={e => setCode(e.target.value)}
-                placeholder="000000"
-                maxLength={6}
+                placeholder="123456"
                 style={{
                   width: '100%', padding: '0.8rem', borderRadius: '8px',
                   background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)',
-                  fontSize: '1.2rem', letterSpacing: '0.2rem', textAlign: 'center'
+                  textAlign: 'center', fontSize: '1.2rem', letterSpacing: '0.2rem'
                 }}
               />
             </div>
+
             <button 
               type="submit" 
-              disabled={loading || code.length < 6}
+              disabled={loading}
               style={{
-                width: '100%', padding: '1rem', marginTop: '1rem', borderRadius: '8px',
+                width: '100%', padding: '1rem', marginTop: '0.5rem', borderRadius: '8px',
                 background: 'var(--primary-color)', color: '#000', fontWeight: 'bold', border: 'none', cursor: 'pointer',
-                opacity: (loading || code.length < 6) ? 0.7 : 1
+                opacity: loading ? 0.7 : 1
               }}
             >
-              {loading ? 'Verifying...' : 'Verify & Login'}
+              {loading ? 'Verifying...' : 'Verify Code'}
             </button>
+
             <button
               type="button"
               onClick={() => setStep('email')}
-              style={{ background: 'transparent', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', textDecoration: 'underline', marginTop: '1rem', opacity: 0.8 }}
+              style={{ 
+                background: 'transparent', border: '1px solid var(--primary-color)', 
+                color: 'var(--primary-color)', cursor: 'pointer', padding: '0.8rem', 
+                borderRadius: '8px', marginTop: '0.5rem'
+              }}
             >
-              Back to Email
+              অন্য ইমেইল দিয়ে চেষ্টা করুন
             </button>
           </form>
         )}

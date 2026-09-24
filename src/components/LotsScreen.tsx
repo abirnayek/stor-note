@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { type Screen } from '../App';
 import { Plus, ChevronLeft, Package, Calendar, Trash2, Search } from 'lucide-react';
+import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { moveToTrash } from '../utils/trashUtils';
 
@@ -26,9 +27,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
     window.addEventListener('storage', loadLots);
     return () => window.removeEventListener('storage', loadLots);
   }, []);
-  const [activeLot, setActiveLot] = useState<number | null>(null);
-  const [password, setPassword] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+      const [searchQuery, setSearchQuery] = useState('');
   const [showNewLotModal, setShowNewLotModal] = useState(false);
   const [newLotPassword, setNewLotPassword] = useState('');
   const { t, language } = useLanguage();
@@ -80,19 +79,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
     }
   };
 
-  const handlePasswordSubmit = (lot: number, e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const savedPassword = localStorage.getItem(`lot_password_${lot}`);
-    if (password === savedPassword) { 
-      onSelectLot(lot);
-      setPassword('');
-      setActiveLot(null);
-    } else {
-      alert(t('incorrectPassword') || 'Incorrect Password');
-    }
-  };
-
-  const filteredLots = lots.filter(lot => {
+    const filteredLots = lots.filter(lot => {
     if (!searchQuery) return true;
     
     const memoDataStr = localStorage.getItem(`memo_lot_${lot}`);
@@ -180,43 +167,25 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
           }
 
           return (
-            <div 
-              key={lot} 
-              className={`lot-card ${activeLot === lot ? 'active-lock' : ''}`} 
-              onClick={() => {
-                const savedPassword = localStorage.getItem(`lot_password_${lot}`);
-                if (localStorage.getItem('disableLotPassword') === 'true' || !savedPassword) {
-                  onSelectLot(lot);
-                } else {
-                  setActiveLot(lot);
-                  setPassword('');
-                }
-              }}
-            >
-              {activeLot === lot ? (
-                <form onSubmit={(e) => handlePasswordSubmit(lot, e)} className="lot-password-form" onClick={(e) => e.stopPropagation()}>
-                  <div className="password-input-wrapper">
-                     <span className="password-label" style={{color: '#000'}}>PassWord:</span>
-                       <input 
-                         type="password" 
-                         autoFocus 
-                         value={password}
-                         onChange={(e) => setPassword(e.target.value)}
-                       />
-                  </div>
-                </form>
-              ) : (
-                <>
+            <ProtectedMemoWrapper key={lot} passwordKey={`lot_password_${lot}`} onAccessGranted={() => onSelectLot(lot)}>
+            <div className="lot-card">
                   <div className="lot-card-header">
                     <Package size={40} className="lot-icon" />
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span className="lot-status">{t('activeLot')}</span>
-                      {hasEditPermission && (
+                    </div>
+                    {hasEditPermission && (
+                      <>
+                        <div className="card-top-actions">
                         <button className="btn-icon delete-btn" onClick={(e) => handleDeleteLot(lot, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
                           <Trash2 size={16} />
                         </button>
-                      )}
-                    </div>
+                      </div>
+                        <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
+                        <MemoLockIcon passwordKey={`lot_password_${lot}`} />
+                      </div>
+                      </>
+                    )}
                   </div>
                   <div className="lot-card-body">
                     <h3>{t('lotPrefix')} {lot.toString().padStart(2, '0')}</h3>
@@ -239,9 +208,8 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
                       <span>{today}</span>
                     </div>
                   </div>
-                </>
-              )}
             </div>
+            </ProtectedMemoWrapper>
           );
         })}
         
@@ -290,3 +258,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
 };
 
 export default LotsScreen;
+
+
+
+

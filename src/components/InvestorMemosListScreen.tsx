@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Plus, FileText, CheckCircle2, Calendar } from 'lucide-react';
+import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 
 interface InvestorMemosListScreenProps {
@@ -125,12 +126,16 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
           
           <div className="lot-grid">
             {activeMemos.map(memo => (
-              <div key={memo.id} className="lot-card" onClick={() => onSelectMemo(memo.id)}>
+              <ProtectedMemoWrapper key={memo.id} passwordKey={`memo_password_investor_memo_${memo.id}`} onAccessGranted={() => onSelectMemo(memo.id)}>
+              <div className="lot-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Calendar size={18} style={{ color: 'var(--primary-color)' }} />
                     <span className="lot-number">{memo.date}</span>
                     {memo.isEdited && <span style={{ fontSize: '10px', color: '#aaa' }}>(edited)</span>}
+                  </div>
+                  <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
+                    <MemoLockIcon passwordKey={`memo_password_investor_memo_${memo.id}`} />
                   </div>
                 </div>
                 
@@ -147,6 +152,7 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
                   </div>
                 </div>
               </div>
+              </ProtectedMemoWrapper>
             ))}
 
             <div className="lot-card empty-card" onClick={handleAddMemo}>
@@ -167,18 +173,27 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
               <p style={{ textAlign: 'center', color: '#aaa', marginTop: '2rem' }}>{t('noCompletedMemos')}</p>
             ) : (
               completedMemos.map(memo => (
-                <div key={memo.id} className="paid-due-card" onClick={() => onSelectMemo(memo.id)} style={{ cursor: 'pointer' }}>
+                <ProtectedMemoWrapper key={memo.id} passwordKey={`memo_password_investor_memo_${memo.id}`} onAccessGranted={() => onSelectMemo(memo.id)}>
+                <div className="paid-due-card" style={{ cursor: 'pointer' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <span style={{ fontWeight: 'bold' }}>{memo.date}</span>
-                    <span style={{ fontSize: '0.8rem', color: '#aaa' }}>
-                      {memo.completedAt ? new Date(memo.completedAt).toLocaleDateString('bn-BD') : ''}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontWeight: 'bold' }}>{memo.date}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '0.8rem', color: '#aaa' }}>
+                        {memo.completedAt ? new Date(memo.completedAt).toLocaleDateString('bn-BD') : ''}
+                      </span>
+                      <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
+                        <MemoLockIcon passwordKey={`memo_password_investor_memo_${memo.id}`} />
+                      </div>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
                     <span style={{ color: '#aaa' }}>{t('totalWithdrawal')}</span>
                     <span style={{ color: '#72be44', fontWeight: 'bold' }}>৳{memo.totalWithdrawn || 0}</span>
                   </div>
                 </div>
+                </ProtectedMemoWrapper>
               ))
             )}
           </div>

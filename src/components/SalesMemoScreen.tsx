@@ -14,6 +14,7 @@ interface SalesMemoScreenProps {
   lotNumber: number | null;
   memoId: string;
   onLotChange?: (lot: any) => void;
+  onBack?: () => void;
 }
 
 interface FishEntry {
@@ -40,7 +41,7 @@ interface MemoState {
   entries: FishEntry[];
 }
 
-const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber, memoId }) => {
+const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber, memoId, onBack }) => {
   const { t, language } = useLanguage();
   const memoRef = useRef<HTMLDivElement>(null);
   const sigPadReceiver = useRef<SignatureCanvas>(null);
@@ -53,7 +54,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   });
 
   const getInitialState = (): MemoState => {
-    const saved = localStorage.getItem(`sales_memo_lot_${lotNumber}_memo_${memoId}`);
+    const saved = localStorage.getItem(`sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -68,7 +69,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           status: parsed.status || 'draft',
           createdAt: parsed.createdAt || today,
           updatedAt: parsed.updatedAt,
-          entries: parsed.entries || [{ id: Date.now().toString(), name: '', totalKg: '', profitPercent: 20 }]
+          entries: parsed.entries || [{ id: Date.now().toString(), name: '', totalKg: '', profitPercent: '' }]
         };
       } catch (e) {
         console.error('Failed to parse saved memo');
@@ -83,7 +84,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       customerType: '',
       status: 'draft',
       createdAt: today,
-      entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', profitPercent: 20 }]
+      entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', profitPercent: '' }]
     };
   };
 
@@ -114,12 +115,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       let buyRateNum = Number(entry.buyRate) || 0;
       let calculatedSaleRate = buyRateNum > 0 ? buyRateNum + (buyRateNum * currentProfitPercent / 100) : 0;
       let saleRate = 0;
-      if (entry.manualSaleRate !== undefined) {
-        if (entry.manualSaleRate !== '') {
-          saleRate = Number(entry.manualSaleRate);
-        } else {
-          saleRate = 0;
-        }
+      if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+        let manualRateNum = Number(entry.manualSaleRate);
+        saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
       } else {
         saleRate = calculatedSaleRate;
       }
@@ -212,7 +210,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       }
     }
 
-    localStorage.setItem(`sales_memo_lot_${lotNumber}_memo_${memoId}`, JSON.stringify(memoState));
+    localStorage.setItem(`sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`, JSON.stringify(memoState));
     setSaveStatus('Saving...');
     const timer = setTimeout(() => setSaveStatus('Saved'), 500);
     return () => clearTimeout(timer);
@@ -294,7 +292,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const handleAddRow = () => {
     setMemoState(prev => ({
       ...prev,
-      entries: [...prev.entries, { id: Date.now().toString(), name: '', totalKg: '', profitPercent: 20 }]
+      entries: [...prev.entries, { id: Date.now().toString(), name: '', totalKg: '', profitPercent: '' }]
     }));
   };
 
@@ -337,15 +335,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     }
     
     let saleRate = 0;
-    if (entry.manualSaleRate !== undefined) {
-      if (entry.manualSaleRate !== '') {
-        saleRate = Number(entry.manualSaleRate);
+      if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+        let manualRateNum = Number(entry.manualSaleRate);
+        saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
       } else {
-        saleRate = 0;
+        saleRate = calculatedSaleRate;
       }
-    } else {
-      saleRate = calculatedSaleRate;
-    }
     
     let weightInKg = 0;
     let totalKgNum = Number(entry.totalKg) || 0;
@@ -363,7 +358,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar" data-html2canvas-ignore>
-        <button className="btn-icon" onClick={() => onNavigate('sales-memo-list')}>
+        <button className="btn-icon" onClick={() => onBack ? onBack() : (lotNumber === null ? onNavigate('sales-lots') : onNavigate('sales-memo-list'))}>
           <ChevronLeft size={24} />
         </button>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -544,15 +539,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   }
                   
                   let saleRate = 0;
-                  if (entry.manualSaleRate !== undefined) {
-                    if (entry.manualSaleRate !== '') {
-                      saleRate = Number(entry.manualSaleRate);
-                    } else {
-                      saleRate = 0;
-                    }
-                  } else {
-                    saleRate = calculatedSaleRate;
-                  }
+      if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+        let manualRateNum = Number(entry.manualSaleRate);
+        saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+      } else {
+        saleRate = calculatedSaleRate;
+      }
                   
                   let weightInKg = 0;
                   let totalKgNum = Number(entry.totalKg) || 0;
@@ -616,8 +608,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                         <MathInput 
                            
                           className="highlight-input"
-                          placeholder="20" 
-                          value={entry.profitPercent !== undefined ? entry.profitPercent : 20}
+                          placeholder="0" 
+                          value={entry.profitPercent !== undefined ? entry.profitPercent : ''}
                           onChange={e => updateEntry(entry.id, 'profitPercent', e.target.value ? Number(e.target.value) : '')}
                           style={{ width: '70px' }}
                         />
@@ -754,4 +746,5 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 };
 
 export default SalesMemoScreen;
+
 

@@ -68,7 +68,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
       globalProfitPercent: '',
       paidAmount: '',
       createdAt: today,
-      entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', totalPrice: '', profitPercent: 20 }]
+      entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', totalPrice: '', profitPercent: '' }]
     };
   };
 
@@ -164,7 +164,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
   const handleAddRow = () => {
     setMemoState(prev => ({
       ...prev,
-      entries: [...prev.entries, { id: Date.now().toString(), name: '', totalKg: '', totalPrice: '', profitPercent: 20 }]
+      entries: [...prev.entries, { id: Date.now().toString(), name: '', totalKg: '', totalPrice: '', profitPercent: '' }]
     }));
   };
 
@@ -344,7 +344,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
                 
                 value={memoState.globalProfitPercent !== undefined ? memoState.globalProfitPercent : ''}
                 onChange={e => updateMemoState('globalProfitPercent', e.target.value ? Number(e.target.value) : '')}
-                placeholder="Ex: 20"
+                placeholder="Ex: 0"
                 style={{ borderColor: 'var(--primary-color)' }}
               />
             </div>
@@ -375,7 +375,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
                   let hasGlobalProfit = memoState.globalProfitPercent !== undefined && memoState.globalProfitPercent !== '';
                   let currentProfitPercent = hasGlobalProfit
                     ? Number(memoState.globalProfitPercent)
-                    : (entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 20);
+                    : (entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0);
 
                   if (typeof entry.totalKg === 'number' && typeof entry.totalPrice === 'number' && entry.totalKg > 0) {
                     let weightInKg = entry.weightUnit === 'g' ? entry.totalKg / 1000 : entry.totalKg;
@@ -431,8 +431,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
                         <MathInput
                           
                           className="highlight-input"
-                          placeholder="20"
-                          value={hasGlobalProfit ? currentProfitPercent : (entry.profitPercent !== undefined ? entry.profitPercent : 20)}
+                          placeholder="0"
+                          value={hasGlobalProfit ? currentProfitPercent : (entry.profitPercent !== undefined ? entry.profitPercent : '')}
                           onChange={e => updateEntry(entry.id, 'profitPercent', e.target.value ? Number(e.target.value) : '')}
                           disabled={hasGlobalProfit}
                           style={{ width: '80px', opacity: hasGlobalProfit ? 0.6 : 1 }}

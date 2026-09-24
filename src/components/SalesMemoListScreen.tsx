@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Plus, Trash2, Filter, Lock } from 'lucide-react';
+import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { moveToTrash } from '../utils/trashUtils';
 
@@ -186,7 +187,8 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
           }
           
           return (
-            <div key={memoId} className="lot-card" onClick={() => onSelectMemo(memoId)}>
+            <ProtectedMemoWrapper key={memoId} passwordKey={`memo_password_${memoKey}`} onAccessGranted={() => onSelectMemo(memoId)}>
+              <div className="lot-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
@@ -197,11 +199,17 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
                   </div>
                   <span className="lot-number">{name}</span>
                 </div>
-                <button className="btn-icon delete-btn" onClick={(e) => handleDeleteMemo(memoId, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
-                  <Trash2 size={16} />
-                </button>
+                <div className="card-top-actions">
+                  <button className="btn-icon delete-btn" onClick={(e) => handleDeleteMemo(memoId, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
+                    <Trash2 size={16} />
+                  </button>
+                      </div>
+                      <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
+                        <MemoLockIcon passwordKey={`memo_password_${memoKey}`} />
+                      </div>
               </div>
             </div>
+            </ProtectedMemoWrapper>
           );
         })}
         
@@ -256,4 +264,6 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
 };
 
 export default SalesMemoListScreen;
+
+
 

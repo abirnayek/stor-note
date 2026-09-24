@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { type Screen } from '../App';
 import { Plus, ChevronLeft, Package, Calendar, Trash2, FileText } from 'lucide-react';
+import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { moveToTrash } from '../utils/trashUtils';
 
@@ -27,9 +28,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
   });
   
   const [globalMemos, setGlobalMemos] = useState<GlobalMemo[]>([]);
-  const [activeLot, setActiveLot] = useState<number | null>(null);
-  const [password, setPassword] = useState('');
-  const [showNewLotModal, setShowNewLotModal] = useState(false);
+      const [showNewLotModal, setShowNewLotModal] = useState(false);
   const [newLotPassword, setNewLotPassword] = useState('');
   const { t, language } = useLanguage();
   
@@ -195,19 +194,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
     }
   };
 
-  const handlePasswordSubmit = (lot: number, e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const savedPassword = localStorage.getItem(`sales_lot_password_${lot}`);
-    if (password === savedPassword) { 
-      onSelectLot(lot);
-      setPassword('');
-      setActiveLot(null);
-    } else {
-      alert(t('incorrectPassword') || 'Incorrect Password');
-    }
-  };
-
-  return (
+    return (
     <div className="lots-screen" style={{ paddingBottom: '2rem' }}>
       <div className="screen-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -239,40 +226,20 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         </div>
         
         {lots.map(lot => (
-              <div 
-                key={lot} 
-                className={`lot-card ${activeLot === lot ? 'active-lock' : ''}`} 
-                onClick={() => {
-                  const savedPassword = localStorage.getItem(`sales_lot_password_${lot}`);
-                  if (localStorage.getItem('disableLotPassword') === 'true' || !savedPassword) {
-                    onSelectLot(lot);
-                  } else {
-                    setActiveLot(lot);
-                    setPassword('');
-                  }
-                }}
-              >
-                {activeLot === lot ? (
-                  <form onSubmit={(e) => handlePasswordSubmit(lot, e)} className="lot-password-form" onClick={(e) => e.stopPropagation()}>
-                    <div className="password-input-wrapper">
-                       <span className="password-label" style={{color: '#000'}}>PassWord:</span>
-                       <input 
-                         type="password" 
-                         autoFocus 
-                         value={password}
-                         onChange={(e) => setPassword(e.target.value)}
-                       />
-                    </div>
-                  </form>
-                ) : (
-                  <>
+              <ProtectedMemoWrapper key={lot} passwordKey={`sales_lot_password_${lot}`} onAccessGranted={() => onSelectLot(lot)}>
+              <div className="lot-card">
                     <div className="lot-card-header">
                       <Package size={40} className="lot-icon" />
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span className="lot-status">{t('activeLot')}</span>
+                      </div>
+                      <div className="card-top-actions">
                         <button className="btn-icon delete-btn" onClick={(e) => handleDeleteLot(lot, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
                           <Trash2 size={16} />
                         </button>
+                      </div>
+                      <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
+                        <MemoLockIcon passwordKey={`sales_lot_password_${lot}`} />
                       </div>
                     </div>
                     <div className="lot-card-body">
@@ -282,9 +249,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                         <span>{today}</span>
                       </div>
                     </div>
-                  </>
-                )}
               </div>
+              </ProtectedMemoWrapper>
             ))}
           </div>
       
@@ -301,7 +267,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         </div>
 
         {globalMemos.map(memo => (
-            <div key={memo.id} className="lot-card" onClick={() => onSelectMemo(memo.id, memo.lotNumber)}>
+            <ProtectedMemoWrapper key={memo.id} passwordKey={`memo_password_${memo.id}`} onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}>
+            <div className="lot-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -322,11 +289,17 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                     )}
                   </div>
                 </div>
-                <button className="btn-icon delete-btn" onClick={(e) => handleDeleteMemo(memo, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
-                  <Trash2 size={16} />
-                </button>
+                <div className="card-top-actions">
+                  <button className="btn-icon delete-btn" onClick={(e) => handleDeleteMemo(memo, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
+                    <Trash2 size={16} />
+                  </button>
+                      </div>
+                      <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
+                        <MemoLockIcon passwordKey={`memo_password_${memo.id}`} />
+                      </div>
               </div>
             </div>
+            </ProtectedMemoWrapper>
           ))}
       </div>
 
@@ -365,3 +338,5 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
 };
 
 export default SalesLotsScreen;
+
+

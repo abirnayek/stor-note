@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Plus, Trash2, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
+import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { moveToTrash } from '../utils/trashUtils';
 
@@ -213,15 +214,21 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
               } catch (e) {}
             }
             return (
-              <div key={dueId} className="lot-card" onClick={() => onSelectDue(dueId)} style={{ position: 'relative' }}>
+              <ProtectedMemoWrapper key={dueId} passwordKey={`memo_password_due_memo_${dueId}`} onAccessGranted={() => onSelectDue(dueId)}>
+                <div className="lot-card" style={{ position: 'relative' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '80%' }}>
                     <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--text-color)', wordBreak: 'break-word', textAlign: 'left' }}>{name}</span>
                     <span style={{ fontSize: '0.95rem', color: '#ff9800', marginTop: '0.3rem', fontWeight: '600' }}>Due: ৳ {(userDues[dueId] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  <button className="btn-icon delete-btn" onClick={(e) => handleDeleteDue(dueId, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="card-top-actions">
+                    <button className="btn-icon delete-btn" onClick={(e) => handleDeleteDue(dueId, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
+                      <Trash2 size={16} />
+                    </button>
+                      </div>
+                      <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
+                        <MemoLockIcon passwordKey={`memo_password_due_memo_${dueId}`} />
+                      </div>
                 </div>
                 {autoMsg && (
                   <div style={{ 
@@ -236,6 +243,7 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
                   </div>
                 )}
               </div>
+              </ProtectedMemoWrapper>
             );
           })}
           
@@ -303,3 +311,5 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
 };
 
 export default DueListScreen;
+
+
