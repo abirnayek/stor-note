@@ -98,37 +98,6 @@ function App() {
       }
       setLoadingAuth(false);
     });
-    // Prevent typing if view-only
-    useEffect(() => {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (localStorage.getItem('device_permission') === 'view') {
-          const target = e.target as HTMLElement;
-          if (
-            (target.tagName === 'INPUT' && !target.classList.contains('search-input') && !target.classList.contains('login-input') && !target.classList.contains('modal-input')) || 
-            target.tagName === 'TEXTAREA'
-          ) {
-            e.preventDefault();
-          }
-        }
-      };
-      
-      const updateBodyClass = () => {
-        if (localStorage.getItem('device_permission') === 'view') {
-          document.body.classList.add('view-only-mode');
-        } else {
-          document.body.classList.remove('view-only-mode');
-        }
-      };
-      
-      updateBodyClass(); // init
-      window.addEventListener('settingsChange', updateBodyClass);
-      document.addEventListener('keydown', handleKeyDown, true);
-      
-      return () => {
-        window.removeEventListener('settingsChange', updateBodyClass);
-        document.removeEventListener('keydown', handleKeyDown, true);
-      };
-    }, []);
 
     const {
       data: { subscription },
@@ -137,6 +106,38 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  // Prevent typing/editing if view-only
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (localStorage.getItem('device_permission') === 'view') {
+        const target = e.target as HTMLElement;
+        if (
+          (target.tagName === 'INPUT' && !target.classList.contains('search-input') && !target.classList.contains('login-input') && !target.classList.contains('modal-input')) || 
+          target.tagName === 'TEXTAREA'
+        ) {
+          e.preventDefault();
+        }
+      }
+    };
+    
+    const updateBodyClass = () => {
+      if (localStorage.getItem('device_permission') === 'view') {
+        document.body.classList.add('view-only-mode');
+      } else {
+        document.body.classList.remove('view-only-mode');
+      }
+    };
+    
+    updateBodyClass();
+    window.addEventListener('settingsChange', updateBodyClass);
+    document.addEventListener('keydown', handleKeyDown, true);
+    
+    return () => {
+      window.removeEventListener('settingsChange', updateBodyClass);
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
   }, []);
   
   const [currentScreen, setCurrentScreen] = useState<Screen>('dashboard');
