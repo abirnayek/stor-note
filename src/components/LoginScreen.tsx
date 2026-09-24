@@ -64,8 +64,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           .select('*', { count: 'exact', head: true })
           .eq('permission', 'admin').eq('status', 'active');
           
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const isFirstDevice = count === 0;
-        const initialPermission = isFirstDevice ? 'admin' : 'view';
+        const initialPermission = (isFirstDevice || isLocalhost) ? 'admin' : 'view';
 
         await supabase.from('active_sessions').upsert({
           device_id: deviceId,
