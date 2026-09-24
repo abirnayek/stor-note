@@ -227,7 +227,7 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
                     </button>
                       </div>
                       <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
-                        <MemoLockIcon passwordKey={`memo_password_due_memo_${dueId}`} />
+                        <MemoLockIcon passwordKey={`memo_password_${dueId}`} />
                       </div>
                 </div>
                 {autoMsg && (

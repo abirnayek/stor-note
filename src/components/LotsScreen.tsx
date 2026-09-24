@@ -174,18 +174,14 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span className="lot-status">{t('activeLot')}</span>
                     </div>
-                    {hasEditPermission && (
-                      <>
-                        <div className="card-top-actions">
+                    <div className="card-top-actions">
                         <button className="btn-icon delete-btn" onClick={(e) => handleDeleteLot(lot, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
                           <Trash2 size={16} />
                         </button>
                       </div>
-                        <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
-                        <MemoLockIcon passwordKey={`lot_password_${lot}`} />
-                      </div>
-                      </>
-                    )}
+                    <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
+                      <MemoLockIcon passwordKey={`lot_password_${lot}`} />
+                    </div>
                   </div>
                   <div className="lot-card-body">
                     <h3>{t('lotPrefix')} {lot.toString().padStart(2, '0')}</h3>
@@ -213,14 +209,12 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
           );
         })}
         
-        {hasEditPermission && (
-          <div className="lot-card add-lot-card" onClick={handleAddLot}>
+        <div className="lot-card add-lot-card" onClick={handleAddLot}>
             <div className="add-lot-content">
               <Plus size={48} />
               <h3>{t('newLot')}</h3>
             </div>
           </div>
-        )}
       </div>
 
       {showNewLotModal && (
@@ -258,6 +252,9 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
 };
 
 export default LotsScreen;
+
+
+
 
 
 

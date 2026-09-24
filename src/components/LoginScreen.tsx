@@ -62,7 +62,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         const { count } = await supabase
           .from('active_sessions')
           .select('*', { count: 'exact', head: true })
-          .eq('permission', 'admin');
+          .eq('permission', 'admin').eq('status', 'active');
           
         const isFirstDevice = count === 0;
         const initialPermission = isFirstDevice ? 'admin' : 'view';
@@ -199,3 +199,4 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 };
 
 export default LoginScreen;
+
