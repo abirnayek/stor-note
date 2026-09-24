@@ -1530,13 +1530,43 @@ body.view-only-mode select:not(.language-select) {
 body.view-only-mode .delete-btn,
 body.view-only-mode .action-undo,
 body.view-only-mode .add-row-btn,
+body.view-only-mode .add-row-dark-btn,
 body.view-only-mode .save-btn,
 body.view-only-mode .add-due-card,
 body.view-only-mode .receive-payment-btn,
 body.view-only-mode .add-button,
 body.view-only-mode .edit-btn,
 body.view-only-mode .add-lot-card,
-body.view-only-mode .card-top-actions {
+body.view-only-mode .card-top-actions,
+body.view-only-mode .card-bottom-actions,
+body.view-only-mode .clear-sig-btn {
+  display: none !important;
+}
+
+/* Block signature drawing in view-only mode */
+body.view-only-mode .sig-canvas-container {
+  pointer-events: none !important;
+  opacity: 0.6 !important;
+}
+
+body.view-only-mode .sigCanvas {
+  pointer-events: none !important;
+}
+
+/* Block all buttons inside memo screens except navigation and download/share */
+body.view-only-mode .memo-dark-table .btn-icon {
+  display: none !important;
+}
+
+/* Prevent clicking on editable summary cards */
+body.view-only-mode .summary-card-dark input,
+body.view-only-mode .summary-card-dark .math-input {
+  pointer-events: none !important;
+}
+
+/* Block auto-message and reminder setup buttons */
+body.view-only-mode .auto-message-btn,
+body.view-only-mode .reminder-btn {
   display: none !important;
 }
 
