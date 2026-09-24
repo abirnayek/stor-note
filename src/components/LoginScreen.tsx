@@ -153,13 +153,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             </div>
             
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>লগইন কোড (৬ সংখ্যার)</label>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>লগইন কোড</label>
               <input 
                 type="text" 
                 required 
                 value={code}
                 onChange={e => setCode(e.target.value)}
-                placeholder="123456"
+                placeholder="12345678"
                 style={{
                   width: '100%', padding: '0.8rem', borderRadius: '8px',
                   background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)',
