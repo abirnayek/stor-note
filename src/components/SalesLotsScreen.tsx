@@ -31,6 +31,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
       const [showNewLotModal, setShowNewLotModal] = useState(false);
   const [newLotPassword, setNewLotPassword] = useState('');
   const { t, language } = useLanguage();
+  const devicePermission = localStorage.getItem('device_permission');
+  const hasEditPermission = devicePermission === 'edit' || devicePermission === 'admin';
   
   const today = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
     month: 'short',
@@ -218,7 +220,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
 
       <h3 style={{ margin: '1rem 0', opacity: 0.8, fontSize: '1.1rem' }}>ফোল্ডার / লটসমূহ</h3>
       <div className="lot-grid" style={{ marginBottom: '2rem' }}>
-        <div className="lot-card add-lot-card" onClick={handleAddLot}>
+        {hasEditPermission && (
+          <div className="lot-card add-lot-card" onClick={handleAddLot}>
           <div className="add-lot-content">
             <Package size={48} />
             <h3>ক্রিয়েট লট</h3>
@@ -233,11 +236,13 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span className="lot-status">{t('activeLot')}</span>
                       </div>
-                      <div className="card-top-actions">
+                      {hasEditPermission && (
+                        <div className="card-top-actions">
                         <button className="btn-icon delete-btn" onClick={(e) => handleDeleteLot(lot, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
                           <Trash2 size={16} />
                         </button>
                       </div>
+                    )}
                       <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
                         <MemoLockIcon passwordKey={`sales_lot_password_${lot}`} />
                       </div>
@@ -259,7 +264,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
       </h3>
       
       <div className="lot-grid">
-        <div className="lot-card add-lot-card" onClick={handleAddMemo}>
+        {hasEditPermission && (
+          <div className="lot-card add-lot-card" onClick={handleAddMemo}>
           <div className="add-lot-content">
             <Plus size={48} />
             <h3>নতুন মেমো</h3>
@@ -289,11 +295,13 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                     )}
                   </div>
                 </div>
-                <div className="card-top-actions">
+                {hasEditPermission && (
+                        <div className="card-top-actions">
                   <button className="btn-icon delete-btn" onClick={(e) => handleDeleteMemo(memo, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
                     <Trash2 size={16} />
                   </button>
                       </div>
+                    )}
                       <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
                         <MemoLockIcon passwordKey={`memo_password_${memo.id}`} />
                       </div>
@@ -329,7 +337,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
               <button className="btn btn-primary" onClick={() => confirmAddLot(false)} style={{ flex: 1 }}>
                 লট তৈরি করুন
               </button>
-            </div>
+                      </div>
+                    )}
           </div>
         </div>
       )}
@@ -338,5 +347,6 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
 };
 
 export default SalesLotsScreen;
+
 
 
