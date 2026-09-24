@@ -271,6 +271,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
             <h3>নতুন মেমো</h3>
           </div>
         </div>
+        )}
 
         {globalMemos.map(memo => (
             <ProtectedMemoWrapper key={memo.id} passwordKey={`memo_password_${memo.id}`} onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}>
@@ -337,8 +338,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
               <button className="btn btn-primary" onClick={() => confirmAddLot(false)} style={{ flex: 1 }}>
                 লট তৈরি করুন
               </button>
-                      </div>
-                    )}
+            </div>
           </div>
         </div>
       )}
