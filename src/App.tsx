@@ -108,9 +108,10 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Prevent typing/editing if view-only
+  // Prevent typing/editing if view-only (only when logged in)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!session) return; // Don't block anything on login screen
       if (localStorage.getItem('device_permission') === 'view') {
         const target = e.target as HTMLElement;
         if (
@@ -123,6 +124,10 @@ function App() {
     };
     
     const updateBodyClass = () => {
+      if (!session) {
+        document.body.classList.remove('view-only-mode');
+        return;
+      }
       if (localStorage.getItem('device_permission') === 'view') {
         document.body.classList.add('view-only-mode');
       } else {
@@ -138,7 +143,7 @@ function App() {
       window.removeEventListener('settingsChange', updateBodyClass);
       document.removeEventListener('keydown', handleKeyDown, true);
     };
-  }, []);
+  }, [session]);
   
   const [currentScreen, setCurrentScreen] = useState<Screen>('dashboard');
   const [currentLot, setCurrentLot] = useState<number | null>(null);
@@ -268,15 +273,49 @@ function App() {
     handleUpdateReminderStatus(reminder.dueId, 'sent');
   };
 
+  // Auto-login for localhost
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  
+  useEffect(() => {
+    if (isLocalhost && !session && !loadingAuth) {
+      // Auto sign-in on localhost
+      const autoLogin = async () => {
+        // Check if we have a stored email for auto-login
+        let storedEmail = localStorage.getItem('localhost_admin_email');
+        if (!storedEmail) {
+          storedEmail = 'localhost-admin@stor-note.local';
+        }
+        // Try to sign in with a magic link (silently create session)
+        const { error } = await supabase.auth.signInWithPassword({
+          email: storedEmail,
+          password: 'localhost-auto-admin-2024'
+        }).catch(() => ({ error: { message: 'no password auth' } } as any));
+        
+        // If password auth fails, just set permission directly and skip login
+        if (error) {
+          localStorage.setItem('device_permission', 'admin');
+          window.dispatchEvent(new Event('settingsChange'));
+        }
+      };
+      autoLogin();
+    }
+  }, [isLocalhost, session, loadingAuth]);
+
   if (loadingAuth) {
     return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-color)', color: 'var(--text-color)' }}>Loading...</div>;
   }
 
-  if (!session) {
+  // Localhost always bypasses login screen
+  if (!session && !isLocalhost) {
     return <LoginScreen onLoginSuccess={() => {
       // Force reload to apply synced localstorage data correctly
       window.location.reload();
     }} />;
+  }
+  
+  // If localhost without session, still show the app as admin
+  if (!session && isLocalhost) {
+    localStorage.setItem('device_permission', 'admin');
   }
 
   return (
