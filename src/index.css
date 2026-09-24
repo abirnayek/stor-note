@@ -1519,14 +1519,22 @@ body {
   z-index: 2;
 }
 
-/* GLOBAL VIEW ONLY MODE */
-body.view-only-mode input:not(.search-input):not(.login-input):not(.modal-input),
+/* ==========================================
+   GLOBAL VIEW ONLY MODE - COMPLETE LOCKDOWN
+   View Only users can ONLY view data.
+   No editing, adding, deleting, or modifying.
+   ========================================== */
+
+/* Block ALL inputs, textareas, selects (except search & language) */
+body.view-only-mode input:not(.search-input),
 body.view-only-mode textarea,
 body.view-only-mode select:not(.language-select) {
   pointer-events: none !important;
-  opacity: 0.8 !important;
+  opacity: 0.7 !important;
+  user-select: none !important;
 }
 
+/* Hide ALL action/edit/delete/add buttons */
 body.view-only-mode .delete-btn,
 body.view-only-mode .action-undo,
 body.view-only-mode .add-row-btn,
@@ -1539,34 +1547,62 @@ body.view-only-mode .edit-btn,
 body.view-only-mode .add-lot-card,
 body.view-only-mode .card-top-actions,
 body.view-only-mode .card-bottom-actions,
-body.view-only-mode .clear-sig-btn {
+body.view-only-mode .clear-sig-btn,
+body.view-only-mode .bulk-btn,
+body.view-only-mode .empty-card,
+body.view-only-mode .btn-3d {
   display: none !important;
 }
 
-/* Block signature drawing in view-only mode */
+/* Block signature drawing completely */
 body.view-only-mode .sig-canvas-container {
   pointer-events: none !important;
-  opacity: 0.6 !important;
+  opacity: 0.5 !important;
 }
-
 body.view-only-mode .sigCanvas {
   pointer-events: none !important;
 }
 
-/* Block all buttons inside memo screens except navigation and download/share */
+/* Hide delete buttons inside memo tables */
 body.view-only-mode .memo-dark-table .btn-icon {
   display: none !important;
 }
 
-/* Prevent clicking on editable summary cards */
+/* Block summary card inputs (total price, cost, profit etc.) */
 body.view-only-mode .summary-card-dark input,
 body.view-only-mode .summary-card-dark .math-input {
   pointer-events: none !important;
 }
 
-/* Block auto-message and reminder setup buttons */
+/* Block supplier input fields */
+body.view-only-mode .supplier-input {
+  pointer-events: none !important;
+}
+
+/* Hide auto-message/reminder buttons */
 body.view-only-mode .auto-message-btn,
 body.view-only-mode .reminder-btn {
   display: none !important;
+}
+
+/* Block the entire memo header actions except back button and download/share */
+body.view-only-mode .header-actions .action-undo,
+body.view-only-mode .header-actions .action-lock {
+  display: none !important;
+}
+
+/* Prevent any modal from being triggered (password set, new lot, etc.) */
+body.view-only-mode .modal-overlay {
+  display: none !important;
+}
+
+/* Block MathInput components */
+body.view-only-mode .math-input-wrapper {
+  pointer-events: none !important;
+}
+
+/* Hide weight unit toggle buttons */
+body.view-only-mode .weight-unit-toggle {
+  pointer-events: none !important;
 }
 
