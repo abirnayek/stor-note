@@ -227,6 +227,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
             <h3>ক্রিয়েট লট</h3>
           </div>
         </div>
+        )}
         
         {lots.map(lot => (
               <ProtectedMemoWrapper key={lot} passwordKey={`sales_lot_password_${lot}`} onAccessGranted={() => onSelectLot(lot)}>
