@@ -23,7 +23,7 @@ import { supabase } from './utils/supabaseClient';
 import LoginScreen from './components/LoginScreen';
 import DeviceManager from './components/DeviceManager';
 
-import { restoreFromCloud, setupRealtimeSync } from './utils/syncEngine';
+import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData } from './utils/syncEngine';
 
 export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo';
 
@@ -54,7 +54,8 @@ function App() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       if (session) {
-        await restoreFromCloud();
+        await pushUnsyncedLocalData();
+          await restoreFromCloud();
         setupRealtimeSync();
         
         // --- Device Validity Check ---

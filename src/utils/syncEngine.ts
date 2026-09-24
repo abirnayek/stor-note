@@ -192,3 +192,31 @@ export const setupRealtimeSync = () => {
     })
     .subscribe();
 };
+
+
+export const pushUnsyncedLocalData = async () => {
+  if (!currentUser) return;
+  const originalGetItem = localStorage.getItem;
+  const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
+  const ts = tsStr ? JSON.parse(tsStr) : {};
+  
+  const keysToSync = Object.keys(localStorage).filter(k => 
+    !k.startsWith('sb-') && k !== 'local_timestamps' && k !== 'device_id' && k !== 'device_permission'
+  );
+  
+  for (const key of keysToSync) {
+    if (!ts[key]) {
+      const value = originalGetItem.call(localStorage, key);
+      if (value) {
+        await supabase.from('user_backups').upsert({
+          user_id: currentUser.id,
+          key: key,
+          value: value,
+          updated_at: new Date().toISOString()
+        });
+        ts[key] = Date.now();
+      }
+    }
+  }
+  localStorage.setItem('local_timestamps', JSON.stringify(ts));
+};
