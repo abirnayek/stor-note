@@ -1518,3 +1518,25 @@ body {
   right: 8px;
   z-index: 2;
 }
+
+/* GLOBAL VIEW ONLY MODE */
+body.view-only-mode input:not(.search-input):not(.login-input):not(.modal-input),
+body.view-only-mode textarea,
+body.view-only-mode select:not(.language-select) {
+  pointer-events: none !important;
+  opacity: 0.8 !important;
+}
+
+body.view-only-mode .delete-btn,
+body.view-only-mode .action-undo,
+body.view-only-mode .add-row-btn,
+body.view-only-mode .save-btn,
+body.view-only-mode .add-due-card,
+body.view-only-mode .receive-payment-btn,
+body.view-only-mode .add-button,
+body.view-only-mode .edit-btn,
+body.view-only-mode .add-lot-card,
+body.view-only-mode .card-top-actions {
+  display: none !important;
+}
+

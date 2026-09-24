@@ -115,7 +115,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
                       <select
                         value={session.permission}
                         onChange={(e) => changePermission(session.device_id, e.target.value)}
-                        disabled={session.device_id === currentDeviceId}
+                        disabled={session.device_id === currentDeviceId || localStorage.getItem('device_permission') !== 'admin'}
                         style={{
                           background: 'transparent',
                           color: '#fff',
@@ -123,7 +123,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
                           padding: '0.4rem 0.5rem',
                           fontSize: '0.9rem',
                           outline: 'none',
-                          cursor: session.device_id === currentDeviceId ? 'not-allowed' : 'pointer',
+                          cursor: (session.device_id === currentDeviceId || localStorage.getItem('device_permission') !== 'admin') ? 'not-allowed' : 'pointer',
                           appearance: 'none', // to hide default arrow on some browsers
                         }}
                       >
@@ -135,7 +135,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
                       <span style={{ paddingRight: '8px', pointerEvents: 'none', opacity: 0.7 }}>▼</span>
                     </div>
                     
-                    {session.device_id !== currentDeviceId && (
+                    {session.device_id !== currentDeviceId && localStorage.getItem('device_permission') === 'admin' && (
                       <button 
                         onClick={() => handleKickOut(session.device_id)}
                         className="btn-icon"
