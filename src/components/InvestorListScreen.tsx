@@ -15,20 +15,25 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
   const { t } = useLanguage();
 
   useEffect(() => {
-    const saved = localStorage.getItem('investor_list');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      setInvestors(parsed);
-      
-      const profs: Record<string, any> = {};
-      parsed.forEach((id: string) => {
-        const profStr = localStorage.getItem(`investor_profile_${id}`);
-        if (profStr) {
-          try { profs[id] = JSON.parse(profStr); } catch (e) {}
-        }
-      });
-      setProfiles(profs);
-    }
+    const loadInvestors = () => {
+      const saved = localStorage.getItem('investor_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setInvestors(parsed);
+        
+        const profs: Record<string, any> = {};
+        parsed.forEach((id: string) => {
+          const profStr = localStorage.getItem(`investor_profile_${id}`);
+          if (profStr) {
+            try { profs[id] = JSON.parse(profStr); } catch (e) {}
+          }
+        });
+        setProfiles(profs);
+      }
+    };
+    loadInvestors();
+    window.addEventListener('storage', loadInvestors);
+    return () => window.removeEventListener('storage', loadInvestors);
   }, []);
 
   const handleAddInvestor = () => {

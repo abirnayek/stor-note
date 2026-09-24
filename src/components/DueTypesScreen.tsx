@@ -13,7 +13,8 @@ const DueTypesScreen: React.FC<DueTypesScreenProps> = ({ onNavigate, onSelectTyp
   const [totalDueAmount, setTotalDueAmount] = useState(0);
 
   useEffect(() => {
-    let total = 0;
+    const calculateTotal = () => {
+      let total = 0;
     const regularDuesStr = localStorage.getItem('dues_regular');
     const permanentDuesStr = localStorage.getItem('dues_permanent');
     
@@ -63,8 +64,17 @@ const DueTypesScreen: React.FC<DueTypesScreenProps> = ({ onNavigate, onSelectTyp
         } catch (e) {}
       }
     });
-    
     setTotalDueAmount(total);
+    };
+
+    calculateTotal();
+    
+    window.addEventListener('storage', calculateTotal);
+    window.addEventListener('settingsChange', calculateTotal); // Custom app event if any
+    return () => {
+      window.removeEventListener('storage', calculateTotal);
+      window.removeEventListener('settingsChange', calculateTotal);
+    };
   }, []);
 
   return (

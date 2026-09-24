@@ -1,10 +1,33 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
-export function useHistory<T>(initialState: T, maxHistory: number = 100) {
+export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: number = 100) {
   const [state, setState] = useState<T>(initialState);
   const historyRef = useRef<T[]>([]);
+  const isInternalUpdate = useRef(false);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    
+    const handleStorage = () => {
+      if (isInternalUpdate.current) {
+         isInternalUpdate.current = false;
+         return;
+      }
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setState(parsed);
+        } catch(e) {}
+      }
+    };
+    
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [storageKey]);
 
   const setWithHistory = useCallback((newState: T | ((prev: T) => T)) => {
+    isInternalUpdate.current = true;
     setState((prev) => {
       const nextState = typeof newState === 'function' ? (newState as Function)(prev) : newState;
       
@@ -19,6 +42,7 @@ export function useHistory<T>(initialState: T, maxHistory: number = 100) {
 
   const undo = useCallback(() => {
     if (historyRef.current.length === 0) return;
+    isInternalUpdate.current = true;
     const previousState = historyRef.current.pop()!;
     setState(previousState);
   }, []);

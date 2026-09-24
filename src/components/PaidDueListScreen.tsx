@@ -101,6 +101,10 @@ const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueTy
 
   useEffect(() => {
     runCleanup(autoDeleteEnabled, autoDeleteMonths);
+    
+    const handleStorage = () => runCleanup(autoDeleteEnabled, autoDeleteMonths);
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, [dueType, autoDeleteEnabled, autoDeleteMonths]);
 
   let totalCategoryPaid = 0;

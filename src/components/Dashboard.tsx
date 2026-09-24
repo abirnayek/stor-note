@@ -18,7 +18,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           <h3>{t('salesAccount')}</h3>
         </div>
         
-        <div className="dashboard-card" onClick={() => onNavigate('due-types')}>
+        <div className="dashboard-card" onClick={() => onNavigate('due-category')}>
           <Clock size={48} className="card-icon" />
           <h3>{t('dueAccount')}</h3>
         </div>

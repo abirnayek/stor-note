@@ -1,3 +1,4 @@
+import { MathInput } from './MathInput';
 import React, { useState, useEffect, useRef } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Plus, Trash2, Download, CheckCircle2, Phone } from 'lucide-react';
@@ -405,8 +406,8 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                       </select>
                     </td>
                     <td data-label={t('amountCol')} style={{ fontWeight: 'bold', color: typeColor(entry.type) }}>
-                      <input
-                        type="number"
+                      <MathInput
+                        
                         value={entry.amount}
                         onChange={e => updateEntry(entry.id, 'amount', e.target.value ? Number(e.target.value) : '')}
                         placeholder="0.00"
@@ -415,8 +416,8 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                       />
                     </td>
                     <td data-label={t('profitPercent')}>
-                      <input
-                        type="number"
+                      <MathInput
+                        
                         value={entry.profitPercent !== undefined ? entry.profitPercent : ''}
                         onChange={e => updateEntry(entry.id, 'profitPercent', e.target.value ? Number(e.target.value) : '')}
                         placeholder="%"
@@ -425,8 +426,8 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                       />
                     </td>
                     <td data-label={t('totalProfitCol')}>
-                      <input
-                        type="number"
+                      <MathInput
+                        
                         value={entry.total}
                         onChange={e => updateEntry(entry.id, 'total', e.target.value ? Number(e.target.value) : '')}
                         placeholder="0.00"

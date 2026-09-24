@@ -24,6 +24,9 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
 
     // Load memos
     loadMemos();
+    
+    window.addEventListener('storage', loadMemos);
+    return () => window.removeEventListener('storage', loadMemos);
   }, [investorId]);
 
   const loadMemos = () => {

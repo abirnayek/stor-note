@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { type Screen } from '../App';
 import { Plus, ChevronLeft, Package, Calendar, Trash2, Search } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -10,16 +10,30 @@ interface LotsScreenProps {
 }
 
 const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
-  const [lots, setLots] = useState<number[]>(() => {
-    const saved = localStorage.getItem('purchase_lots_list');
-    return saved ? JSON.parse(saved) : [1];
-  });
+  const [lots, setLots] = useState<number[]>([]);
+  
+  useEffect(() => {
+    const loadLots = () => {
+      const saved = localStorage.getItem('purchase_lots_list');
+      try {
+        const parsed = saved ? JSON.parse(saved) : [1];
+        setLots(Array.isArray(parsed) ? parsed : [1]);
+      } catch (e) {
+        setLots([1]);
+      }
+    };
+    loadLots();
+    window.addEventListener('storage', loadLots);
+    return () => window.removeEventListener('storage', loadLots);
+  }, []);
   const [activeLot, setActiveLot] = useState<number | null>(null);
   const [password, setPassword] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewLotModal, setShowNewLotModal] = useState(false);
   const [newLotPassword, setNewLotPassword] = useState('');
   const { t, language } = useLanguage();
+  const devicePermission = localStorage.getItem('device_permission');
+  const hasEditPermission = devicePermission === 'edit' || devicePermission === 'admin';
   
   const today = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
     month: 'short',
@@ -197,9 +211,11 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
                     <Package size={40} className="lot-icon" />
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span className="lot-status">{t('activeLot')}</span>
-                      <button className="btn-icon delete-btn" onClick={(e) => handleDeleteLot(lot, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
-                        <Trash2 size={16} />
-                      </button>
+                      {hasEditPermission && (
+                        <button className="btn-icon delete-btn" onClick={(e) => handleDeleteLot(lot, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="lot-card-body">
@@ -229,12 +245,14 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
           );
         })}
         
-        <div className="lot-card add-lot-card" onClick={handleAddLot}>
-          <div className="add-lot-content">
-            <Plus size={48} />
-            <h3>{t('newLot')}</h3>
+        {hasEditPermission && (
+          <div className="lot-card add-lot-card" onClick={handleAddLot}>
+            <div className="add-lot-content">
+              <Plus size={48} />
+              <h3>{t('newLot')}</h3>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {showNewLotModal && (

@@ -1,3 +1,4 @@
+import { MathInput } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Phone, Plus, Trash2 } from 'lucide-react';
@@ -44,7 +45,7 @@ interface DueMemoState {
 }
 
 const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueId, isPaid = false }) => {
-  const { t, language } = useLanguage();
+  const { t, language, formatNumber } = useLanguage();
   const memoRef = useRef<HTMLDivElement>(null);
   const sigPadReceiver = useRef<SignatureCanvas>(null);
   const sigPadSeller = useRef<SignatureCanvas>(null);
@@ -319,7 +320,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
           <div className="memo-top-meta" style={{ alignItems: 'flex-start' }}>
             <div className="meta-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
               <div className="supplier-input-dark" style={{ display: 'flex', alignItems: 'center' }}>
-                <span className="memo-label-dark" style={{ width: '80px' }}>Name: </span>
+                <span className="memo-label-dark" style={{ width: '80px' }}>{t('nameLabel')} </span>
                 <input 
                   type="text" 
                   className="supplier-input"
@@ -329,7 +330,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                 />
               </div>
               <div className="supplier-input-dark" style={{ display: 'flex', alignItems: 'center' }}>
-                <span className="memo-label-dark" style={{ width: '80px' }}>Address: </span>
+                <span className="memo-label-dark" style={{ width: '80px' }}>{t('addressLabel')} </span>
                 <input 
                   type="text" 
                   className="supplier-input"
@@ -339,7 +340,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                 />
               </div>
               <div className="supplier-input-dark" style={{ display: 'flex', alignItems: 'center' }}>
-                <span className="memo-label-dark" style={{ width: '80px' }}>Mobile: </span>
+                <span className="memo-label-dark" style={{ width: '80px' }}>{t('mobileLabel')} </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1 }}>
                   <input 
                     type="text" 
@@ -405,7 +406,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
             <table className="memo-dark-table">
               <thead>
                 <tr>
-                  <th>Sl No.</th>
+                  <th>{t('slNo')}</th>
                   <th>{t('fishName') || 'Fish Name'}</th>
                   <th>{t('weightKg') || 'Weight/Kg'}</th>
                   <th>{t('price') || 'Price'}</th>
@@ -445,8 +446,8 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                       </td>
                       <td data-label={t('weightKg') || 'Weight/Kg'}>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
-                          <input 
-                            type="number" 
+                          <MathInput 
+                             
                             placeholder="0.00" 
                             value={entry.totalKg}
                             onChange={e => updateEntry(entry.id, 'totalKg', e.target.value ? Number(e.target.value) : '')}
@@ -463,16 +464,16 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                         </div>
                       </td>
                       <td data-label={t('price') || 'Price'}>
-                        <input 
-                          type="number" 
+                        <MathInput 
+                           
                           placeholder="0.00" 
                           value={entry.buyRate}
                           onChange={e => updateEntry(entry.id, 'buyRate', e.target.value ? Number(e.target.value) : '')}
                         />
                       </td>
                       <td data-label={t('profitPercent') || 'Profit %'}>
-                        <input 
-                          type="number" 
+                        <MathInput 
+                           
                           className="highlight-input"
                           placeholder="20" 
                           value={entry.profitPercent !== undefined ? entry.profitPercent : 20}
@@ -481,8 +482,8 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                         />
                       </td>
                       <td data-label={t('saleRateAuto') || 'Sale Rate (Auto)'} style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>
-                        <input 
-                          type="number" 
+                        <MathInput 
+                           
                           placeholder="0.00"
                           value={entry.manualSaleRate !== undefined ? entry.manualSaleRate : (calculatedSalePriceAuto > 0 ? calculatedSalePriceAuto.toFixed(2) : '')}
                           onChange={e => updateEntry(entry.id, 'manualSaleRate', e.target.value === '' ? undefined : Number(e.target.value))}
@@ -509,12 +510,12 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem', fontSize: '1.1rem' }}>
               <div>
                 <span style={{ display: 'inline-block', width: '120px' }}>Total Price:</span> 
-                <span style={{ fontWeight: 'bold' }}>{totalPrice.toFixed(2)}</span>
+                <span style={{ fontWeight: 'bold' }}>{formatNumber(totalPrice.toFixed(2))}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center' }}>
                 <span style={{ display: 'inline-block', width: '120px' }}>Deposit (Jama):</span> 
-                <input 
-                  type="number" 
+                <MathInput 
+                   
                   value={memoState.deposit} 
                   onChange={e => updateMemoState('deposit', e.target.value ? Number(e.target.value) : '')}
                   placeholder="0.00"
@@ -522,7 +523,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                 />
               </div>
               <div style={{ fontSize: '1.2rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
-                  <span style={{ display: 'inline-block', width: '120px' }}>Total Due:</span> 
+                  <span style={{ display: 'inline-block', width: '120px' }}>{t('totalDue')}</span> 
                   <span style={{ color: '#ff9800' }}>{totalDueAmount.toFixed(2)}</span>
               </div>
             </div>

@@ -24,10 +24,15 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
   const [msgType, setMsgType] = useState<'whatsapp' | 'sms'>('whatsapp');
   
   useEffect(() => {
-    const savedDues = localStorage.getItem(`dues_${dueType}`);
-    if (savedDues) {
-      setDues(JSON.parse(savedDues));
-    }
+    const loadDues = () => {
+      const savedDues = localStorage.getItem(`dues_${dueType}`);
+      if (savedDues) {
+        setDues(JSON.parse(savedDues));
+      }
+    };
+    loadDues();
+    window.addEventListener('storage', loadDues);
+    return () => window.removeEventListener('storage', loadDues);
   }, [dueType]);
   
   const handleDeleteDue = (dueId: string, e: React.MouseEvent) => {

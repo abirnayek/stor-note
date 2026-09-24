@@ -19,25 +19,30 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
   const { t } = useLanguage();
 
   useEffect(() => {
-    // Migration logic for old single memo format
-    const oldMemoKey = `sales_memo_lot_${lotNumber}`;
-    const oldMemoStr = localStorage.getItem(oldMemoKey);
-    
-    const memoListKey = `sales_memo_list_${lotNumber}`;
-    let savedList = localStorage.getItem(memoListKey);
-    
-    if (oldMemoStr && !savedList) {
-      // Migrate
-      const firstMemoId = '1';
-      localStorage.setItem(`sales_memo_lot_${lotNumber}_memo_${firstMemoId}`, oldMemoStr);
-      localStorage.removeItem(oldMemoKey);
+    const loadMemos = () => {
+      // Migration logic for old single memo format
+      const oldMemoKey = `sales_memo_lot_${lotNumber}`;
+      const oldMemoStr = localStorage.getItem(oldMemoKey);
       
-      const newList = [firstMemoId];
-      localStorage.setItem(memoListKey, JSON.stringify(newList));
-      setMemos(newList);
-    } else if (savedList) {
-      setMemos(JSON.parse(savedList));
-    }
+      const memoListKey = `sales_memo_list_${lotNumber}`;
+      let savedList = localStorage.getItem(memoListKey);
+      
+      if (oldMemoStr && !savedList) {
+        // Migrate
+        const firstMemoId = '1';
+        localStorage.setItem(`sales_memo_lot_${lotNumber}_memo_${firstMemoId}`, oldMemoStr);
+        localStorage.removeItem(oldMemoKey);
+        
+        const newList = [firstMemoId];
+        localStorage.setItem(memoListKey, JSON.stringify(newList));
+        setMemos(newList);
+      } else if (savedList) {
+        setMemos(JSON.parse(savedList));
+      }
+    };
+    loadMemos();
+    window.addEventListener('storage', loadMemos);
+    return () => window.removeEventListener('storage', loadMemos);
   }, [lotNumber]);
 
   const handleAddMemo = () => {
@@ -101,7 +106,12 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
           <button className="btn-icon" onClick={() => onNavigate('sales-lots')}>
             <ChevronLeft size={24} />
           </button>
-          <h2>{t('salesAccount')} {lotNumber} - Memos</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+            <h2>{t('salesAccount')} {lotNumber} - Memos</h2>
+            <div style={{ background: 'rgba(114, 190, 68, 0.2)', color: '#72be44', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 'bold' }}>
+              Total: {memos.length}
+            </div>
+          </div>
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.2rem 0.5rem', borderRadius: '8px' }}>

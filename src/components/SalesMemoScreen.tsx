@@ -1,3 +1,4 @@
+import { MathInput } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Undo, MessageCircle, Mail, Share2, Download, Plus, Trash2, Phone } from 'lucide-react';
@@ -12,6 +13,7 @@ interface SalesMemoScreenProps {
   onNavigate: (screen: Screen) => void;
   lotNumber: number | null;
   memoId: string;
+  onLotChange?: (lot: any) => void;
 }
 
 interface FishEntry {
@@ -414,7 +416,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           <div className="memo-top-meta" style={{ alignItems: 'flex-start' }}>
             <div className="meta-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
               <div className="supplier-input-dark" style={{ display: 'flex', alignItems: 'center' }}>
-                <span className="memo-label-dark" style={{ width: '80px' }}>Name: </span>
+                <span className="memo-label-dark" style={{ width: '80px' }}>{t('nameLabel')} </span>
                 <input 
                   type="text" 
                   className="supplier-input"
@@ -424,7 +426,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 />
               </div>
               <div className="supplier-input-dark" style={{ display: 'flex', alignItems: 'center' }}>
-                <span className="memo-label-dark" style={{ width: '80px' }}>Address: </span>
+                <span className="memo-label-dark" style={{ width: '80px' }}>{t('addressLabel')} </span>
                 <input 
                   type="text" 
                   className="supplier-input"
@@ -434,7 +436,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 />
               </div>
               <div className="supplier-input-dark" style={{ display: 'flex', alignItems: 'center' }}>
-                <span className="memo-label-dark" style={{ width: '80px' }}>Mobile: </span>
+                <span className="memo-label-dark" style={{ width: '80px' }}>{t('mobileLabel')} </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1 }}>
                   <input 
                     type="text" 
@@ -483,7 +485,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span className="memo-label-dark" style={{ fontSize: '0.9rem' }}>Lot No:</span>
+                <span className="memo-label-dark" style={{ fontSize: '0.9rem' }}>{t('lotNoLabel')}</span>
                 <input 
                   type="text" 
                   className="supplier-input" 
@@ -494,7 +496,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span className="memo-label-dark" style={{ fontSize: '0.9rem' }}>Type:</span>
+                <span className="memo-label-dark" style={{ fontSize: '0.9rem' }}>{t('typeLabel')}</span>
                 <select 
                   style={{ 
                     width: '130px', 
@@ -522,12 +524,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
             <table className="memo-dark-table">
               <thead>
                 <tr>
-                  <th style={{ width: '60px' }}>Sl No.</th>
+                  <th style={{ width: '60px' }}>{t('slNo')}</th>
                   <th>{t('fishName')}</th>
                   <th>{t('weightKg')}</th>
-                  <th>Sale Rate</th>
+                  <th>{t('saleRate')}</th>
                   <th data-html2canvas-ignore>{t('profitPercent')}</th>
-                  <th>Total Price</th>
+                  <th>{t('totalPrice')}</th>
                   <th data-html2canvas-ignore></th>
                 </tr>
               </thead>
@@ -584,8 +586,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                       </td>
                       <td data-label={t('weightKg')}>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
-                          <input 
-                            type="number" 
+                          <MathInput 
+                             
                             placeholder="0.00" 
                             value={entry.totalKg}
                             onChange={e => updateEntry(entry.id, 'totalKg', e.target.value ? Number(e.target.value) : '')}
@@ -602,8 +604,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                         </div>
                       </td>
                       <td data-label="Sale Rate">
-                        <input 
-                          type="number" 
+                        <MathInput 
+                           
                           placeholder="0.00"
                           value={entry.manualSaleRate !== undefined ? entry.manualSaleRate : (calculatedSaleRate > 0 ? calculatedSaleRate.toFixed(2) : '')}
                           onChange={e => updateEntry(entry.id, 'manualSaleRate', e.target.value === '' ? '' : Number(e.target.value))}
@@ -611,8 +613,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                         />
                       </td>
                       <td data-label={t('profitPercent')} data-html2canvas-ignore>
-                        <input 
-                          type="number" 
+                        <MathInput 
+                           
                           className="highlight-input"
                           placeholder="20" 
                           value={entry.profitPercent !== undefined ? entry.profitPercent : 20}
@@ -653,9 +655,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 <span style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{grandTotal.toFixed(2)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="memo-label-dark">Jama (Paid):</span>
-                <input 
-                  type="number" 
+                <span className="memo-label-dark">{t('jamaPaid')}</span>
+                <MathInput 
+                   
                   className="supplier-input" 
                   style={{ width: '100%', textAlign: 'center', padding: '0.3rem' }}
                   value={memoState.paidAmount}

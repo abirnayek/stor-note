@@ -11,9 +11,14 @@ const TrashScreen: React.FC<TrashScreenProps> = ({ onNavigate }) => {
   const [items, setItems] = useState<TrashedItem[]>([]);
 
   useEffect(() => {
-    // Run cleanup on mount
-    cleanupTrash();
-    setItems(getTrashItems());
+    const loadTrash = () => {
+      // Run cleanup on mount or sync
+      cleanupTrash();
+      setItems(getTrashItems());
+    };
+    loadTrash();
+    window.addEventListener('storage', loadTrash);
+    return () => window.removeEventListener('storage', loadTrash);
   }, []);
 
   const handleRestore = (item: TrashedItem) => {

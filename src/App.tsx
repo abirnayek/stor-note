@@ -21,6 +21,7 @@ import InvestorMemoScreen from './components/InvestorMemoScreen';
 import { useLanguage } from './i18n/LanguageContext';
 import { supabase } from './utils/supabaseClient';
 import LoginScreen from './components/LoginScreen';
+import DeviceManager from './components/DeviceManager';
 
 import { restoreFromCloud, setupRealtimeSync } from './utils/syncEngine';
 
@@ -41,6 +42,7 @@ interface PendingReminder {
 function App() {
   const [theme, setTheme] = useState('dark');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDeviceManagerOpen, setIsDeviceManagerOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [userEmail] = useState<string | null>(localStorage.getItem('userEmail'));
   const [searchQuery, setSearchQuery] = useState('');
@@ -54,6 +56,35 @@ function App() {
       if (session) {
         await restoreFromCloud();
         setupRealtimeSync();
+        
+        // --- Device Validity Check ---
+        const deviceId = localStorage.getItem('device_id');
+        if (deviceId) {
+          const { data, error } = await supabase.from('active_sessions').select('status, permission').eq('device_id', deviceId).single();
+          if (error || !data || data.status === 'revoked') {
+            await supabase.auth.signOut();
+            localStorage.clear();
+            window.location.reload();
+            return;
+          }
+          if (data.permission) {
+             localStorage.setItem('device_permission', data.permission);
+          }
+          
+          // Setup realtime listener for this specific device to auto-logout if kicked
+          supabase.channel(`device_${deviceId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions', filter: `device_id=eq.${deviceId}` }, async (payload) => {
+              if (payload.eventType === 'DELETE' || (payload.eventType === 'UPDATE' && payload.new.status === 'revoked')) {
+                await supabase.auth.signOut();
+                localStorage.clear();
+                window.location.reload();
+              } else if (payload.eventType === 'UPDATE' && payload.new.permission) {
+                localStorage.setItem('device_permission', payload.new.permission);
+                window.dispatchEvent(new Event('settingsChange'));
+              }
+            }).subscribe();
+        }
+        // --- End Device Check ---
       }
       setLoadingAuth(false);
     });
@@ -506,7 +537,12 @@ function App() {
               onSelectLot={(lot) => {
                 setCurrentSalesLot(lot);
                 handleNavigate('sales-memo-list');
-              }} 
+              }}
+              onSelectMemo={(memoId, lotNumber) => {
+                if (lotNumber !== null) setCurrentSalesLot(lotNumber);
+                setCurrentSalesMemoId(memoId);
+                handleNavigate('sales-memo');
+              }}
             />
           )}
           {currentScreen === 'sales-memo-list' && currentSalesLot !== null && (
@@ -524,6 +560,7 @@ function App() {
               onNavigate={handleNavigate} 
               lotNumber={currentSalesLot} 
               memoId={currentSalesMemoId}
+              onLotChange={(lot) => setCurrentSalesLot(lot)}
             />
           )}
           {currentScreen === 'trash' && (
@@ -604,6 +641,26 @@ function App() {
               <span>{t('appVersion')}</span>
               <span style={{ opacity: 0.7 }}>1.0.0 (PWA enabled)</span>
             </div>
+            
+            {(localStorage.getItem('device_permission') === 'admin' || true) && (
+              <>
+                <div className="setting-item">
+                  <span>Devices & Permissions</span>
+                  <button className="btn btn-primary" onClick={() => { setIsSettingsOpen(false); setIsDeviceManagerOpen(true); }} style={{ fontSize: '0.9rem' }}>
+                    Manage Devices
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Device Manager Modal */}
+      {isDeviceManagerOpen && (
+        <div className="modal-overlay" onClick={() => setIsDeviceManagerOpen(false)} style={{ zIndex: 9999 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ minWidth: '400px', background: 'var(--card-bg)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <DeviceManager onClose={() => setIsDeviceManagerOpen(false)} />
           </div>
         </div>
       )}

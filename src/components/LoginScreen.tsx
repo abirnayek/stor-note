@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import { restoreFromCloud, setupRealtimeSync } from '../utils/syncEngine';
+import { CheckCircle } from 'lucide-react';
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
@@ -8,40 +9,83 @@ interface LoginScreenProps {
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLogin, setIsLogin] = useState(true);
+  const [code, setCode] = useState('');
+  const [step, setStep] = useState<'email' | 'code'>('email');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email.trim()) return;
+    
     setLoading(true);
     setError(null);
-
+    
     try {
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-        
-        // Restore data from cloud to local storage after successful login
-        await restoreFromCloud();
-        setupRealtimeSync();
-        onLoginSuccess();
-      } else {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        if (error) throw error;
-        
-        alert('Account created successfully! Please check your email if confirmation is required, or simply log in.');
-        setIsLogin(true);
-      }
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+      });
+      if (error) throw error;
+      setStep('code');
     } catch (err: any) {
-      setError(err.message || 'An error occurred during authentication');
+      setError(err.message || 'Failed to send verification code.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!code.trim()) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const { data: authData, error } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: code.trim(),
+        type: 'email'
+      });
+      if (error) throw error;
+      
+      // --- Device Tracking ---
+      let deviceId = localStorage.getItem('device_id');
+      if (!deviceId) {
+        deviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
+        localStorage.setItem('device_id', deviceId);
+      }
+      const deviceName = navigator.userAgent;
+
+      if (authData?.user) {
+        // Check if there are any admins in the system
+        const { count } = await supabase
+          .from('active_sessions')
+          .select('*', { count: 'exact', head: true })
+          .eq('permission', 'admin');
+          
+        const isFirstDevice = count === 0;
+        const initialPermission = isFirstDevice ? 'admin' : 'view';
+
+        await supabase.from('active_sessions').upsert({
+          device_id: deviceId,
+          user_id: authData.user.id,
+          device_name: deviceName,
+          status: 'active',
+          permission: initialPermission,
+          last_active: new Date().toISOString()
+        }, { onConflict: 'device_id' });
+        
+        localStorage.setItem('device_permission', initialPermission);
+      }
+      // --- End Device Tracking ---
+
+      // Restore data from cloud to local storage after successful login
+      await restoreFromCloud();
+      setupRealtimeSync();
+      onLoginSuccess();
+    } catch (err: any) {
+      setError(err.message || 'Invalid verification code.');
     } finally {
       setLoading(false);
     }
@@ -68,59 +112,76 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           </div>
         )}
 
-        <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>Email</label>
-            <input 
-              type="email" 
-              required 
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="you@example.com"
+        {step === 'email' ? (
+          <form onSubmit={handleSendCode} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>Email</label>
+              <input 
+                type="email" 
+                required 
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                style={{
+                  width: '100%', padding: '0.8rem', borderRadius: '8px',
+                  background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)'
+                }}
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={loading}
               style={{
-                width: '100%', padding: '0.8rem', borderRadius: '8px',
-                background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)'
+                width: '100%', padding: '1rem', marginTop: '1rem', borderRadius: '8px',
+                background: 'var(--primary-color)', color: '#000', fontWeight: 'bold', border: 'none', cursor: 'pointer',
+                opacity: loading ? 0.7 : 1
               }}
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>Password</label>
-            <input 
-              type="password" 
-              required 
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Min 6 characters"
+            >
+              {loading ? 'Sending Code...' : 'Send Verification Code'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyCode} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#72be44', marginBottom: '1rem' }}>
+              <CheckCircle size={16} />
+              <span style={{ fontSize: '0.9rem' }}>Code sent to {email}</span>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', opacity: 0.9 }}>6-Digit Verification Code</label>
+              <input 
+                type="text" 
+                required 
+                value={code}
+                onChange={e => setCode(e.target.value)}
+                placeholder="000000"
+                maxLength={6}
+                style={{
+                  width: '100%', padding: '0.8rem', borderRadius: '8px',
+                  background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)',
+                  fontSize: '1.2rem', letterSpacing: '0.2rem', textAlign: 'center'
+                }}
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={loading || code.length < 6}
               style={{
-                width: '100%', padding: '0.8rem', borderRadius: '8px',
-                background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)'
+                width: '100%', padding: '1rem', marginTop: '1rem', borderRadius: '8px',
+                background: 'var(--primary-color)', color: '#000', fontWeight: 'bold', border: 'none', cursor: 'pointer',
+                opacity: (loading || code.length < 6) ? 0.7 : 1
               }}
-            />
-          </div>
-          <button 
-            type="submit" 
-            disabled={loading}
-            style={{
-              width: '100%', padding: '1rem', marginTop: '1rem', borderRadius: '8px',
-              background: 'var(--primary-color)', color: '#000', fontWeight: 'bold', border: 'none', cursor: 'pointer',
-              opacity: loading ? 0.7 : 1
-            }}
-          >
-            {loading ? 'Please wait...' : (isLogin ? 'Log In' : 'Sign Up')}
-          </button>
-        </form>
-
-        <div style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.9rem' }}>
-          <button 
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setError(null);
-            }}
-            style={{ background: 'transparent', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', textDecoration: 'underline' }}
-          >
-            {isLogin ? 'Need an account? Sign Up' : 'Already have an account? Log In'}
-          </button>
-        </div>
+            >
+              {loading ? 'Verifying...' : 'Verify & Login'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep('email')}
+              style={{ background: 'transparent', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', textDecoration: 'underline', marginTop: '1rem', opacity: 0.8 }}
+            >
+              Back to Email
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
