@@ -247,8 +247,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
               <button className="btn btn-primary" onClick={() => confirmAddLot(false)} style={{ flex: 1 }}>
                 লট তৈরি করুন
               </button>
-                      </div>
-                    )}
+            </div>
           </div>
         </div>
       )}
