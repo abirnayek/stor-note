@@ -1,9 +1,11 @@
 import { MathInput } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Plus, Trash2, Phone } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, Phone, Share2, MessageCircle, Mail, Download } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import SignatureCanvas from 'react-signature-canvas';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
 
 interface DueMemoScreenProps {
@@ -46,6 +48,7 @@ interface DueMemoState {
 
 const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueId, isPaid = false }) => {
   const { t, language, formatNumber } = useLanguage();
+  const memoRef = useRef<HTMLDivElement>(null);
   const sigPadReceiver = useRef<SignatureCanvas>(null);
   const sigPadSeller = useRef<SignatureCanvas>(null);
   
@@ -282,6 +285,25 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
 
 
 
+  const handleDownload = async () => {
+    if (memoRef.current) {
+      try {
+        const canvas = await html2canvas(memoRef.current, { scale: 2, backgroundColor: '#092115' });
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save(`Due_Sales_Memo_${dueType}_${dueId}.pdf`);
+      } catch (err) {
+        console.error('Failed to download PDF', err);
+      }
+    }
+  };
+
+  const shareUrl = window.location.href;
+  const shareText = `Check out this Due Memo (${dueType === 'regular' ? 'Regular' : dueType === 'permanent' ? 'Permanent' : 'Purchase'} Due)`;
+
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar" data-html2canvas-ignore>
@@ -294,10 +316,28 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
             {saveStatus === 'Saved' ? '✔ All changes saved' : 'Saving...'}
           </span>
         </div>
+
+        <div className="header-actions">
+          <div className="share-group">
+            <button className="btn-icon action-fb" onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`)} title="Share on Facebook">
+              <Share2 size={24} />
+            </button>
+            <button className="btn-icon action-wa" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`)} title="Share on WhatsApp">
+              <MessageCircle size={24} />
+            </button>
+            <button className="btn-icon action-mail" onClick={() => window.open(`mailto:?subject=Due Memo&body=${encodeURIComponent(shareText + ' ' + shareUrl)}`)} title="Share via Email">
+              <Mail size={24} />
+            </button>
+          </div>
+
+          <button className="btn-icon action-download" onClick={handleDownload} title="Download PDF">
+            <Download size={24} />
+          </button>
+        </div>
       </div>
 
       <div className="memo-wrapper">
-        <div className="memo-paper-dark" >
+        <div className="memo-paper-dark" ref={memoRef} >
           
           <div className="memo-dark-header">
             <div className="memo-logo-area-dark">
