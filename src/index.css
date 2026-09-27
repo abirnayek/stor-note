@@ -575,6 +575,7 @@ body {
 .lot-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-auto-rows: 1fr;
   gap: 1.5rem;
 }
 
@@ -592,6 +593,8 @@ body {
   flex-direction: column;
   gap: 1.5rem;
   position: relative;
+  min-height: 145px;
+  height: 100%;
 }
 
 .lot-card:hover {
