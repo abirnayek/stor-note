@@ -61,6 +61,22 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
               if (memoStr) {
                 try {
                   const memo = JSON.parse(memoStr);
+                  
+                  // Auto-sync fallback for old memos that didn't sync name properly
+                  if (!memo.customerName) {
+                    const dueMemoStr = localStorage.getItem(`due_memo_${memoId}`);
+                    if (dueMemoStr) {
+                      try {
+                        const dueMemo = JSON.parse(dueMemoStr);
+                        if (dueMemo.name) {
+                          memo.customerName = dueMemo.name;
+                          memo.status = dueMemo.paidDate ? 'paid' : 'due';
+                          localStorage.setItem(key, JSON.stringify(memo));
+                        }
+                      } catch(e) {}
+                    }
+                  }
+                  
                   if (memo.customerName) name = memo.customerName;
                   if (memo.status === 'paid') {
                     statusColor = '#72be44';
