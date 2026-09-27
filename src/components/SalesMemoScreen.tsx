@@ -65,7 +65,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           mobile: parsed.mobile || '',
           lotNumberInput: parsed.lotNumberInput || (lotNumber ? lotNumber.toString() : ''),
           paidAmount: parsed.paidAmount || '',
-          customerType: parsed.customerType || '',
+          customerType: parsed.customerType || 'regular',
           status: parsed.status || 'draft',
           createdAt: parsed.createdAt || today,
           updatedAt: parsed.updatedAt,
@@ -81,7 +81,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       mobile: '',
       lotNumberInput: lotNumber ? lotNumber.toString() : '',
       paidAmount: '',
-      customerType: '',
+      customerType: 'regular',
       status: 'draft',
       createdAt: today,
       entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', profitPercent: '' }]
@@ -131,7 +131,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       }
     });
 
-    const dueAmount = grandTotal - Number(memoState.paidAmount || 0);
+    const dueAmount = Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100;
     let currentStatus = memoState.status || 'draft';
 
     if (memoState.customerType) {
@@ -507,7 +507,6 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   value={memoState.customerType || ''}
                   onChange={e => updateMemoState('customerType', e.target.value)}
                 >
-                  <option value="" style={{ color: '#000', background: '#fff' }}>Select Type...</option>
                   <option value="regular" style={{ color: '#000', background: '#fff' }}>{t('regularSeller')}</option>
                   <option value="permanent" style={{ color: '#000', background: '#fff' }}>{t('aratdarSeller')}</option>
                 </select>
@@ -746,5 +745,6 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 };
 
 export default SalesMemoScreen;
+
 
 

@@ -51,6 +51,7 @@ function App() {
   
   const [session, setSession] = useState<any>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  const [showLoginScreen, setShowLoginScreen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -218,7 +219,7 @@ function App() {
   }, []);
 
   const handleLogin = () => {
-    // Actually, we use LoginScreen now, this is just for safety.
+    setShowLoginScreen(true);
   };
 
   const handleLogout = async () => {
@@ -305,9 +306,10 @@ function App() {
     return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-color)', color: 'var(--text-color)' }}>Loading...</div>;
   }
 
-  // Localhost always bypasses login screen
-  if (!session && !isLocalhost) {
+  // Localhost always bypasses login screen (unless user explicitly clicks Log In)
+  if (!session && (!isLocalhost || showLoginScreen)) {
     return <LoginScreen onLoginSuccess={() => {
+      setShowLoginScreen(false);
       // Force reload to apply synced localstorage data correctly
       window.location.reload();
     }} />;

@@ -108,6 +108,76 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
       return;
     }
 
+    let currentTotalPrice = 0;
+    if (memoState.entries && memoState.entries.length > 0) {
+      currentTotalPrice = memoState.entries.reduce((sum, entry) => {
+          let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
+          let buyRateNum = Number(entry.buyRate) || 0;
+          let calculatedSalePriceAuto = 0;
+          if (buyRateNum > 0) {
+            calculatedSalePriceAuto = buyRateNum + (buyRateNum * currentProfitPercent / 100);
+          }
+          let salePriceAuto = 0;
+          if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+            let manualRateNum = Number(entry.manualSaleRate);
+            salePriceAuto = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+          } else {
+            salePriceAuto = calculatedSalePriceAuto;
+          }
+          let weightInKg = 0;
+          let totalKgNum = Number(entry.totalKg) || 0;
+          if (totalKgNum > 0) {
+            weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
+          }
+          if (weightInKg > 0 && salePriceAuto > 0) {
+            return sum + (salePriceAuto * weightInKg);
+          }
+          return sum;
+      }, 0);
+    }
+    const currentDeposit = typeof memoState.deposit === 'number' ? memoState.deposit : (Number(memoState.deposit) || 0);
+    const currentDueAmount = Math.round((currentTotalPrice - currentDeposit) * 100) / 100;
+
+    if (memoState.memoState) {
+      const lotForSalesMemo = memoState.memoState.lotNumberInput || 'unassigned';
+      const updatedSalesMemo = {
+        ...memoState.memoState,
+        paidAmount: currentDeposit,
+        status: currentDueAmount <= 0 ? 'paid' : 'due',
+        customerName: memoState.name,
+        address: memoState.address,
+        mobile: memoState.mobile,
+        entries: memoState.entries.map((e, index) => ({
+          ...e,
+          serialNo: String(index + 1)
+        }))
+      };
+      localStorage.setItem(`sales_memo_lot_${lotForSalesMemo}_memo_${dueId}`, JSON.stringify(updatedSalesMemo));
+      memoState.memoState = updatedSalesMemo;
+    }
+
+    if (!isPaid && currentTotalPrice > 0 && currentDueAmount <= 0) {
+      // 1. Remove from active dues
+      const existingDuesStr = localStorage.getItem(`dues_${dueType}`);
+      let existingDues: string[] = existingDuesStr ? JSON.parse(existingDuesStr) : [];
+      existingDues = existingDues.filter(id => id !== dueId);
+      localStorage.setItem(`dues_${dueType}`, JSON.stringify(existingDues));
+
+      // 2. Add to paid dues
+      const paidDuesStr = localStorage.getItem(`paid_dues_${dueType}`);
+      const paidDues: string[] = paidDuesStr ? JSON.parse(paidDuesStr) : [];
+      if (!paidDues.includes(dueId)) {
+        localStorage.setItem(`paid_dues_${dueType}`, JSON.stringify([...paidDues, dueId]));
+      }
+
+      // 3. Mark memo as paid with timestamp
+      const updatedMemo = { ...memoState, paidDate: Date.now() };
+      localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(updatedMemo));
+      alert('মেমোটির সম্পূর্ণ বকেয়া পরিশোধ হয়েছে এবং এটি পেইড লিস্টে চলে গেছে!');
+      onNavigate('due-list');
+      return;
+    }
+
     localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(memoState));
     
     if (!isPaid) {
@@ -228,28 +298,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
   const totalDeposit = typeof memoState.deposit === 'number' ? memoState.deposit : 0;
   const totalDueAmount = totalPrice - totalDeposit;
 
-  const handleMarkAsPaid = () => {
-    // 1. Remove from active dues
-    const existingDuesStr = localStorage.getItem(`dues_${dueType}`);
-    let existingDues: string[] = existingDuesStr ? JSON.parse(existingDuesStr) : [];
-    existingDues = existingDues.filter(id => id !== dueId);
-    localStorage.setItem(`dues_${dueType}`, JSON.stringify(existingDues));
 
-    // 2. Add to paid dues
-    const paidDuesStr = localStorage.getItem(`paid_dues_${dueType}`);
-    const paidDues: string[] = paidDuesStr ? JSON.parse(paidDuesStr) : [];
-    if (!paidDues.includes(dueId)) {
-      localStorage.setItem(`paid_dues_${dueType}`, JSON.stringify([...paidDues, dueId]));
-    }
-
-    // 3. Mark memo as paid with timestamp
-    const updatedMemo = { ...memoState, paidDate: Date.now() };
-    setMemoState(updatedMemo);
-    localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(updatedMemo));
-    
-    alert('Marked as Paid!');
-    onNavigate('due-list');
-  };
 
   const handleSetAutoMessage = () => {
     let timestamp = 0;
@@ -586,13 +635,6 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                   Set Auto Message
                 </button>
               )}
-              <button 
-                className="btn-primary"  
-                style={{ background: '#72be44', padding: '0.8rem 2rem', fontSize: '1.1rem', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer' }} 
-                onClick={handleMarkAsPaid}
-              >
-                Mark as Paid
-              </button>
             </div>
           )}
 
@@ -727,4 +769,8 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
 };
 
 export default DueMemoScreen;
+
+
+
+
 

@@ -228,28 +228,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
   const totalDeposit = typeof memoState.deposit === 'number' ? memoState.deposit : 0;
   const totalDueAmount = totalPrice - totalDeposit;
 
-  const handleMarkAsPaid = () => {
-    // 1. Remove from active dues
-    const existingDuesStr = localStorage.getItem(`dues_${dueType}`);
-    let existingDues: string[] = existingDuesStr ? JSON.parse(existingDuesStr) : [];
-    existingDues = existingDues.filter(id => id !== dueId);
-    localStorage.setItem(`dues_${dueType}`, JSON.stringify(existingDues));
 
-    // 2. Add to paid dues
-    const paidDuesStr = localStorage.getItem(`paid_dues_${dueType}`);
-    const paidDues: string[] = paidDuesStr ? JSON.parse(paidDuesStr) : [];
-    if (!paidDues.includes(dueId)) {
-      localStorage.setItem(`paid_dues_${dueType}`, JSON.stringify([...paidDues, dueId]));
-    }
-
-    // 3. Mark memo as paid with timestamp
-    const updatedMemo = { ...memoState, paidDate: Date.now() };
-    setMemoState(updatedMemo);
-    localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(updatedMemo));
-    
-    alert('Marked as Paid!');
-    onNavigate('due-list');
-  };
 
   const handleSetAutoMessage = () => {
     let timestamp = 0;
@@ -585,13 +564,6 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                   Set Auto Message
                 </button>
               )}
-              <button 
-                className="btn-primary"  
-                style={{ background: '#72be44', padding: '0.8rem 2rem', fontSize: '1.1rem', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer' }} 
-                onClick={handleMarkAsPaid}
-              >
-                Mark as Paid
-              </button>
             </div>
           )}
 
@@ -726,4 +698,8 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
 };
 
 export default DueMemoScreen;
+
+
+
+
 
