@@ -57,48 +57,58 @@ function App() {
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
+      setLoadingAuth(false);
+
       if (session) {
-        await pushUnsyncedLocalData(true);
-        await restoreFromCloud();
-        setupRealtimeSync();
-        window.dispatchEvent(new Event('storage'));
-        
-        // --- Device Validity Check ---
-        const deviceId = localStorage.getItem('device_id');
-        if (deviceId) {
-          const { data, error } = await supabase.from('active_sessions').select('status, permission').eq('device_id', deviceId).single();
-          if (error || !data || data.status === 'revoked') {
-            await supabase.auth.signOut();
-            localStorage.clear();
-            window.location.reload();
-            return;
-          }
-          if (data.permission) {
-             const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-             if (isLocalhost && data.permission !== 'admin') {
-                await supabase.from('active_sessions').update({ permission: 'admin' }).eq('device_id', deviceId);
-                localStorage.setItem('device_permission', 'admin');
-             } else {
-                localStorage.setItem('device_permission', data.permission);
-             }
-             window.dispatchEvent(new Event('settingsChange'));
-          }
-          
-          // Setup realtime listener for this specific device to auto-logout if kicked
-          supabase.channel(`device_${deviceId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions', filter: `device_id=eq.${deviceId}` }, async (payload) => {
-              if (payload.eventType === 'DELETE' || (payload.eventType === 'UPDATE' && payload.new.status === 'revoked')) {
+        (async () => {
+          try {
+            await pushUnsyncedLocalData(true);
+            await restoreFromCloud();
+            setupRealtimeSync();
+            window.dispatchEvent(new Event('storage'));
+            
+            // --- Device Validity Check ---
+            const deviceId = localStorage.getItem('device_id');
+            if (deviceId) {
+              const { data, error } = await supabase.from('active_sessions').select('status, permission').eq('device_id', deviceId).single();
+              if (error || !data || data.status === 'revoked') {
                 await supabase.auth.signOut();
                 localStorage.clear();
                 window.location.reload();
-              } else if (payload.eventType === 'UPDATE' && payload.new.permission) {
-                localStorage.setItem('device_permission', payload.new.permission);
-                window.dispatchEvent(new Event('settingsChange'));
+                return;
               }
-            }).subscribe();
-        }
-        // --- End Device Check ---
+              if (data.permission) {
+                 const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                 if (isLocalhost && data.permission !== 'admin') {
+                    await supabase.from('active_sessions').update({ permission: 'admin' }).eq('device_id', deviceId);
+                    localStorage.setItem('device_permission', 'admin');
+                 } else {
+                    localStorage.setItem('device_permission', data.permission);
+                 }
+                 window.dispatchEvent(new Event('settingsChange'));
+              }
+              
+              // Setup realtime listener for this specific device to auto-logout if kicked
+              supabase.channel(`device_${deviceId}`)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions', filter: `device_id=eq.${deviceId}` }, async (payload) => {
+                  if (payload.eventType === 'DELETE' || (payload.eventType === 'UPDATE' && payload.new.status === 'revoked')) {
+                    await supabase.auth.signOut();
+                    localStorage.clear();
+                    window.location.reload();
+                  } else if (payload.eventType === 'UPDATE' && payload.new.permission) {
+                    localStorage.setItem('device_permission', payload.new.permission);
+                    window.dispatchEvent(new Event('settingsChange'));
+                  }
+                }).subscribe();
+            }
+            // --- End Device Check ---
+          } catch (e) {
+            console.error('Background sync/auth init error:', e);
+          }
+        })();
       }
+    }).catch(err => {
+      console.error('Auth session error:', err);
       setLoadingAuth(false);
     });
 

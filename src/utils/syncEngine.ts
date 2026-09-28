@@ -217,36 +217,51 @@ export const setupRealtimeSync = () => {
 };
 
 export const pushUnsyncedLocalData = async (forceAll: boolean = true) => {
-  if (!currentUser) {
-    const { data } = await supabase.auth.getSession();
-    currentUser = data.session?.user || null;
-  }
-  if (!currentUser) return;
+  try {
+    if (!currentUser) {
+      const { data } = await supabase.auth.getSession();
+      currentUser = data.session?.user || null;
+    }
+    if (!currentUser) return;
 
-  const originalGetItem = localStorage.getItem;
-  const originalSetItem = localStorage.setItem;
-  const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
-  const ts = tsStr ? JSON.parse(tsStr) : {};
-  
-  const keysToSync = Object.keys(localStorage).filter(k => 
-    !k.startsWith('sb-') && k !== 'local_timestamps' && k !== 'device_id' && k !== 'device_permission' && !k.startsWith('localhost_')
-  );
-  
-  for (const key of keysToSync) {
-    const value = originalGetItem.call(localStorage, key);
-    if (value) {
-      if (forceAll || !ts[key]) {
-        await supabase.from('user_backups').upsert({
-          user_id: currentUser.id,
-          key: key,
-          value: value,
-          updated_at: new Date().toISOString()
-        });
-        ts[key] = Date.now();
+    const originalGetItem = localStorage.getItem;
+    const originalSetItem = localStorage.setItem;
+    const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
+    const ts = tsStr ? JSON.parse(tsStr) : {};
+    
+    const keysToSync = Object.keys(localStorage).filter(k => 
+      !k.startsWith('sb-') && k !== 'local_timestamps' && k !== 'device_id' && k !== 'device_permission' && !k.startsWith('localhost_')
+    );
+    
+    const rowsToUpsert: any[] = [];
+    const nowISO = new Date().toISOString();
+    const nowMs = Date.now();
+
+    for (const key of keysToSync) {
+      const value = originalGetItem.call(localStorage, key);
+      if (value) {
+        if (forceAll || !ts[key]) {
+          rowsToUpsert.push({
+            user_id: currentUser.id,
+            key: key,
+            value: value,
+            updated_at: nowISO
+          });
+          ts[key] = nowMs;
+        }
       }
     }
+
+    if (rowsToUpsert.length > 0) {
+      // Upsert all rows in a single batch request
+      const { error } = await supabase.from('user_backups').upsert(rowsToUpsert);
+      if (error) console.error('Batch sync error:', error);
+    }
+
+    originalSetItem.call(localStorage, 'local_timestamps', JSON.stringify(ts));
+  } catch (e) {
+    console.error('pushUnsyncedLocalData error:', e);
   }
-  originalSetItem.call(localStorage, 'local_timestamps', JSON.stringify(ts));
 };
 
 export const manualSyncNow = async () => {
