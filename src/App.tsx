@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, User, Settings, X, Moon, Sun, Globe, ShoppingCart, Clock, ShoppingBag, Plus, Home, Trash2, Send, XCircle, TrendingUp } from 'lucide-react';
+import { Search, User, Settings, X, Moon, Sun, Globe, ShoppingCart, Clock, ShoppingBag, Plus, Home, Trash2, Send, XCircle, TrendingUp, RefreshCw } from 'lucide-react';
 import './index.css';
 import Dashboard from './components/Dashboard';
 import PasswordScreen from './components/PasswordScreen';
@@ -24,7 +24,7 @@ import LoginScreen from './components/LoginScreen';
 import DeviceManager from './components/DeviceManager';
 import { LotPasswordManager } from './components/LotPasswordManager';
 
-import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData } from './utils/syncEngine';
+import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow } from './utils/syncEngine';
 
 export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo';
 
@@ -48,6 +48,7 @@ function App() {
   const [isLotPasswordManagerOpen, setIsLotPasswordManagerOpen] = useState(false);
   const [userEmail] = useState<string | null>(localStorage.getItem('userEmail'));
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const [session, setSession] = useState<any>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -57,9 +58,10 @@ function App() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       if (session) {
-        await pushUnsyncedLocalData();
-          await restoreFromCloud();
+        await pushUnsyncedLocalData(true);
+        await restoreFromCloud();
         setupRealtimeSync();
+        window.dispatchEvent(new Event('storage'));
         
         // --- Device Validity Check ---
         const deviceId = localStorage.getItem('device_id');
@@ -230,6 +232,18 @@ function App() {
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      await manualSyncNow();
+      alert('সব মেমো ও হিসাব সফলভাবে অনলাইন সিঙ্ক করা হয়েছে!');
+    } catch (e) {
+      alert('সিঙ্ক করার সময় সমস্যা হয়েছে, ইন্টারনেট সংযোগ চেক করুন।');
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleNavigate = (screen: Screen) => {
@@ -711,6 +725,14 @@ function App() {
               </button>
             </div>
 
+            <div className="setting-item">
+              <span>Cloud Sync (অনলাইন সিঙ্ক)</span>
+              <button className="btn btn-primary" onClick={handleManualSync} disabled={isSyncing} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.9rem' }}>
+                <RefreshCw size={16} className={isSyncing ? 'spin-icon' : ''} />
+                {isSyncing ? 'সিঙ্ক হচ্ছে...' : 'সব মেমো সিঙ্ক করুন'}
+              </button>
+            </div>
+
             {(localStorage.getItem('device_permission') === 'admin' || true) && (
               <div className="setting-item">
                 <span>Devices & Permissions</span>
@@ -766,6 +788,14 @@ function App() {
             <div className="setting-item">
               <span>{t('email')}</span>
               <span style={{ fontWeight: 600 }}>{session?.user?.email || userEmail}</span>
+            </div>
+
+            <div className="setting-item">
+              <span>অনলাইন সিঙ্ক</span>
+              <button className="btn btn-primary" onClick={handleManualSync} disabled={isSyncing} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <RefreshCw size={16} className={isSyncing ? 'spin-icon' : ''} />
+                {isSyncing ? 'সিঙ্ক হচ্ছে...' : 'সব মেমো সিঙ্ক করুন'}
+              </button>
             </div>
 
             <div className="setting-item">

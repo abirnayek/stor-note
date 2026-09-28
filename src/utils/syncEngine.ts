@@ -127,9 +127,6 @@ export const restoreFromCloud = async () => {
       // Handle local deletes (key exists in local_timestamps but not in cloud)
       Object.keys(localTimestamps).forEach(key => {
         if (!cloudKeys.has(key)) {
-          // If we have a local value, it means it wasn't uploaded. Push it.
-          // If we don't have a local value, it was deleted locally but delete didn't reach cloud? 
-          // Actually if it's not in cloud, then cloud has it deleted. So we should delete locally too unless our timestamp is very new.
           const localValue = originalGetItem.call(localStorage, key);
           if (localValue !== null && Date.now() - localTimestamps[key] < 86400000) { // If modified in last 24h, push it
             supabase.from('user_backups').upsert({
@@ -149,6 +146,7 @@ export const restoreFromCloud = async () => {
       if (timestampsModified) {
         originalSetItem.call(localStorage, 'local_timestamps', JSON.stringify(localTimestamps));
       }
+      window.dispatchEvent(new Event('storage'));
       return true;
     }
     return false;
@@ -178,13 +176,15 @@ export const setupRealtimeSync = () => {
         isRestoring = true; // prevent our own listeners from firing back
         if (payload.eventType === 'DELETE') {
           const key = payload.old?.key;
-          if (key) originalRemoveItem.call(localStorage, key);
+          if (key) {
+            originalRemoveItem.call(localStorage, key);
+            window.dispatchEvent(new Event('storage'));
+          }
         } else {
           const key = payload.new?.key;
           const value = payload.new?.value;
           if (key && value && localStorage.getItem(key) !== value) {
             originalSetItem.call(localStorage, key, value);
-            // Optionally dispatch an event so React re-renders, but most data is read on navigate
             window.dispatchEvent(new Event('storage'));
           }
         }
@@ -193,21 +193,26 @@ export const setupRealtimeSync = () => {
     .subscribe();
 };
 
-
-export const pushUnsyncedLocalData = async () => {
+export const pushUnsyncedLocalData = async (forceAll: boolean = true) => {
+  if (!currentUser) {
+    const { data } = await supabase.auth.getSession();
+    currentUser = data.session?.user || null;
+  }
   if (!currentUser) return;
+
   const originalGetItem = localStorage.getItem;
+  const originalSetItem = localStorage.setItem;
   const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
   const ts = tsStr ? JSON.parse(tsStr) : {};
   
   const keysToSync = Object.keys(localStorage).filter(k => 
-    !k.startsWith('sb-') && k !== 'local_timestamps' && k !== 'device_id' && k !== 'device_permission'
+    !k.startsWith('sb-') && k !== 'local_timestamps' && k !== 'device_id' && k !== 'device_permission' && !k.startsWith('localhost_')
   );
   
   for (const key of keysToSync) {
-    if (!ts[key]) {
-      const value = originalGetItem.call(localStorage, key);
-      if (value) {
+    const value = originalGetItem.call(localStorage, key);
+    if (value) {
+      if (forceAll || !ts[key]) {
         await supabase.from('user_backups').upsert({
           user_id: currentUser.id,
           key: key,
@@ -218,5 +223,13 @@ export const pushUnsyncedLocalData = async () => {
       }
     }
   }
-  localStorage.setItem('local_timestamps', JSON.stringify(ts));
+  originalSetItem.call(localStorage, 'local_timestamps', JSON.stringify(ts));
 };
+
+export const manualSyncNow = async () => {
+  await pushUnsyncedLocalData(true);
+  const restored = await restoreFromCloud();
+  window.dispatchEvent(new Event('storage'));
+  return { success: true, restored };
+};
+

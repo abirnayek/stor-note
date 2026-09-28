@@ -71,7 +71,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                         if (dueMemo.name) {
                           memo.customerName = dueMemo.name;
                           memo.status = dueMemo.paidDate ? 'paid' : 'due';
-                          localStorage.setItem(key, JSON.stringify(memo));
+                          const memoKey = `sales_memo_lot_${lotKey}_memo_${memoId}`;
+                          localStorage.setItem(memoKey, JSON.stringify(memo));
                         }
                       } catch(e) {}
                     }
