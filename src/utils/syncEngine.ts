@@ -5,13 +5,36 @@ let currentUser: any = null;
 // Initialize and listen to auth changes
 supabase.auth.getSession().then(({ data: { session } }) => {
   currentUser = session?.user || null;
+  if (currentUser) {
+    pushUnsyncedLocalData(true).then(() => restoreFromCloud());
+    setupRealtimeSync();
+  }
 });
 
 supabase.auth.onAuthStateChange((_event, session) => {
   currentUser = session?.user || null;
+  if (currentUser) {
+    pushUnsyncedLocalData(true).then(() => restoreFromCloud());
+    setupRealtimeSync();
+  }
 });
 
 let isRestoring = false;
+
+// Auto-sync in background when tab becomes visible or every 10 seconds
+if (typeof window !== 'undefined') {
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && currentUser) {
+      pushUnsyncedLocalData(true).then(() => restoreFromCloud());
+    }
+  });
+
+  setInterval(() => {
+    if (currentUser && !isRestoring) {
+      pushUnsyncedLocalData(true).then(() => restoreFromCloud());
+    }
+  }, 10000);
+}
 
 export const initSyncEngine = () => {
   const originalSetItem = localStorage.setItem;
