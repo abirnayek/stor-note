@@ -1,12 +1,13 @@
+import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Phone, Plus, Trash2, Share2, MessageCircle, Mail, Download } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
-import SignatureCanvas from 'react-signature-canvas';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
+
 
 interface DueMemoScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -41,6 +42,8 @@ interface DueMemoState {
   lotNumber?: string;
   deposit?: number | '';
   paidDate?: number;
+  receiverSignature?: string;
+  sellerSignature?: string;
   entries: DueEntry[];
   memoState?: any;
   autoMessage?: AutoMessageConfig;
@@ -49,8 +52,6 @@ interface DueMemoState {
 const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueId, isPaid = false }) => {
   const { t, language, formatNumber } = useLanguage();
   const memoRef = useRef<HTMLDivElement>(null);
-  const sigPadReceiver = useRef<SignatureCanvas>(null);
-  const sigPadSeller = useRef<SignatureCanvas>(null);
   
   const today = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
     month: 'short',
@@ -68,7 +69,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
         }
         if (!parsed.address) parsed.address = '';
         if (!parsed.date) parsed.date = today;
-        return parsed;
+        return { ...parsed, receiverSignature: parsed.receiverSignature || '', sellerSignature: parsed.sellerSignature || '' };
       } catch (e) {
         console.error('Failed to parse saved due memo');
       }
@@ -95,6 +96,61 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
   const [msgType, setMsgType] = useState<'whatsapp' | 'sms'>('whatsapp');
 
   const isMounted = useRef(false);
+
+  // Listen for storage changes from Realtime sync
+  useEffect(() => {
+    const handleStorage = () => {
+      const saved = localStorage.getItem(`due_memo_${dueId}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setMemoState(parsed);
+        } catch(e) {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [dueId]);
+
+  
+  const handleSaveReceiverSig = (dataUrl: string) => {
+    const key = `due_memo_${dueId}`;
+    setMemoState(prev => {
+      const next = { ...prev, receiverSignature: dataUrl };
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch(e) {}
+      return next;
+    });
+    setSaveStatus('Signature Saved ✔');
+    setTimeout(() => setSaveStatus('Saved'), 1500);
+  };
+
+  const handleSaveSellerSig = (dataUrl: string) => {
+    const key = `due_memo_${dueId}`;
+    setMemoState(prev => {
+      const next = { ...prev, sellerSignature: dataUrl };
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch(e) {}
+      return next;
+    });
+    setSaveStatus('Signature Saved ✔');
+    setTimeout(() => setSaveStatus('Saved'), 1500);
+  };
+
+  const handleClearReceiverSig = () => {
+    handleSaveReceiverSig('');
+  };
+
+  const handleClearSellerSig = () => {
+    handleSaveSellerSig('');
+  };
+
+  const handleBack = () => {
+    try {
+      const key = `due_memo_${dueId}`;
+      const finalState = { ...memoState };
+      localStorage.setItem(key, JSON.stringify(finalState));
+    } catch(e) {}
+    onNavigate(isPaid ? 'paid-due-list' : (dueType === 'purchase' ? 'due-purchase-list' : 'due-list'));
+  };
 
   // Auto-save
   useEffect(() => {
@@ -285,7 +341,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar" data-html2canvas-ignore>
-        <button className="btn-icon" onClick={() => onNavigate('due-list')}>
+        <button className="btn-icon" onClick={handleBack}>
           <ChevronLeft size={24} />
         </button>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -609,34 +665,22 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
             </div>
           </div>
 
-          <div className="memo-dark-footer">
-            <div className="sig-box-dark">
-              <div className="sig-canvas-container">
-                <SignatureCanvas 
-                  ref={sigPadReceiver}
-                  penColor="#72be44"
-                  canvasProps={{ className: 'sigCanvas' }} 
-                />
-                <button className="btn-icon clear-sig-btn" onClick={() => sigPadReceiver.current?.clear()} data-html2canvas-ignore>
-                  <Trash2 size={12} />
-                </button>
-              </div>
-              <span>{t('receiverSig')}</span>
-            </div>
+          <div className="memo-dark-footer" style={{ display: 'flex', justifyContent: 'space-between', gap: '1.5rem', marginTop: '1.5rem', alignItems: 'flex-start' }}>
+            <MemoSignatureBox 
+              label={t('receiverSig')}
+              signatureData={memoState.receiverSignature}
+              penColor="#72be44"
+              onSave={handleSaveReceiverSig}
+              onClear={handleClearReceiverSig}
+            />
             
-            <div className="sig-box-dark">
-              <div className="sig-canvas-container">
-                <SignatureCanvas 
-                  ref={sigPadSeller}
-                  penColor="#72be44"
-                  canvasProps={{ className: 'sigCanvas' }} 
-                />
-                <button className="btn-icon clear-sig-btn" onClick={() => sigPadSeller.current?.clear()} data-html2canvas-ignore>
-                  <Trash2 size={12} />
-                </button>
-              </div>
-              <span>{t('sellerSig')}</span>
-            </div>
+            <MemoSignatureBox 
+              label={t('sellerSig')}
+              signatureData={memoState.sellerSignature}
+              penColor="#72be44"
+              onSave={handleSaveSellerSig}
+              onClear={handleClearSellerSig}
+            />
           </div>
           
         </div>

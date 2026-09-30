@@ -1,13 +1,18 @@
-import React, { useState, useEffect, type InputHTMLAttributes } from 'react';
+import React, { useState, useEffect, useRef, type InputHTMLAttributes } from 'react';
 
 interface MathInputProps extends InputHTMLAttributes<HTMLInputElement> {}
 
 export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, onKeyDown, ...props }) => {
-  const [localValue, setLocalValue] = useState(value?.toString() || '');
+  const [localValue, setLocalValue] = useState(value !== undefined && value !== null ? value.toString() : '');
+  const localValueRef = useRef(value !== undefined && value !== null ? value.toString() : '');
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
-    if (value?.toString() !== localValue) {
-      setLocalValue(value?.toString() || '');
+    const strVal = value !== undefined && value !== null ? value.toString() : '';
+    if (strVal !== localValueRef.current) {
+      setLocalValue(strVal);
+      localValueRef.current = strVal;
     }
   }, [value]);
 
@@ -28,17 +33,27 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
   };
 
   const triggerChange = (val: string) => {
-    if (onChange) {
-      // Create a mock event to be drop-in compatible with standard onChange
+    if (onChangeRef.current) {
       const mockEvent = {
         target: { value: val, name: props.name || '' },
         currentTarget: { value: val, name: props.name || '' },
         preventDefault: () => {},
         stopPropagation: () => {},
       } as unknown as React.ChangeEvent<HTMLInputElement>;
-      onChange(mockEvent);
+      onChangeRef.current(mockEvent);
     }
   };
+
+  // Ensure any pending value is committed when unmounting (e.g. clicking Back button)
+  useEffect(() => {
+    return () => {
+      const val = localValueRef.current;
+      if (val) {
+        const evaluated = evaluateExpression(val);
+        triggerChange(evaluated || val);
+      }
+    };
+  }, []);
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -46,6 +61,7 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
       const evaluated = evaluateExpression(val);
       if (evaluated !== val) {
         setLocalValue(evaluated);
+        localValueRef.current = evaluated;
         triggerChange(evaluated);
       } else {
         triggerChange(val);
@@ -65,6 +81,7 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
         const evaluated = evaluateExpression(val);
         if (evaluated !== val) {
           setLocalValue(evaluated);
+          localValueRef.current = evaluated;
           triggerChange(evaluated);
         } else {
           triggerChange(val);
@@ -85,6 +102,7 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
       onChange={(e) => {
         const val = e.target.value;
         setLocalValue(val);
+        localValueRef.current = val;
         if (val === '' || !isNaN(Number(val))) {
           triggerChange(val);
         }

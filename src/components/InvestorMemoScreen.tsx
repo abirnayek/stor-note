@@ -4,7 +4,7 @@ import { type Screen } from '../App';
 import { ChevronLeft, Plus, Trash2, Download, CheckCircle2, Phone } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import SignatureCanvas from 'react-signature-canvas';
+import { MemoSignatureBox } from './MemoSignatureBox';
 import CallMenu from './CallMenu';
 import { useLanguage } from '../i18n/LanguageContext';
 
@@ -39,6 +39,8 @@ interface InvestorMemo {
   balance?: number;
   investNumber?: string;
   totalInvestAmount?: string;
+  investorSignature?: string;
+  sellerSignature?: string;
   updatedAt?: string;
 }
 
@@ -58,8 +60,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
   const memoRef = useRef<HTMLDivElement>(null);
   const { t, language } = useLanguage();
   
-  const sigPadInvestor = useRef<SignatureCanvas>(null);
-  const sigPadSeller = useRef<SignatureCanvas>(null);
+  
 
   useEffect(() => {
     // Load profile
@@ -81,7 +82,45 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
         setMemo(parsed); 
       } catch (e) {}
     }
+
+    const handleStorage = () => {
+      const memoStr = localStorage.getItem(`investor_memo_${memoId}`);
+      if (memoStr) {
+        try { setMemo(JSON.parse(memoStr)); } catch (e) {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, [investorId, memoId]);
+
+
+    const handleSaveInvestorSig = (dataUrl: string) => {
+    setMemo(prev => {
+      const next = { ...prev, investorSignature: dataUrl };
+      try { localStorage.setItem(`investor_memo_${memoId}`, JSON.stringify(next)); } catch(e) {}
+      return next;
+    });
+    setSaveStatus('Signature Saved ✔');
+    setTimeout(() => setSaveStatus('Saved'), 1500);
+  };
+
+  const handleSaveSellerSig = (dataUrl: string) => {
+    setMemo(prev => {
+      const next = { ...prev, sellerSignature: dataUrl };
+      try { localStorage.setItem(`investor_memo_${memoId}`, JSON.stringify(next)); } catch(e) {}
+      return next;
+    });
+    setSaveStatus('Signature Saved ✔');
+    setTimeout(() => setSaveStatus('Saved'), 1500);
+  };
+
+  const handleClearInvestorSig = () => {
+    handleSaveInvestorSig('');
+  };
+
+  const handleClearSellerSig = () => {
+    handleSaveSellerSig('');
+  };
 
   const updateProfile = (field: string, value: string) => {
     const newProfile = { ...profile, [field]: value };
@@ -485,21 +524,14 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
           </div>
 
           <div className="memo-dark-footer" style={{ position: 'relative' }}>
-            <div className="sig-box-dark">
-              <div className="sig-canvas-container">
-                <SignatureCanvas 
-                  ref={sigPadInvestor}
-                  penColor="#64b5f6"
-                  canvasProps={{ className: 'sigCanvas' }} 
-                />
-                {memo.status !== 'completed' && (
-                  <button className="btn-icon clear-sig-btn" onClick={() => sigPadInvestor.current?.clear()} data-html2canvas-ignore>
-                    <Trash2 size={12} />
-                  </button>
-                )}
-              </div>
-              <span>{t('investorSig')}</span>
-            </div>
+            <MemoSignatureBox 
+              label={t('investorSig')}
+              signatureData={memo.investorSignature}
+              penColor="#64b5f6"
+              disabled={memo.status === 'completed'}
+              onSave={handleSaveInvestorSig}
+              onClear={handleClearInvestorSig}
+            />
             
             {memo.status !== 'completed' && (
               <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '2rem' }} data-html2canvas-ignore>
@@ -513,21 +545,14 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
               </div>
             )}
 
-            <div className="sig-box-dark">
-              <div className="sig-canvas-container">
-                <SignatureCanvas 
-                  ref={sigPadSeller}
-                  penColor="#64b5f6"
-                  canvasProps={{ className: 'sigCanvas' }} 
-                />
-                {memo.status !== 'completed' && (
-                  <button className="btn-icon clear-sig-btn" onClick={() => sigPadSeller.current?.clear()} data-html2canvas-ignore>
-                    <Trash2 size={12} />
-                  </button>
-                )}
-              </div>
-              <span>{t('businessSig')}</span>
-            </div>
+            <MemoSignatureBox 
+              label={t('businessSig')}
+              signatureData={memo.sellerSignature}
+              penColor="#64b5f6"
+              disabled={memo.status === 'completed'}
+              onSave={handleSaveSellerSig}
+              onClear={handleClearSellerSig}
+            />
           </div>
 
         </div>

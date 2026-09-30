@@ -2,11 +2,18 @@ import { supabase } from './supabaseClient';
 
 let currentUser: any = null;
 
+const syncFromCloud = async () => {
+  if (!currentUser) return;
+  const restored = await restoreFromCloud();
+  await pushUnsyncedLocalData(false);
+  return restored;
+};
+
 // Initialize and listen to auth changes
 supabase.auth.getSession().then(({ data: { session } }) => {
   currentUser = session?.user || null;
   if (currentUser) {
-    pushUnsyncedLocalData(true).then(() => restoreFromCloud());
+    syncFromCloud();
     setupRealtimeSync();
   }
 });
@@ -14,7 +21,7 @@ supabase.auth.getSession().then(({ data: { session } }) => {
 supabase.auth.onAuthStateChange((_event, session) => {
   currentUser = session?.user || null;
   if (currentUser) {
-    pushUnsyncedLocalData(true).then(() => restoreFromCloud());
+    syncFromCloud();
     setupRealtimeSync();
   }
 });
@@ -25,13 +32,13 @@ let isRestoring = false;
 if (typeof window !== 'undefined') {
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && currentUser) {
-      pushUnsyncedLocalData(true).then(() => restoreFromCloud());
+      syncFromCloud();
     }
   });
 
   setInterval(() => {
     if (currentUser && !isRestoring) {
-      pushUnsyncedLocalData(true).then(() => restoreFromCloud());
+      syncFromCloud();
     }
   }, 10000);
 }
@@ -52,11 +59,13 @@ export const initSyncEngine = () => {
   };
 
   localStorage.setItem = function(key: string, value: string) {
+    const prevValue = originalGetItem.call(localStorage, key);
     originalSetItem.apply(this, [key, value] as any);
     
     if (currentUser && !isRestoring) {
       // Skip auth keys to avoid infinite loops or saving tokens to the db
       if (key.startsWith('sb-') || key === 'local_timestamps') return;
+      if (prevValue === value) return;
       
       updateLocalTimestamp(key);
       
@@ -68,6 +77,17 @@ export const initSyncEngine = () => {
       }).then(({ error }) => {
         if (error) console.error('Sync error:', error);
       });
+
+      // Send instant broadcast over Realtime channel (<50ms latency)
+      if (realtimeChannel) {
+        try {
+          realtimeChannel.send({
+            type: 'broadcast',
+            event: 'storage_sync',
+            payload: { key, value, ts: Date.now(), action: 'SET' }
+          });
+        } catch(e) {}
+      }
     }
   };
 
@@ -77,7 +97,12 @@ export const initSyncEngine = () => {
     if (currentUser && !isRestoring) {
       if (key.startsWith('sb-') || key === 'local_timestamps') return;
 
-      updateLocalTimestamp(key);
+      try {
+        const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
+        const ts = tsStr ? JSON.parse(tsStr) : {};
+        delete ts[key];
+        originalSetItem.call(localStorage, 'local_timestamps', JSON.stringify(ts));
+      } catch(e) {}
 
       supabase.from('user_backups').delete().match({ 
         user_id: currentUser.id, 
@@ -85,6 +110,16 @@ export const initSyncEngine = () => {
       }).then(({ error }) => {
         if (error) console.error('Sync error:', error);
       });
+
+      if (realtimeChannel) {
+        try {
+          realtimeChannel.send({
+            type: 'broadcast',
+            event: 'storage_sync',
+            payload: { key, ts: Date.now(), action: 'DELETE' }
+          });
+        } catch(e) {}
+      }
     }
   };
   
@@ -181,14 +216,59 @@ export const restoreFromCloud = async () => {
   }
 };
 
+let realtimeChannel: any = null;
+let currentSubscribedUserId: string | null = null;
+
 export const setupRealtimeSync = () => {
   if (!currentUser) return;
+  if (realtimeChannel && currentSubscribedUserId === currentUser.id) return;
+
+  if (realtimeChannel) {
+    try {
+      supabase.removeChannel(realtimeChannel);
+    } catch(e) {}
+    realtimeChannel = null;
+  }
+
+  currentSubscribedUserId = currentUser.id;
+  const channelName = `user_sync_${currentUser.id}`;
   
   const originalSetItem = localStorage.setItem;
   const originalRemoveItem = localStorage.removeItem;
+  const originalGetItem = localStorage.getItem;
   
-  supabase
-    .channel('user_backups_changes')
+  const handleIncomingData = (key: string, value: string | undefined, cloudTs: number, action: string) => {
+    if (!key) return;
+    isRestoring = true;
+    try {
+      if (action === 'DELETE') {
+        originalRemoveItem.call(localStorage, key);
+        const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
+        const ts = tsStr ? JSON.parse(tsStr) : {};
+        delete ts[key];
+        originalSetItem.call(localStorage, 'local_timestamps', JSON.stringify(ts));
+        window.dispatchEvent(new Event('storage'));
+      } else if (value !== undefined) {
+        if (originalGetItem.call(localStorage, key) !== value) {
+          originalSetItem.call(localStorage, key, value);
+          const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
+          const ts = tsStr ? JSON.parse(tsStr) : {};
+          ts[key] = cloudTs;
+          originalSetItem.call(localStorage, 'local_timestamps', JSON.stringify(ts));
+          window.dispatchEvent(new Event('storage'));
+        }
+      }
+    } catch(e) {}
+    isRestoring = false;
+  };
+
+  realtimeChannel = supabase
+    .channel(channelName)
+    .on('broadcast', { event: 'storage_sync' }, ({ payload }: any) => {
+      if (payload) {
+        handleIncomingData(payload.key, payload.value, payload.ts || Date.now(), payload.action || 'SET');
+      }
+    })
     .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -196,27 +276,17 @@ export const setupRealtimeSync = () => {
         filter: `user_id=eq.${currentUser.id}` 
       }, 
       (payload: any) => {
-        isRestoring = true; // prevent our own listeners from firing back
         if (payload.eventType === 'DELETE') {
-          const key = payload.old?.key;
-          if (key) {
-            originalRemoveItem.call(localStorage, key);
-            window.dispatchEvent(new Event('storage'));
-          }
-        } else {
-          const key = payload.new?.key;
-          const value = payload.new?.value;
-          if (key && value && localStorage.getItem(key) !== value) {
-            originalSetItem.call(localStorage, key, value);
-            window.dispatchEvent(new Event('storage'));
-          }
+          handleIncomingData(payload.old?.key, undefined, Date.now(), 'DELETE');
+        } else if (payload.new) {
+          const cloudTs = payload.new.updated_at ? new Date(payload.new.updated_at).getTime() : Date.now();
+          handleIncomingData(payload.new.key, payload.new.value, cloudTs, 'SET');
         }
-        isRestoring = false;
     })
     .subscribe();
 };
 
-export const pushUnsyncedLocalData = async (forceAll: boolean = true) => {
+export const pushUnsyncedLocalData = async (forceAll: boolean = false) => {
   try {
     if (!currentUser) {
       const { data } = await supabase.auth.getSession();
@@ -265,9 +335,10 @@ export const pushUnsyncedLocalData = async (forceAll: boolean = true) => {
 };
 
 export const manualSyncNow = async () => {
-  await pushUnsyncedLocalData(true);
   const restored = await restoreFromCloud();
+  await pushUnsyncedLocalData(false);
   window.dispatchEvent(new Event('storage'));
   return { success: true, restored };
 };
+
 

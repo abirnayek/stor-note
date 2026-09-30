@@ -62,8 +62,8 @@ function App() {
       if (session) {
         (async () => {
           try {
-            await pushUnsyncedLocalData(true);
             await restoreFromCloud();
+            await pushUnsyncedLocalData(false);
             setupRealtimeSync();
             window.dispatchEvent(new Event('storage'));
             
@@ -619,7 +619,7 @@ function App() {
               onSelectDue={(id) => {
                 setCurrentDueId(id);
                 setIsPaidDue(true);
-                handleNavigate('due-memo');
+                handleNavigate(currentDueType === 'purchase' ? 'due-memo' : 'due-sales-memo');
               }}
             />
           )}

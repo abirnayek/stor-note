@@ -1,3 +1,4 @@
+import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
@@ -6,8 +7,8 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import SignatureCanvas from 'react-signature-canvas';
 import CallMenu from './CallMenu';
+
 
 interface MemoScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -32,14 +33,14 @@ interface MemoState {
   paidAmount?: number | '';
   createdAt?: string;
   updatedAt?: string;
+  receiverSignature?: string;
+  sellerSignature?: string;
   entries: FishEntry[];
 }
 
 const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
   const { t, language, formatNumber } = useLanguage();
   const memoRef = useRef<HTMLDivElement>(null);
-  const sigPadReceiver = useRef<SignatureCanvas>(null);
-  const sigPadSeller = useRef<SignatureCanvas>(null);
 
   const today = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
     month: 'short',
@@ -55,7 +56,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
         if (!parsed.createdAt) {
           parsed.createdAt = today;
         }
-        return parsed;
+        return { ...parsed, receiverSignature: parsed.receiverSignature || '', sellerSignature: parsed.sellerSignature || '' };
       } catch (e) {
         console.error('Failed to parse saved memo');
       }
@@ -72,7 +73,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
     };
   };
 
-  const [memoState, setMemoState, undo, canUndo] = useHistory<MemoState>(getInitialState());
+  const storageKey = `memo_lot_${lotNumber}`;
+  const [memoState, setMemoState, undo, canUndo] = useHistory<MemoState>(getInitialState(), storageKey);
   const [saveStatus, setSaveStatus] = useState<string>('Saved');
   const [showSupplierCallMenu, setShowSupplierCallMenu] = useState(false);
   const [showBusinessCallMenu, setShowBusinessCallMenu] = useState(false);
@@ -120,6 +122,46 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
   };
 
   const isMounted = useRef(false);
+
+  
+  const handleSaveReceiverSig = (dataUrl: string) => {
+    const key = `memo_lot_${lotNumber}`;
+    setMemoState(prev => {
+      const next = { ...prev, receiverSignature: dataUrl };
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch(e) {}
+      return next;
+    });
+    setSaveStatus('Signature Saved ✔');
+    setTimeout(() => setSaveStatus('Saved'), 1500);
+  };
+
+  const handleSaveSellerSig = (dataUrl: string) => {
+    const key = `memo_lot_${lotNumber}`;
+    setMemoState(prev => {
+      const next = { ...prev, sellerSignature: dataUrl };
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch(e) {}
+      return next;
+    });
+    setSaveStatus('Signature Saved ✔');
+    setTimeout(() => setSaveStatus('Saved'), 1500);
+  };
+
+  const handleClearReceiverSig = () => {
+    handleSaveReceiverSig('');
+  };
+
+  const handleClearSellerSig = () => {
+    handleSaveSellerSig('');
+  };
+
+  const handleBack = () => {
+    try {
+      const key = `memo_lot_${lotNumber}`;
+      const finalState = { ...memoState };
+      localStorage.setItem(key, JSON.stringify(finalState));
+    } catch(e) {}
+    onNavigate('lots');
+  };
 
   // Auto-save
   useEffect(() => {
@@ -199,7 +241,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar">
-        <button className="btn-icon" onClick={() => onNavigate('lots')}>
+        <button className="btn-icon" onClick={handleBack}>
           <ChevronLeft size={24} />
         </button>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -540,34 +582,22 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
           </div>
 
 
-          <div className="memo-dark-footer">
-            <div className="sig-box-dark">
-              <div className="sig-canvas-container">
-                <SignatureCanvas
-                  ref={sigPadReceiver}
-                  penColor="#72be44"
-                  canvasProps={{ className: 'sigCanvas' }}
-                />
-                <button className="btn-icon clear-sig-btn" onClick={() => sigPadReceiver.current?.clear()} data-html2canvas-ignore>
-                  <Trash2 size={12} />
-                </button>
-              </div>
-              <span>{t('receiverSig')}</span>
-            </div>
-
-            <div className="sig-box-dark">
-              <div className="sig-canvas-container">
-                <SignatureCanvas
-                  ref={sigPadSeller}
-                  penColor="#72be44"
-                  canvasProps={{ className: 'sigCanvas' }}
-                />
-                <button className="btn-icon clear-sig-btn" onClick={() => sigPadSeller.current?.clear()} data-html2canvas-ignore>
-                  <Trash2 size={12} />
-                </button>
-              </div>
-              <span>{t('sellerSig')}</span>
-            </div>
+          <div className="memo-dark-footer" style={{ display: 'flex', justifyContent: 'space-between', gap: '1.5rem', marginTop: '1.5rem', alignItems: 'flex-start' }}>
+            <MemoSignatureBox 
+              label={t('receiverSig')}
+              signatureData={memoState.receiverSignature}
+              penColor="#72be44"
+              onSave={handleSaveReceiverSig}
+              onClear={handleClearReceiverSig}
+            />
+            
+            <MemoSignatureBox 
+              label={t('sellerSig')}
+              signatureData={memoState.sellerSignature}
+              penColor="#72be44"
+              onSave={handleSaveSellerSig}
+              onClear={handleClearSellerSig}
+            />
           </div>
 
         </div>

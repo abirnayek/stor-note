@@ -1,3 +1,4 @@
+import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
@@ -6,8 +7,8 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
-import SignatureCanvas from 'react-signature-canvas';
 import CallMenu from './CallMenu';
+
 
 interface SalesMemoScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -38,14 +39,14 @@ interface MemoState {
   status?: 'due' | 'paid' | 'draft';
   createdAt?: string;
   updatedAt?: string;
+  receiverSignature?: string;
+  sellerSignature?: string;
   entries: FishEntry[];
 }
 
 const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber, memoId, onBack }) => {
   const { t, language } = useLanguage();
   const memoRef = useRef<HTMLDivElement>(null);
-  const sigPadReceiver = useRef<SignatureCanvas>(null);
-  const sigPadSeller = useRef<SignatureCanvas>(null);
   
   const today = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
     month: 'short',
@@ -53,8 +54,41 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     year: 'numeric'
   });
 
-  const getInitialState = (): MemoState => {
-    const saved = localStorage.getItem(`sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`);
+    const getInitialState = (): MemoState => {
+    let saved = localStorage.getItem(`sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`);
+    if (!saved) {
+      saved = localStorage.getItem(`sales_memo_lot_unassigned_memo_${memoId}`);
+    }
+    if (!saved) {
+      for (let i = 1; i <= 50; i++) {
+        const alt = localStorage.getItem(`sales_memo_lot_${i}_memo_${memoId}`);
+        if (alt) { saved = alt; break; }
+      }
+    }
+    if (!saved) {
+      const dueStr = localStorage.getItem(`due_memo_${memoId}`);
+      if (dueStr) {
+        try {
+          const dueData = JSON.parse(dueStr);
+          if (dueData.memoState) {
+            saved = JSON.stringify(dueData.memoState);
+          } else if (dueData.name || (dueData.entries && dueData.entries.length > 0)) {
+            saved = JSON.stringify({
+              customerName: dueData.name || '',
+              address: dueData.address || '',
+              mobile: dueData.mobile || '',
+              lotNumberInput: dueData.lotNumber || (lotNumber ? lotNumber.toString() : ''),
+              paidAmount: dueData.deposit || '',
+              customerType: dueData.type || 'regular',
+              status: dueData.paidDate ? 'paid' : 'due',
+              createdAt: dueData.date || today,
+              entries: dueData.entries || []
+            });
+          }
+        } catch(e) {}
+      }
+    }
+
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -64,12 +98,14 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           address: parsed.address || '',
           mobile: parsed.mobile || '',
           lotNumberInput: parsed.lotNumberInput || (lotNumber ? lotNumber.toString() : ''),
-          paidAmount: parsed.paidAmount || '',
+          paidAmount: parsed.paidAmount !== undefined ? parsed.paidAmount : '',
           customerType: parsed.customerType || 'regular',
           status: parsed.status || 'draft',
           createdAt: parsed.createdAt || today,
           updatedAt: parsed.updatedAt,
-          entries: parsed.entries || [{ id: Date.now().toString(), name: '', totalKg: '', profitPercent: '' }]
+          receiverSignature: parsed.receiverSignature || '',
+          sellerSignature: parsed.sellerSignature || '',
+          entries: (parsed.entries && parsed.entries.length > 0) ? parsed.entries : [{ id: Date.now().toString(), name: '', totalKg: '', profitPercent: '' }]
         };
       } catch (e) {
         console.error('Failed to parse saved memo');
@@ -88,13 +124,58 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     };
   };
 
-  const [memoState, setMemoState, undo, canUndo] = useHistory<MemoState>(getInitialState());
+  const storageKey = `sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`;
+  const [memoState, setMemoState, undo, canUndo] = useHistory<MemoState>(getInitialState(), storageKey);
   const [saveStatus, setSaveStatus] = useState<string>('Saved');
   const [showBusinessCallMenu, setShowBusinessCallMenu] = useState(false);
   const [showBusinessCallMenu2, setShowBusinessCallMenu2] = useState(false);
   const [showCustomerCallMenu, setShowCustomerCallMenu] = useState(false);
 
   const isMounted = useRef(false);
+
+  
+  const handleSaveReceiverSig = (dataUrl: string) => {
+    const key = `sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`;
+    setMemoState(prev => {
+      const next = { ...prev, receiverSignature: dataUrl };
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch(e) {}
+      return next;
+    });
+    setSaveStatus('Signature Saved ✔');
+    setTimeout(() => setSaveStatus('Saved'), 1500);
+  };
+
+  const handleSaveSellerSig = (dataUrl: string) => {
+    const key = `sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`;
+    setMemoState(prev => {
+      const next = { ...prev, sellerSignature: dataUrl };
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch(e) {}
+      return next;
+    });
+    setSaveStatus('Signature Saved ✔');
+    setTimeout(() => setSaveStatus('Saved'), 1500);
+  };
+
+  const handleClearReceiverSig = () => {
+    handleSaveReceiverSig('');
+  };
+
+  const handleClearSellerSig = () => {
+    handleSaveSellerSig('');
+  };
+
+  const handleBack = () => {
+    try {
+      const key = `sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`;
+      const finalState = { ...memoState };
+      localStorage.setItem(key, JSON.stringify(finalState));
+    } catch(e) {}
+    if (onBack) {
+      onBack();
+    } else {
+      lotNumber === null ? onNavigate('sales-lots') : onNavigate('sales-memo-list');
+    }
+  };
 
   // Auto-save
   useEffect(() => {
@@ -142,9 +223,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       }
     }
 
+        const effectiveState = memoState.status !== currentStatus 
+      ? { ...memoState, status: currentStatus } 
+      : memoState;
+
     if (memoState.status !== currentStatus) {
       setMemoState(prev => ({ ...prev, status: currentStatus }));
-      return;
     }
 
     // Sync to due accounts if customer type is selected
@@ -210,7 +294,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       }
     }
 
-    localStorage.setItem(`sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`, JSON.stringify(memoState));
+    const storageKey = `sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`;
+    localStorage.setItem(storageKey, JSON.stringify(effectiveState || memoState));
     setSaveStatus('Saving...');
     const timer = setTimeout(() => setSaveStatus('Saved'), 500);
     return () => clearTimeout(timer);
@@ -358,7 +443,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar" data-html2canvas-ignore>
-        <button className="btn-icon" onClick={() => onBack ? onBack() : (lotNumber === null ? onNavigate('sales-lots') : onNavigate('sales-memo-list'))}>
+        <button className="btn-icon" onClick={handleBack}>
           <ChevronLeft size={24} />
         </button>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -707,34 +792,22 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           </div>
 
 
-          <div className="memo-dark-footer">
-            <div className="sig-box-dark">
-              <div className="sig-canvas-container">
-                <SignatureCanvas 
-                  ref={sigPadReceiver}
-                  penColor="#72be44"
-                  canvasProps={{ className: 'sigCanvas' }} 
-                />
-                <button className="btn-icon clear-sig-btn" onClick={() => sigPadReceiver.current?.clear()} data-html2canvas-ignore>
-                  <Trash2 size={12} />
-                </button>
-              </div>
-              <span>{t('receiverSig')}</span>
-            </div>
+          <div className="memo-dark-footer" style={{ display: 'flex', justifyContent: 'space-between', gap: '1.5rem', marginTop: '1.5rem', alignItems: 'flex-start' }}>
+            <MemoSignatureBox 
+              label={t('receiverSig')}
+              signatureData={memoState.receiverSignature}
+              penColor="#72be44"
+              onSave={handleSaveReceiverSig}
+              onClear={handleClearReceiverSig}
+            />
             
-            <div className="sig-box-dark">
-              <div className="sig-canvas-container">
-                <SignatureCanvas 
-                  ref={sigPadSeller}
-                  penColor="#72be44"
-                  canvasProps={{ className: 'sigCanvas' }} 
-                />
-                <button className="btn-icon clear-sig-btn" onClick={() => sigPadSeller.current?.clear()} data-html2canvas-ignore>
-                  <Trash2 size={12} />
-                </button>
-              </div>
-              <span>{t('sellerSig')}</span>
-            </div>
+            <MemoSignatureBox 
+              label={t('sellerSig')}
+              signatureData={memoState.sellerSignature}
+              penColor="#72be44"
+              onSave={handleSaveSellerSig}
+              onClear={handleClearSellerSig}
+            />
           </div>
           
         </div>
