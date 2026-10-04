@@ -190,7 +190,7 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
                     <span style={{ color: '#aaa' }}>{t('totalWithdrawal')}</span>
-                    <span style={{ color: '#72be44', fontWeight: 'bold' }}>৳{memo.totalWithdrawn || 0}</span>
+                    <span style={{ color: '#ff9800', fontWeight: 'bold' }}>৳{memo.totalWithdrawn || 0}</span>
                   </div>
                 </div>
                 </ProtectedMemoWrapper>

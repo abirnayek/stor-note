@@ -1,7 +1,7 @@
 import { MathInput } from './MathInput';
 import React, { useState, useEffect, useRef } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Plus, Trash2, Download, CheckCircle2, Phone } from 'lucide-react';
+import { ChevronLeft, Plus, MinusCircle, Trash2, Download, CheckCircle2, Phone } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { MemoSignatureBox } from './MemoSignatureBox';
@@ -188,6 +188,21 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
       name: '',
       description: '',
       type: 'invest',
+      amount: '',
+      profitPercent: '',
+      total: ''
+    };
+    setMemo(prev => ({ ...prev, entries: [...prev.entries, newEntry] }));
+  };
+
+  const addWithdrawEntry = () => {
+    const newEntry: InvestEntry = {
+      id: Date.now().toString(),
+      serial: (memo.entries.length + 1).toString(),
+      date: new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'short', day: 'numeric' }),
+      name: '',
+      description: language === 'bn' ? 'উত্তোলন' : 'Withdrawal',
+      type: 'withdraw',
       amount: '',
       profitPercent: '',
       total: ''
@@ -454,34 +469,42 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                       </select>
                     </td>
                     <td data-label={t('amountCol')} style={{ fontWeight: 'bold', color: typeColor(entry.type) }}>
-                      <MathInput
-                        
-                        value={entry.amount}
-                        onChange={e => updateEntry(entry.id, 'amount', e.target.value ? Number(e.target.value) : '')}
-                        placeholder="0.00"
-                        style={{ color: typeColor(entry.type), width: '80px' }}
-                        disabled={memo.status === 'completed'}
-                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {entry.type === 'withdraw' && <span style={{ color: '#ff9800', fontWeight: 'bold' }}>(-)</span>}
+                        <MathInput
+                          value={entry.amount}
+                          onChange={e => updateEntry(entry.id, 'amount', e.target.value ? Number(e.target.value) : '')}
+                          placeholder="0.00"
+                          style={{ color: typeColor(entry.type), width: '80px' }}
+                          disabled={memo.status === 'completed'}
+                        />
+                      </div>
                     </td>
                     <td data-label={t('profitPercent')}>
-                      <MathInput
-                        
-                        value={entry.profitPercent !== undefined ? entry.profitPercent : ''}
-                        onChange={e => updateEntry(entry.id, 'profitPercent', e.target.value ? Number(e.target.value) : '')}
-                        placeholder="%"
-                        style={{ width: '50px', display: entry.type === 'invest' ? 'block' : 'none' }}
-                        disabled={memo.status === 'completed'}
-                      />
+                      {entry.type === 'invest' ? (
+                        <MathInput
+                          value={entry.profitPercent !== undefined ? entry.profitPercent : ''}
+                          onChange={e => updateEntry(entry.id, 'profitPercent', e.target.value ? Number(e.target.value) : '')}
+                          placeholder="%"
+                          style={{ width: '50px' }}
+                          disabled={memo.status === 'completed'}
+                        />
+                      ) : (
+                        <span style={{ color: '#888' }}>-</span>
+                      )}
                     </td>
                     <td data-label={t('totalProfitCol')}>
-                      <MathInput
-                        
-                        value={entry.total}
-                        onChange={e => updateEntry(entry.id, 'total', e.target.value ? Number(e.target.value) : '')}
-                        placeholder="0.00"
-                        style={{ fontWeight: 'bold', width: '80px' }}
-                        disabled={memo.status === 'completed' || (entry.type === 'invest' && !!entry.profitPercent)}
-                      />
+                      {entry.type === 'withdraw' ? (
+                        <span style={{ color: '#ff9800', fontWeight: 'bold' }}>-</span>
+                      ) : (
+                        <MathInput
+                          value={entry.total}
+                          onChange={e => updateEntry(entry.id, 'total', e.target.value ? Number(e.target.value) : '')}
+                          placeholder="0.00"
+                          style={{ fontWeight: 'bold', width: '80px' }}
+                          disabled={memo.status === 'completed' || (entry.type === 'invest' && !!entry.profitPercent)}
+                        />
+                      )}
                     </td>
                     {memo.status !== 'completed' && (
                       <td data-label="" data-html2canvas-ignore>
@@ -498,9 +521,23 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
 
           <div style={{ padding: '1rem 2rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             {memo.status !== 'completed' ? (
-              <button className="add-row-dark-btn" onClick={addEntry} data-html2canvas-ignore style={{ margin: 0 }}>
-                <Plus size={16} /> {t('addNewRow')}
-              </button>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }} data-html2canvas-ignore>
+                <button className="add-row-dark-btn" onClick={addEntry} style={{ margin: 0 }}>
+                  <Plus size={16} /> {t('addNewRow')}
+                </button>
+                <button 
+                  className="add-row-dark-btn" 
+                  onClick={addWithdrawEntry} 
+                  style={{ 
+                    margin: 0, 
+                    background: 'rgba(255, 152, 0, 0.2)', 
+                    border: '1px solid #ff9800', 
+                    color: '#ffb74d' 
+                  }}
+                >
+                  <MinusCircle size={16} /> {t('addWithdrawalRow')}
+                </button>
+              </div>
             ) : (
               <div>
                 <span style={{ color: '#ff9800', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
