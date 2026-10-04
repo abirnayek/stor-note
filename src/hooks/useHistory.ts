@@ -4,6 +4,8 @@ export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: 
   const [state, setState] = useState<T>(initialState);
   const historyRef = useRef<T[]>([]);
   const isInternalUpdate = useRef(false);
+  const debounceTimerRef = useRef<any>(null);
+  const lastPushedStateRef = useRef<string>(JSON.stringify(initialState));
 
   useEffect(() => {
     if (!storageKey) return;
@@ -31,11 +33,23 @@ export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: 
     setState((prev) => {
       const nextState = typeof newState === 'function' ? (newState as Function)(prev) : newState;
       
-      // Save deep copy of prev to history
-      historyRef.current.push(JSON.parse(JSON.stringify(prev)));
-      if (historyRef.current.length > maxHistory) {
-        historyRef.current.shift(); // Remove oldest
+      const prevSerialized = JSON.stringify(prev);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
       }
+      
+      debounceTimerRef.current = setTimeout(() => {
+        if (prevSerialized !== lastPushedStateRef.current) {
+          try {
+            historyRef.current.push(JSON.parse(prevSerialized));
+            if (historyRef.current.length > maxHistory) {
+              historyRef.current.shift();
+            }
+            lastPushedStateRef.current = prevSerialized;
+          } catch(e) {}
+        }
+      }, 400);
+
       return nextState;
     });
   }, [maxHistory]);
@@ -44,6 +58,7 @@ export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: 
     if (historyRef.current.length === 0) return;
     isInternalUpdate.current = true;
     const previousState = historyRef.current.pop()!;
+    lastPushedStateRef.current = JSON.stringify(previousState);
     setState(previousState);
   }, []);
 

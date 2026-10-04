@@ -5,14 +5,27 @@ interface MathInputProps extends InputHTMLAttributes<HTMLInputElement> {}
 export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, onKeyDown, ...props }) => {
   const [localValue, setLocalValue] = useState(value !== undefined && value !== null ? value.toString() : '');
   const localValueRef = useRef(value !== undefined && value !== null ? value.toString() : '');
+  const lastSentValueRef = useRef(value !== undefined && value !== null ? value.toString() : '');
+  const inputRef = useRef<HTMLInputElement>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
   useEffect(() => {
     const strVal = value !== undefined && value !== null ? value.toString() : '';
-    if (strVal !== localValueRef.current) {
-      setLocalValue(strVal);
-      localValueRef.current = strVal;
+    const isFocused = inputRef.current && document.activeElement === inputRef.current;
+    
+    if (!isFocused) {
+      if (strVal !== localValueRef.current) {
+        setLocalValue(strVal);
+        localValueRef.current = strVal;
+        lastSentValueRef.current = strVal;
+      }
+    } else {
+      if (strVal !== lastSentValueRef.current && strVal !== localValueRef.current) {
+        setLocalValue(strVal);
+        localValueRef.current = strVal;
+        lastSentValueRef.current = strVal;
+      }
     }
   }, [value]);
 
@@ -33,6 +46,7 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
   };
 
   const triggerChange = (val: string) => {
+    lastSentValueRef.current = val;
     if (onChangeRef.current) {
       const mockEvent = {
         target: { value: val, name: props.name || '' },
@@ -96,6 +110,7 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
   return (
     <input
       {...props}
+      ref={inputRef}
       type="text"
       inputMode="text"
       value={localValue}
@@ -103,9 +118,7 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
         const val = e.target.value;
         setLocalValue(val);
         localValueRef.current = val;
-        if (val === '' || !isNaN(Number(val))) {
-          triggerChange(val);
-        }
+        triggerChange(val);
       }}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}

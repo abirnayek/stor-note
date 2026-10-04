@@ -43,6 +43,8 @@ if (typeof window !== 'undefined') {
   }, 10000);
 }
 
+const syncTimers: Record<string, any> = {};
+
 export const initSyncEngine = () => {
   const originalSetItem = localStorage.setItem;
   const originalRemoveItem = localStorage.removeItem;
@@ -69,25 +71,32 @@ export const initSyncEngine = () => {
       
       updateLocalTimestamp(key);
       
-      supabase.from('user_backups').upsert({
-        user_id: currentUser.id,
-        key: key,
-        value: value,
-        updated_at: new Date().toISOString()
-      }).then(({ error }) => {
-        if (error) console.error('Sync error:', error);
-      });
-
-      // Send instant broadcast over Realtime channel (<50ms latency)
-      if (realtimeChannel) {
-        try {
-          realtimeChannel.send({
-            type: 'broadcast',
-            event: 'storage_sync',
-            payload: { key, value, ts: Date.now(), action: 'SET' }
-          });
-        } catch(e) {}
+      if (syncTimers[key]) {
+        clearTimeout(syncTimers[key]);
       }
+      syncTimers[key] = setTimeout(() => {
+        delete syncTimers[key];
+        if (!currentUser) return;
+        
+        supabase.from('user_backups').upsert({
+          user_id: currentUser.id,
+          key: key,
+          value: value,
+          updated_at: new Date().toISOString()
+        }).then(({ error }) => {
+          if (error) console.error('Sync error:', error);
+        });
+
+        if (realtimeChannel) {
+          try {
+            realtimeChannel.send({
+              type: 'broadcast',
+              event: 'storage_sync',
+              payload: { key, value, ts: Date.now(), action: 'SET' }
+            });
+          } catch(e) {}
+        }
+      }, 400);
     }
   };
 
