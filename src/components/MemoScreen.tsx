@@ -33,6 +33,7 @@ interface MemoState {
   paidAmount?: number | '';
   createdAt?: string;
   updatedAt?: string;
+  status?: 'draft' | 'due' | 'paid';
   receiverSignature?: string;
   sellerSignature?: string;
   entries: FishEntry[];
@@ -208,11 +209,94 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
       return;
     }
 
-    localStorage.setItem(`memo_lot_${lotNumber}`, JSON.stringify(memoState));
+    const totalBill = (Number(memoState.totalPriceMain) || 0) > 0 
+      ? Number(memoState.totalPriceMain) 
+      : memoState.entries.reduce((sum, entry) => sum + (typeof entry.totalPrice === 'number' ? entry.totalPrice : 0), 0);
+    const paid = Number(memoState.paidAmount) || 0;
+    const due = totalBill - paid;
+
+    let currentStatus = memoState.status || 'draft';
+    if (totalBill > 0) {
+      if (due > 0) {
+        currentStatus = 'due';
+      } else {
+        currentStatus = 'paid';
+      }
+    }
+
+    const purchaseDueId = `purchase_lot_${lotNumber}`;
+    const supplierNameFinal = memoState.supplierName || `লট ${lotNumber} সাপ্লায়ার`;
+
+    if (totalBill > 0) {
+      const dueMemoData = {
+        id: purchaseDueId,
+        name: supplierNameFinal,
+        mobile: memoState.supplierPhone || '',
+        address: '',
+        date: memoState.createdAt || today,
+        lotNumber: lotNumber ? lotNumber.toString() : '',
+        deposit: paid,
+        type: 'purchase',
+        status: currentStatus,
+        entries: memoState.entries.map((e, index) => {
+          const totalKgNum = Number(e.totalKg) || 0;
+          const totalPriceNum = Number(e.totalPrice) || 0;
+          const weightInKg = e.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
+          const buyRateVal = weightInKg > 0 ? totalPriceNum / weightInKg : totalPriceNum;
+
+          return {
+            id: e.id,
+            serialNo: (index + 1).toString(),
+            name: e.name || `পণ্য ${index + 1}`,
+            totalKg: e.totalKg,
+            weightUnit: e.weightUnit || 'kg',
+            buyRate: buyRateVal || '',
+            profitPercent: e.profitPercent !== undefined ? e.profitPercent : '',
+            manualSaleRate: buyRateVal || ''
+          };
+        })
+      };
+
+      if (currentStatus === 'due') {
+        localStorage.setItem(`due_memo_${purchaseDueId}`, JSON.stringify(dueMemoData));
+        
+        const existingDuesStr = localStorage.getItem('dues_purchase');
+        let existingDues: string[] = existingDuesStr ? JSON.parse(existingDuesStr) : [];
+        if (!existingDues.includes(purchaseDueId)) {
+          existingDues.push(purchaseDueId);
+          localStorage.setItem('dues_purchase', JSON.stringify(existingDues));
+        }
+
+        const existingPaidStr = localStorage.getItem('paid_dues_purchase');
+        let existingPaid: string[] = existingPaidStr ? JSON.parse(existingPaidStr) : [];
+        if (existingPaid.includes(purchaseDueId)) {
+          existingPaid = existingPaid.filter(id => id !== purchaseDueId);
+          localStorage.setItem('paid_dues_purchase', JSON.stringify(existingPaid));
+        }
+      } else if (currentStatus === 'paid') {
+        localStorage.setItem(`due_memo_${purchaseDueId}`, JSON.stringify({ ...dueMemoData, paidDate: Date.now() }));
+
+        const existingPaidStr = localStorage.getItem('paid_dues_purchase');
+        let existingPaid: string[] = existingPaidStr ? JSON.parse(existingPaidStr) : [];
+        if (!existingPaid.includes(purchaseDueId)) {
+          existingPaid.push(purchaseDueId);
+          localStorage.setItem('paid_dues_purchase', JSON.stringify(existingPaid));
+        }
+
+        const existingDuesStr = localStorage.getItem('dues_purchase');
+        let existingDues: string[] = existingDuesStr ? JSON.parse(existingDuesStr) : [];
+        if (existingDues.includes(purchaseDueId)) {
+          existingDues = existingDues.filter(id => id !== purchaseDueId);
+          localStorage.setItem('dues_purchase', JSON.stringify(existingDues));
+        }
+      }
+    }
+
+    localStorage.setItem(`memo_lot_${lotNumber}`, JSON.stringify({ ...memoState, status: currentStatus }));
     setSaveStatus('Saving...');
     const timer = setTimeout(() => setSaveStatus('Saved'), 500);
     return () => clearTimeout(timer);
-  }, [memoState, lotNumber]);
+  }, [memoState, lotNumber, today]);
 
   const globalCostPercent = (typeof memoState.totalPriceMain === 'number' && typeof memoState.totalCostMain === 'number' && memoState.totalPriceMain > 0)
     ? (memoState.totalCostMain / memoState.totalPriceMain) * 100
