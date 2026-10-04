@@ -56,7 +56,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
         if (!parsed.createdAt) {
           parsed.createdAt = today;
         }
-        return { ...parsed, receiverSignature: parsed.receiverSignature || '', sellerSignature: parsed.sellerSignature || '' };
+        return { ...parsed, receiverSignature: parsed.receiverSignature || '', sellerSignature: parsed.sellerSignature || localStorage.getItem('default_seller_signature') || '' };
       } catch (e) {
         console.error('Failed to parse saved memo');
       }
@@ -75,6 +75,30 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
 
   const storageKey = `memo_lot_${lotNumber}`;
   const [memoState, setMemoState, undo, canUndo] = useHistory<MemoState>(getInitialState(), storageKey);
+
+  useEffect(() => {
+    const handleStorage = () => {
+      const defaultSig = localStorage.getItem('default_seller_signature') || '';
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (!parsed.sellerSignature && defaultSig) {
+            parsed.sellerSignature = defaultSig;
+          }
+          setMemoState(parsed);
+        } catch(e) {}
+      } else if (defaultSig) {
+        setMemoState(prev => ({ ...prev, sellerSignature: defaultSig }));
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('global_seller_signature_changed', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('global_seller_signature_changed', handleStorage);
+    };
+  }, [storageKey]);
   const [saveStatus, setSaveStatus] = useState<string>('Saved');
   const [showSupplierCallMenu, setShowSupplierCallMenu] = useState(false);
   const [showBusinessCallMenu, setShowBusinessCallMenu] = useState(false);
@@ -136,6 +160,15 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
   };
 
   const handleSaveSellerSig = (dataUrl: string) => {
+    try {
+      if (dataUrl) {
+        localStorage.setItem('default_seller_signature', dataUrl);
+      } else {
+        localStorage.removeItem('default_seller_signature');
+      }
+      window.dispatchEvent(new Event('global_seller_signature_changed'));
+    } catch(e) {}
+
     const key = `memo_lot_${lotNumber}`;
     setMemoState(prev => {
       const next = { ...prev, sellerSignature: dataUrl };

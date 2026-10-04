@@ -105,6 +105,15 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
   };
 
   const handleSaveSellerSig = (dataUrl: string) => {
+    try {
+      if (dataUrl) {
+        localStorage.setItem('default_seller_signature', dataUrl);
+      } else {
+        localStorage.removeItem('default_seller_signature');
+      }
+      window.dispatchEvent(new Event('global_seller_signature_changed'));
+    } catch(e) {}
+
     setMemo(prev => {
       const next = { ...prev, sellerSignature: dataUrl };
       try { localStorage.setItem(`investor_memo_${memoId}`, JSON.stringify(next)); } catch(e) {}

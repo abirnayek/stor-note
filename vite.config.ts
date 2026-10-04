@@ -31,6 +31,9 @@ export default defineConfig({
         ]
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         globIgnores: ['**/PC Version/**/*', '**/dist-electron/**/*', '**/Untitled-1.pdf']
       }
     })

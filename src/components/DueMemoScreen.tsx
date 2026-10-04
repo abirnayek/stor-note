@@ -69,7 +69,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
         }
         if (!parsed.address) parsed.address = '';
         if (!parsed.date) parsed.date = today;
-        return { ...parsed, receiverSignature: parsed.receiverSignature || '', sellerSignature: parsed.sellerSignature || '' };
+        return { ...parsed, receiverSignature: parsed.receiverSignature || '', sellerSignature: parsed.sellerSignature || localStorage.getItem('default_seller_signature') || '' };
       } catch (e) {
         console.error('Failed to parse saved due memo');
       }
@@ -100,16 +100,26 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
   // Listen for storage changes from Realtime sync
   useEffect(() => {
     const handleStorage = () => {
+      const defaultSig = localStorage.getItem('default_seller_signature') || '';
       const saved = localStorage.getItem(`due_memo_${dueId}`);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
+          if (!parsed.sellerSignature && defaultSig) {
+            parsed.sellerSignature = defaultSig;
+          }
           setMemoState(parsed);
         } catch(e) {}
+      } else if (defaultSig) {
+        setMemoState(prev => ({ ...prev, sellerSignature: defaultSig }));
       }
     };
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    window.addEventListener('global_seller_signature_changed', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('global_seller_signature_changed', handleStorage);
+    };
   }, [dueId]);
 
   
@@ -125,6 +135,15 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
   };
 
   const handleSaveSellerSig = (dataUrl: string) => {
+    try {
+      if (dataUrl) {
+        localStorage.setItem('default_seller_signature', dataUrl);
+      } else {
+        localStorage.removeItem('default_seller_signature');
+      }
+      window.dispatchEvent(new Event('global_seller_signature_changed'));
+    } catch(e) {}
+
     const key = `due_memo_${dueId}`;
     setMemoState(prev => {
       const next = { ...prev, sellerSignature: dataUrl };

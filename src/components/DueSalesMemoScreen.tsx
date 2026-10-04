@@ -69,7 +69,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
         }
         if (!parsed.address) parsed.address = '';
         if (!parsed.date) parsed.date = today;
-        return { ...parsed, receiverSignature: parsed.receiverSignature || '', sellerSignature: parsed.sellerSignature || '' };
+        return { ...parsed, receiverSignature: parsed.receiverSignature || '', sellerSignature: parsed.sellerSignature || localStorage.getItem('default_seller_signature') || '' };
       } catch (e) {
         console.error('Failed to parse saved due memo');
       }
@@ -81,6 +81,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
       lotNumber: '',
       deposit: '',
       date: today,
+      sellerSignature: localStorage.getItem('default_seller_signature') || '',
       entries: [{ id: Date.now().toString(), serialNo: '', name: '', totalKg: '', weightUnit: 'kg', buyRate: '', profitPercent: 20 }]
     };
   };
@@ -100,16 +101,26 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
   // Listen for storage changes from Realtime sync
   useEffect(() => {
     const handleStorage = () => {
+      const defaultSig = localStorage.getItem('default_seller_signature') || '';
       const saved = localStorage.getItem(`due_memo_${dueId}`);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
+          if (!parsed.sellerSignature && defaultSig) {
+            parsed.sellerSignature = defaultSig;
+          }
           setMemoState(parsed);
         } catch(e) {}
+      } else if (defaultSig) {
+        setMemoState(prev => ({ ...prev, sellerSignature: defaultSig }));
       }
     };
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    window.addEventListener('global_seller_signature_changed', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('global_seller_signature_changed', handleStorage);
+    };
   }, [dueId]);
 
   
@@ -125,6 +136,15 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
   };
 
   const handleSaveSellerSig = (dataUrl: string) => {
+    try {
+      if (dataUrl) {
+        localStorage.setItem('default_seller_signature', dataUrl);
+      } else {
+        localStorage.removeItem('default_seller_signature');
+      }
+      window.dispatchEvent(new Event('global_seller_signature_changed'));
+    } catch(e) {}
+
     const key = `due_memo_${dueId}`;
     setMemoState(prev => {
       const next = { ...prev, sellerSignature: dataUrl };
@@ -561,8 +581,20 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                   let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
                   let buyRateNum = Number(entry.buyRate) || 0;
                   
+                  let perKgRate = 0;
                   if (buyRateNum > 0) {
-                    calculatedSalePriceAuto = buyRateNum + (buyRateNum * currentProfitPercent / 100);
+                    perKgRate = buyRateNum + (buyRateNum * currentProfitPercent / 100);
+                  }
+
+                  // Calculate weight in kg for display
+                  let totalKgNum = Number(entry.totalKg) || 0;
+                  let weightInKg = totalKgNum > 0 ? (entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum) : 0;
+
+                  // বিক্রয় দর = per-kg rate × weight (total line price)
+                  if (weightInKg > 0 && perKgRate > 0) {
+                    calculatedSalePriceAuto = perKgRate * weightInKg;
+                  } else if (perKgRate > 0) {
+                    calculatedSalePriceAuto = perKgRate;
                   }
 
                   return (
@@ -625,8 +657,9 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                         <MathInput 
                            
                           placeholder="0.00"
-                          value={entry.manualSaleRate !== undefined ? entry.manualSaleRate : (calculatedSalePriceAuto > 0 ? calculatedSalePriceAuto.toFixed(2) : '')}
-                          onChange={e => updateEntry(entry.id, 'manualSaleRate', e.target.value === '' ? undefined : Number(e.target.value))}
+                          value={calculatedSalePriceAuto > 0 ? calculatedSalePriceAuto.toFixed(2) : ''}
+                          onChange={() => {}}
+                          readOnly
                           style={{ fontWeight: '500', color: 'var(--primary-color)' }}
                         />
                       </td>
