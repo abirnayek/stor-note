@@ -167,22 +167,60 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
 
   const handleDeleteLot = (lot: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this Lot and ALL its memos?')) {
+    if (window.confirm('লট নম্বরটি ডিলিট করতে চান? এই লটের সকল মেমো "সকল মেমো (Global List)" এবং বকেয়া হিসাবে স্থানান্তরিত ও সংরক্ষিত থাকবে।')) {
       const listStr = localStorage.getItem(`sales_memo_list_${lot}`);
       if (listStr) {
         try {
-           const memoIds = JSON.parse(listStr);
-           memoIds.forEach((mId: string) => {
-             const key = `sales_memo_lot_${lot}_memo_${mId}`;
-             localStorage.removeItem(key);
-           });
-        } catch(e){}
+          const memoIds: string[] = JSON.parse(listStr);
+          const unassignedListStr = localStorage.getItem('sales_memo_list_unassigned');
+          const unassignedList: string[] = unassignedListStr ? JSON.parse(unassignedListStr) : [];
+          
+          memoIds.forEach((mId: string) => {
+            const oldKey = `sales_memo_lot_${lot}_memo_${mId}`;
+            const memoStr = localStorage.getItem(oldKey);
+            
+            if (memoStr) {
+              try {
+                const memo = JSON.parse(memoStr);
+                memo.lotNumberInput = '';
+                const newKey = `sales_memo_lot_unassigned_memo_${mId}`;
+                localStorage.setItem(newKey, JSON.stringify(memo));
+                localStorage.removeItem(oldKey);
+              } catch(err) {
+                localStorage.setItem(`sales_memo_lot_unassigned_memo_${mId}`, memoStr);
+                localStorage.removeItem(oldKey);
+              }
+            }
+            
+            const dueKey = `due_memo_${mId}`;
+            const dueStr = localStorage.getItem(dueKey);
+            if (dueStr) {
+              try {
+                const dueData = JSON.parse(dueStr);
+                dueData.lotNumber = '';
+                if (dueData.memoState) {
+                  dueData.memoState.lotNumberInput = '';
+                }
+                localStorage.setItem(dueKey, JSON.stringify(dueData));
+              } catch(err) {}
+            }
+            
+            if (!unassignedList.includes(mId)) {
+              unassignedList.push(mId);
+            }
+          });
+          
+          localStorage.setItem('sales_memo_list_unassigned', JSON.stringify(unassignedList));
+        } catch(e) {}
       }
+      
       localStorage.removeItem(`sales_memo_list_${lot}`);
+      localStorage.removeItem(`sales_lot_password_${lot}`);
 
       const newLots = lots.filter(l => l !== lot);
       setLots(newLots);
       localStorage.setItem('sales_lots_list', JSON.stringify(newLots));
+      window.dispatchEvent(new Event('storage'));
     }
   };
   
