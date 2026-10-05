@@ -163,7 +163,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
       </div>
 
       <div className="lot-grid">
-        {filteredMemos.map(memoId => {
+        {filteredMemos.map((memoId, idx) => {
           const memoKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
           const memoStr = localStorage.getItem(memoKey);
           let name = `Memo ${memoId}`;
@@ -187,7 +187,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
           }
           
           return (
-            <ProtectedMemoWrapper key={memoId} passwordKey={`memo_password_${memoKey}`} onAccessGranted={() => onSelectMemo(memoId)}>
+            <ProtectedMemoWrapper key={`sales_memo_${lotNumber}_${memoId}_${idx}`} passwordKey={`memo_password_${memoKey}`} onAccessGranted={() => onSelectMemo(memoId)}>
               <div className="lot-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>

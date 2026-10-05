@@ -150,7 +150,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
       </div>
 
       <div className="lot-grid">
-        {filteredLots.map(lot => {
+        {filteredLots.map((lot, idx) => {
           const memoDataStr = localStorage.getItem(`memo_lot_${lot}`);
           let supplierName = '';
           let totalAmount = 0;
@@ -167,7 +167,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
           }
 
           return (
-            <ProtectedMemoWrapper key={lot} passwordKey={`lot_password_${lot}`} onAccessGranted={() => onSelectLot(lot)}>
+            <ProtectedMemoWrapper key={`purchase_lot_${lot}_${idx}`} passwordKey={`lot_password_${lot}`} onAccessGranted={() => onSelectLot(lot)}>
             <div className="lot-card">
                   <div className="lot-card-header">
                     <Package size={40} className="lot-icon" />
