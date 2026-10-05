@@ -84,7 +84,37 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
   });
 
   const getInitialState = (): DueMemoState => {
-    const saved = localStorage.getItem(`due_memo_${dueId}`);
+    const hasValidEntries = (str: string | null): boolean => {
+      if (!str) return false;
+      try {
+        const parsed = JSON.parse(str);
+        const entries = parsed.entries || (parsed.memoState && parsed.memoState.entries);
+        if (entries && Array.isArray(entries) && entries.length > 0) {
+          return entries.some((e: any) => 
+            (e.name && e.name.trim() !== '') || 
+            (e.totalKg !== undefined && e.totalKg !== '' && Number(e.totalKg) > 0) || 
+            (e.buyRate !== undefined && e.buyRate !== '' && Number(e.buyRate) > 0) ||
+            (e.manualSaleRate !== undefined && e.manualSaleRate !== '' && Number(e.manualSaleRate) > 0)
+          );
+        }
+      } catch(e) {}
+      return false;
+    };
+
+    const keysToTry = [
+      `due_memo_${dueId}`,
+      `sales_memo_lot_unassigned_memo_${dueId}`,
+    ];
+    for (let i = 1; i <= 50; i++) {
+      keysToTry.push(`sales_memo_lot_${i}_memo_${dueId}`);
+    }
+
+    let savedKey = keysToTry.find(k => hasValidEntries(localStorage.getItem(k)));
+    let saved = savedKey ? localStorage.getItem(savedKey) : null;
+    if (!saved) {
+      saved = localStorage.getItem(`due_memo_${dueId}`);
+    }
+
     if (saved) {
       try {
         const parsed = JSON.parse(saved);

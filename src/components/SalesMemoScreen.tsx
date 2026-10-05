@@ -55,22 +55,45 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   });
 
     const getInitialState = (): MemoState => {
-    let saved = localStorage.getItem(`sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`);
-    if (!saved) {
-      saved = localStorage.getItem(`sales_memo_lot_unassigned_memo_${memoId}`);
+    const hasValidEntries = (str: string | null): boolean => {
+      if (!str) return false;
+      try {
+        const parsed = JSON.parse(str);
+        const entries = parsed.entries || (parsed.memoState && parsed.memoState.entries);
+        if (entries && Array.isArray(entries) && entries.length > 0) {
+          return entries.some((e: any) => 
+            (e.name && e.name.trim() !== '') || 
+            (e.totalKg !== undefined && e.totalKg !== '' && Number(e.totalKg) > 0) || 
+            (e.manualSaleRate !== undefined && e.manualSaleRate !== '' && Number(e.manualSaleRate) > 0) ||
+            (e.buyRate !== undefined && e.buyRate !== '' && Number(e.buyRate) > 0)
+          );
+        }
+      } catch(e) {}
+      return false;
+    };
+
+    const keysToTry = [
+      `sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`,
+      `sales_memo_lot_unassigned_memo_${memoId}`,
+    ];
+    for (let i = 1; i <= 50; i++) {
+      keysToTry.push(`sales_memo_lot_${i}_memo_${memoId}`);
     }
+
+    let savedKey = keysToTry.find(k => hasValidEntries(localStorage.getItem(k)));
+    let saved = savedKey ? localStorage.getItem(savedKey) : null;
+
     if (!saved) {
-      for (let i = 1; i <= 50; i++) {
-        const alt = localStorage.getItem(`sales_memo_lot_${i}_memo_${memoId}`);
-        if (alt) { saved = alt; break; }
-      }
+      savedKey = keysToTry.find(k => localStorage.getItem(k) !== null);
+      saved = savedKey ? localStorage.getItem(savedKey) : null;
     }
-    if (!saved) {
+
+    if (!saved || !hasValidEntries(saved)) {
       const dueStr = localStorage.getItem(`due_memo_${memoId}`);
       if (dueStr) {
         try {
           const dueData = JSON.parse(dueStr);
-          if (dueData.memoState) {
+          if (dueData.memoState && hasValidEntries(JSON.stringify(dueData.memoState))) {
             saved = JSON.stringify(dueData.memoState);
           } else if (dueData.name || (dueData.entries && dueData.entries.length > 0)) {
             saved = JSON.stringify({
