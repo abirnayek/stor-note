@@ -1,5 +1,5 @@
 import { MemoSignatureBox } from './MemoSignatureBox';
-import { MathInput } from './MathInput';
+import { MathInput, parseMathOrNumber } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Plus, Trash2, Phone, Share2, MessageCircle, Mail, Download } from 'lucide-react';
@@ -622,7 +622,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                              
                             placeholder="0.00" 
                             value={entry.totalKg}
-                            onChange={e => updateEntry(entry.id, 'totalKg', e.target.value ? Number(e.target.value) : '')}
+                            onChange={e => updateEntry(entry.id, 'totalKg', parseMathOrNumber(e.target.value))}
                             style={{ flex: 1, minWidth: '60px' }}
                           />
                           <select
@@ -640,7 +640,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                            
                           placeholder="0.00" 
                           value={entry.buyRate}
-                          onChange={e => updateEntry(entry.id, 'buyRate', e.target.value ? Number(e.target.value) : '')}
+                          onChange={e => updateEntry(entry.id, 'buyRate', parseMathOrNumber(e.target.value))}
                         />
                       </td>
                       <td data-label={t('profitPercent') || 'Profit %'}>
@@ -649,7 +649,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                           className="highlight-input"
                           placeholder="20" 
                           value={entry.profitPercent !== undefined ? entry.profitPercent : 20}
-                          onChange={e => updateEntry(entry.id, 'profitPercent', e.target.value ? Number(e.target.value) : '')}
+                          onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
                           style={{ width: '80px' }}
                         />
                       </td>
@@ -690,7 +690,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                 <MathInput 
                    
                   value={memoState.deposit} 
-                  onChange={e => updateMemoState('deposit', e.target.value ? Number(e.target.value) : '')}
+                  onChange={e => updateMemoState('deposit', parseMathOrNumber(e.target.value))}
                   placeholder="0.00"
                   style={{ width: '100%', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-color)', padding: '5px', borderRadius: '4px', textAlign: 'center', fontWeight: 'bold' }}
                 />

@@ -1,4 +1,4 @@
-import { MathInput } from './MathInput';
+import { MathInput, parseMathOrNumber } from './MathInput';
 import React, { useState, useEffect, useRef } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Plus, MinusCircle, Trash2, Download, CheckCircle2, Phone } from 'lucide-react';
@@ -473,7 +473,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                         {entry.type === 'withdraw' && <span style={{ color: '#ff9800', fontWeight: 'bold' }}>(-)</span>}
                         <MathInput
                           value={entry.amount}
-                          onChange={e => updateEntry(entry.id, 'amount', e.target.value ? Number(e.target.value) : '')}
+                          onChange={e => updateEntry(entry.id, 'amount', parseMathOrNumber(e.target.value))}
                           placeholder="0.00"
                           style={{ color: typeColor(entry.type), width: '80px' }}
                           disabled={memo.status === 'completed'}
@@ -484,7 +484,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                       {entry.type === 'invest' ? (
                         <MathInput
                           value={entry.profitPercent !== undefined ? entry.profitPercent : ''}
-                          onChange={e => updateEntry(entry.id, 'profitPercent', e.target.value ? Number(e.target.value) : '')}
+                          onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
                           placeholder="%"
                           style={{ width: '50px' }}
                           disabled={memo.status === 'completed'}
@@ -499,7 +499,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                       ) : (
                         <MathInput
                           value={entry.total}
-                          onChange={e => updateEntry(entry.id, 'total', e.target.value ? Number(e.target.value) : '')}
+                          onChange={e => updateEntry(entry.id, 'total', parseMathOrNumber(e.target.value))}
                           placeholder="0.00"
                           style={{ fontWeight: 'bold', width: '80px' }}
                           disabled={memo.status === 'completed' || (entry.type === 'invest' && !!entry.profitPercent)}

@@ -1,5 +1,5 @@
 import { MemoSignatureBox } from './MemoSignatureBox';
-import { MathInput } from './MathInput';
+import { MathInput, parseMathOrNumber } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Undo, MessageCircle, Mail, Share2, Download, Plus, Trash2, Phone } from 'lucide-react';
@@ -700,7 +700,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                              
                             placeholder="0.00" 
                             value={entry.totalKg}
-                            onChange={e => updateEntry(entry.id, 'totalKg', e.target.value ? Number(e.target.value) : '')}
+                            onChange={e => updateEntry(entry.id, 'totalKg', parseMathOrNumber(e.target.value))}
                             style={{ flex: 1, minWidth: '60px' }}
                           />
                           <select
@@ -718,7 +718,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                            
                           placeholder="0.00"
                           value={entry.manualSaleRate !== undefined ? entry.manualSaleRate : (calculatedSaleRate > 0 ? calculatedSaleRate.toFixed(2) : '')}
-                          onChange={e => updateEntry(entry.id, 'manualSaleRate', e.target.value === '' ? '' : Number(e.target.value))}
+                          onChange={e => updateEntry(entry.id, 'manualSaleRate', parseMathOrNumber(e.target.value))}
                           style={{ fontWeight: '500' }}
                         />
                       </td>
@@ -728,7 +728,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                           className="highlight-input"
                           placeholder="0" 
                           value={entry.profitPercent !== undefined ? entry.profitPercent : ''}
-                          onChange={e => updateEntry(entry.id, 'profitPercent', e.target.value ? Number(e.target.value) : '')}
+                          onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
                           style={{ width: '70px' }}
                         />
                       </td>
@@ -771,7 +771,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   className="supplier-input" 
                   style={{ width: '100%', textAlign: 'center', padding: '0.3rem' }}
                   value={memoState.paidAmount}
-                  onChange={e => updateMemoState('paidAmount', e.target.value ? Number(e.target.value) : '')}
+                  onChange={e => updateMemoState('paidAmount', parseMathOrNumber(e.target.value))}
                   placeholder="0.00"
                 />
               </div>

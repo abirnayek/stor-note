@@ -1,6 +1,44 @@
 import React, { useState, useEffect, useRef, type InputHTMLAttributes } from 'react';
 
-interface MathInputProps extends InputHTMLAttributes<HTMLInputElement> {}
+interface MathInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value'> {
+  value?: string | number;
+}
+
+/**
+ * Utility to safely parse math expressions or raw numbers from input.
+ * Supports Bengali numerals (০-৯ -> 0-9), common math operators (+, -, *, /, ×, ÷), and commas.
+ */
+export const parseMathOrNumber = (val: string | number | undefined | null): number | '' => {
+  if (val === '' || val === null || val === undefined) return '';
+  if (typeof val === 'number') return isNaN(val) ? '' : val;
+  const str = val.toString().trim();
+  if (!str) return '';
+  
+  // Direct numeric check
+  const directNum = Number(str);
+  if (!isNaN(directNum)) return directNum;
+  
+  // Convert Bengali numerals & common operators
+  const converted = str
+    .replace(/[০-৯]/g, (d) => (d.charCodeAt(0) - 0x09e6).toString())
+    .replace(/×/g, '*')
+    .replace(/÷/g, '/')
+    .replace(/,/g, '');
+  
+  const sanitized = converted.replace(/[^\d.+\-*/()]/g, '');
+  if (!sanitized) return '';
+  
+  try {
+    // eslint-disable-next-line no-new-func
+    const res = new Function('return ' + sanitized)();
+    if (typeof res === 'number' && !isNaN(res) && isFinite(res)) {
+      return parseFloat(res.toFixed(4));
+    }
+  } catch (e) {}
+  
+  const parsedFloat = parseFloat(converted);
+  return isNaN(parsedFloat) ? '' : parsedFloat;
+};
 
 export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, onKeyDown, ...props }) => {
   const [localValue, setLocalValue] = useState(value !== undefined && value !== null ? value.toString() : '');
@@ -30,16 +68,22 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
   }, [value]);
 
   const evaluateExpression = (expr: string): string => {
+    if (!expr || !expr.trim()) return '';
     try {
-      const sanitized = expr.replace(/[^\d.+\-*/()]/g, '');
-      if (!sanitized) return '';
+      // 1. Bengali numerals conversion (০-৯ -> 0-9)
+      let converted = expr.replace(/[০-৯]/g, (d) => (d.charCodeAt(0) - 0x09e6).toString());
+      // 2. Operators & commas
+      converted = converted.replace(/×/g, '*').replace(/÷/g, '/').replace(/,/g, '');
       
+      const sanitized = converted.replace(/[^\d.+\-*/()]/g, '');
+      if (!sanitized) return '';
+
       // eslint-disable-next-line no-new-func
       const result = new Function('return ' + sanitized)();
       if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
-        return Number.isInteger(result) ? result.toString() : result.toFixed(2);
+        return Number.isInteger(result) ? result.toString() : parseFloat(result.toFixed(4)).toString();
       }
-      return '';
+      return expr;
     } catch (e) {
       return expr;
     }
@@ -58,31 +102,22 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
     }
   };
 
-  // Ensure any pending value is committed when unmounting (e.g. clicking Back button)
-  useEffect(() => {
-    return () => {
-      const val = localValueRef.current;
-      if (val) {
-        const evaluated = evaluateExpression(val);
-        triggerChange(evaluated || val);
-      }
-    };
-  }, []);
-
-  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    if (val) {
-      const evaluated = evaluateExpression(val);
-      if (evaluated !== val) {
-        setLocalValue(evaluated);
-        localValueRef.current = evaluated;
-        triggerChange(evaluated);
-      } else {
-        triggerChange(val);
-      }
+  const commitValue = () => {
+    const current = localValueRef.current;
+    if (current) {
+      const evaluated = evaluateExpression(current);
+      setLocalValue(evaluated);
+      localValueRef.current = evaluated;
+      triggerChange(evaluated);
     } else {
+      setLocalValue('');
+      localValueRef.current = '';
       triggerChange('');
     }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    commitValue();
     if (onBlur) {
       onBlur(e);
     }
@@ -90,17 +125,9 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      const val = e.currentTarget.value;
-      if (val) {
-        const evaluated = evaluateExpression(val);
-        if (evaluated !== val) {
-          setLocalValue(evaluated);
-          localValueRef.current = evaluated;
-          triggerChange(evaluated);
-        } else {
-          triggerChange(val);
-        }
-      }
+      e.preventDefault();
+      commitValue();
+      inputRef.current?.blur();
     }
     if (onKeyDown) {
       onKeyDown(e);
@@ -118,10 +145,18 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
         const val = e.target.value;
         setLocalValue(val);
         localValueRef.current = val;
-        triggerChange(val);
+        
+        // Check if value can be parsed cleanly so linked totals update in real-time
+        const parsed = parseMathOrNumber(val);
+        if (parsed !== '') {
+          triggerChange(parsed.toString());
+        } else {
+          triggerChange(val);
+        }
       }}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
     />
   );
 };
+

@@ -1,5 +1,5 @@
 import { MemoSignatureBox } from './MemoSignatureBox';
-import { MathInput } from './MathInput';
+import { MathInput, parseMathOrNumber } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
 import { Share2, Download, Plus, Trash2, Phone, Undo, MessageCircle, Mail, ChevronLeft, Lock, X } from 'lucide-react';
@@ -478,18 +478,16 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
             <div className="summary-card-dark">
               <span className="memo-label-dark">{t('totalPriceLabel')}</span>
               <MathInput
-                
                 value={memoState.totalPriceMain}
-                onChange={e => updateMemoState('totalPriceMain', e.target.value ? Number(e.target.value) : '')}
+                onChange={e => updateMemoState('totalPriceMain', parseMathOrNumber(e.target.value))}
                 placeholder="0.00"
               />
             </div>
             <div className="summary-card-dark">
               <span className="memo-label-dark">{t('totalCostLabel')}</span>
               <MathInput
-                
                 value={memoState.totalCostMain}
-                onChange={e => updateMemoState('totalCostMain', e.target.value ? Number(e.target.value) : '')}
+                onChange={e => updateMemoState('totalCostMain', parseMathOrNumber(e.target.value))}
                 placeholder="0.00"
               />
             </div>
@@ -500,9 +498,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
             <div className="summary-card-dark">
               <span className="memo-label-dark">{t('globalProfitPercent')}</span>
               <MathInput
-                
                 value={memoState.globalProfitPercent !== undefined ? memoState.globalProfitPercent : ''}
-                onChange={e => updateMemoState('globalProfitPercent', e.target.value ? Number(e.target.value) : '')}
+                onChange={e => updateMemoState('globalProfitPercent', parseMathOrNumber(e.target.value))}
                 placeholder="Ex: 0"
                 style={{ borderColor: 'var(--primary-color)' }}
               />
@@ -559,10 +556,9 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
                       <td data-label={t('weightKg')}>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                           <MathInput
-                            
                             placeholder="0.00"
                             value={entry.totalKg}
-                            onChange={e => updateEntry(entry.id, 'totalKg', e.target.value ? Number(e.target.value) : '')}
+                            onChange={e => updateEntry(entry.id, 'totalKg', parseMathOrNumber(e.target.value))}
                             style={{ flex: 1, minWidth: '60px' }}
                           />
                           <select
@@ -577,10 +573,9 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
                       </td>
                       <td data-label={t('price')}>
                         <MathInput
-                          
                           placeholder="0.00"
                           value={entry.totalPrice}
-                          onChange={e => updateEntry(entry.id, 'totalPrice', e.target.value ? Number(e.target.value) : '')}
+                          onChange={e => updateEntry(entry.id, 'totalPrice', parseMathOrNumber(e.target.value))}
                         />
                       </td>
                       <td data-label={t('buyRateAuto')}>{autoRate > 0 ? autoRate.toFixed(2) : '0.00'}</td>
@@ -588,11 +583,10 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
                       <td data-label={t('totalBuyPriceAuto')} style={{ fontWeight: '500', color: '#ffb74d' }}>{investment > 0 ? investment.toFixed(2) : '0.00'}</td>
                       <td data-label={t('profitPercent')}>
                         <MathInput
-                          
                           className="highlight-input"
                           placeholder="0"
                           value={hasGlobalProfit ? currentProfitPercent : (entry.profitPercent !== undefined ? entry.profitPercent : '')}
-                          onChange={e => updateEntry(entry.id, 'profitPercent', e.target.value ? Number(e.target.value) : '')}
+                          onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
                           disabled={hasGlobalProfit}
                           style={{ width: '80px', opacity: hasGlobalProfit ? 0.6 : 1 }}
                         />
@@ -639,9 +633,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
             <div className="summary-card-dark" style={{ borderLeft: '4px solid #72be44', flex: '1 1 200px' }}>
               <span className="memo-label-dark">{t('deposit') || 'জমা'}</span>
               <MathInput
-                
                 value={memoState.paidAmount !== undefined ? memoState.paidAmount : ''}
-                onChange={e => updateMemoState('paidAmount', e.target.value ? Number(e.target.value) : '')}
+                onChange={e => updateMemoState('paidAmount', parseMathOrNumber(e.target.value))}
                 placeholder="0.00"
                 style={{ fontWeight: 'bold', background: 'transparent', border: 'none', color: '#fff', fontSize: '1.2rem', textAlign: 'center', width: '100%', outline: 'none' }}
               />
