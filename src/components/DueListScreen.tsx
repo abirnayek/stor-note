@@ -78,38 +78,63 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
         
         // Calculate due for this memo
         if (memo && Array.isArray(memo.entries)) {
-          const totalPrice = memo.entries.reduce((sum: number, entry: any) => {
-            let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
-            let buyRateNum = Number(entry.buyRate) || 0;
-            
-            let calculatedSalePriceAuto = 0;
-            if (buyRateNum > 0) {
-              calculatedSalePriceAuto = buyRateNum + (buyRateNum * currentProfitPercent / 100);
-            }
-            
-            let salePriceAuto = 0;
-            if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-              let manualRateNum = Number(entry.manualSaleRate);
-              salePriceAuto = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+          let totalPrice = 0;
+          if (dueType === 'purchase') {
+            if (memo.memoState && Number(memo.memoState.totalPriceMain) > 0) {
+              totalPrice = Number(memo.memoState.totalPriceMain);
             } else {
-              salePriceAuto = calculatedSalePriceAuto;
+              totalPrice = memo.entries.reduce((sum: number, entry: any) => {
+                let buyRateNum = Number(entry.buyRate) || 0;
+                let weightInKg = 0;
+                let totalKgNum = Number(entry.totalKg) || 0;
+                if (totalKgNum > 0) {
+                  weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
+                }
+                if (weightInKg > 0 && buyRateNum > 0) {
+                  return sum + (buyRateNum * weightInKg);
+                }
+                if (typeof entry.totalPrice === 'number' && entry.totalPrice > 0) {
+                  return sum + entry.totalPrice;
+                }
+                return sum;
+              }, 0);
             }
-            
-            let weightInKg = 0;
-            let totalKgNum = Number(entry.totalKg) || 0;
-            if (totalKgNum > 0) {
-              weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
-            }
-            
-            if (weightInKg > 0 && salePriceAuto > 0) {
-              return sum + (salePriceAuto * weightInKg);
-            }
-            return sum;
-          }, 0);
+          } else {
+            totalPrice = memo.entries.reduce((sum: number, entry: any) => {
+              let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
+              let buyRateNum = Number(entry.buyRate) || 0;
+              
+              let calculatedSalePriceAuto = 0;
+              if (buyRateNum > 0) {
+                calculatedSalePriceAuto = buyRateNum + (buyRateNum * currentProfitPercent / 100);
+              }
+              
+              let salePriceAuto = 0;
+              if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+                let manualRateNum = Number(entry.manualSaleRate);
+                salePriceAuto = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+              } else {
+                salePriceAuto = calculatedSalePriceAuto;
+              }
+              
+              let weightInKg = 0;
+              let totalKgNum = Number(entry.totalKg) || 0;
+              if (totalKgNum > 0) {
+                weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
+              }
+              
+              if (weightInKg > 0 && salePriceAuto > 0) {
+                return sum + (salePriceAuto * weightInKg);
+              }
+              return sum;
+            }, 0);
+          }
           
           const deposit = typeof memo.deposit === 'number' ? memo.deposit : (Number(memo.deposit) || 0);
           const paid = typeof memo.paidAmount === 'number' ? memo.paidAmount : (Number(memo.paidAmount) || 0);
-          const dueAmount = totalPrice - deposit - paid;
+          const memoStatePaid = (memo.memoState && typeof memo.memoState.paidAmount === 'number') ? memo.memoState.paidAmount : (Number(memo.memoState?.paidAmount) || 0);
+          const totalPaid = Math.max(deposit + paid, memoStatePaid);
+          const dueAmount = totalPrice - totalPaid;
           
           userDues[dueId] = dueAmount > 0 ? dueAmount : 0;
 
