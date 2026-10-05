@@ -9,6 +9,8 @@ import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
 
 
+import MemoScreen from './MemoScreen';
+
 interface DueMemoScreenProps {
   onNavigate: (screen: Screen) => void;
   dueType?: 'regular' | 'permanent' | 'purchase';
@@ -50,6 +52,27 @@ interface DueMemoState {
 }
 
 const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueId, isPaid = false }) => {
+  if (dueType === 'purchase' || dueId.startsWith('purchase_lot_')) {
+    let lotNum = 1;
+    if (dueId.startsWith('purchase_lot_')) {
+      lotNum = parseInt(dueId.replace('purchase_lot_', ''), 10) || 1;
+    } else {
+      const saved = localStorage.getItem(`due_memo_${dueId}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.lotNumber) lotNum = parseInt(parsed.lotNumber, 10) || 1;
+        } catch (e) {}
+      }
+    }
+    return (
+      <MemoScreen 
+        onNavigate={onNavigate} 
+        lotNumber={lotNum}
+        onBack={() => onNavigate(isPaid ? 'paid-due-list' : 'due-purchase-list')}
+      />
+    );
+  }
   const { t, language, formatNumber } = useLanguage();
   const memoRef = useRef<HTMLDivElement>(null);
   
@@ -168,7 +191,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
       const finalState = { ...memoState };
       localStorage.setItem(key, JSON.stringify(finalState));
     } catch(e) {}
-    onNavigate(isPaid ? 'paid-due-list' : (dueType === 'purchase' ? 'due-purchase-list' : 'due-list'));
+    onNavigate(isPaid ? 'paid-due-list' : ((dueType as string) === 'purchase' ? 'due-purchase-list' : 'due-list'));
   };
 
   // Auto-save
@@ -364,7 +387,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
           <ChevronLeft size={24} />
         </button>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <h2>{dueType === 'purchase' ? t('purchaseDue') : (dueType === 'regular' ? t('regularDue') : t('permanentDue'))} Memo</h2>
+          <h2>{(dueType as string) === 'purchase' ? t('purchaseDue') : (dueType === 'regular' ? t('regularDue') : t('permanentDue'))} Memo</h2>
           <span style={{ fontSize: '0.8rem', color: saveStatus === 'Saved' ? '#72be44' : '#fff', transition: 'color 0.3s' }}>
             {saveStatus === 'Saved' ? '✔ All changes saved' : 'Saving...'}
           </span>

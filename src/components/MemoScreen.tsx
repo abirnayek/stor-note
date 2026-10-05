@@ -13,6 +13,7 @@ import CallMenu from './CallMenu';
 interface MemoScreenProps {
   onNavigate: (screen: Screen) => void;
   lotNumber: number | null;
+  onBack?: () => void;
 }
 
 interface FishEntry {
@@ -39,7 +40,7 @@ interface MemoState {
   entries: FishEntry[];
 }
 
-const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
+const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }) => {
   const { t, language, formatNumber } = useLanguage();
   const memoRef = useRef<HTMLDivElement>(null);
 
@@ -50,7 +51,18 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
   });
 
   const getInitialState = (): MemoState => {
-    const saved = localStorage.getItem(`memo_lot_${lotNumber}`);
+    let saved = localStorage.getItem(`memo_lot_${lotNumber}`);
+    if (!saved && lotNumber) {
+      const dueSaved = localStorage.getItem(`due_memo_purchase_lot_${lotNumber}`);
+      if (dueSaved) {
+        try {
+          const parsedDue = JSON.parse(dueSaved);
+          if (parsedDue.memoState) {
+            saved = JSON.stringify(parsedDue.memoState);
+          }
+        } catch(e) {}
+      }
+    }
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -194,7 +206,11 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
       const finalState = { ...memoState };
       localStorage.setItem(key, JSON.stringify(finalState));
     } catch(e) {}
-    onNavigate('lots');
+    if (onBack) {
+      onBack();
+    } else {
+      onNavigate('lots');
+    }
   };
 
   // Auto-save
@@ -238,6 +254,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
         deposit: paid,
         type: 'purchase',
         status: currentStatus,
+        memoState: { ...memoState },
         entries: memoState.entries.map((e, index) => {
           const totalKgNum = Number(e.totalKg) || 0;
           const totalPriceNum = Number(e.totalPrice) || 0;
