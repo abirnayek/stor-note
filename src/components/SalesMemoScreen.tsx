@@ -2,7 +2,7 @@ import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput, parseMathOrNumber } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Undo, MessageCircle, Mail, Share2, Download, Plus, Trash2, Phone } from 'lucide-react';
+import { ChevronLeft, Undo, Redo, MessageCircle, Mail, Share2, Download, Plus, Trash2, Phone } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
@@ -126,7 +126,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   };
 
   const storageKey = `sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`;
-  const [memoState, setMemoState, undo, canUndo] = useHistory<MemoState>(getInitialState(), storageKey);
+  const [memoState, setMemoState, undo, redo, canUndo, canRedo] = useHistory<MemoState>(getInitialState(), storageKey);
 
   useEffect(() => {
     const handleStorage = () => {
@@ -488,8 +488,11 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         </div>
         
         <div className="header-actions">
-          <button className="btn-icon action-undo" onClick={undo} disabled={!canUndo} title="Undo">
+          <button className="btn-icon action-undo" onClick={undo} disabled={!canUndo} title="Undo" style={{ opacity: canUndo ? 1 : 0.4 }}>
             <Undo size={24} />
+          </button>
+          <button className="btn-icon action-redo" onClick={redo} disabled={!canRedo} title="Redo" style={{ opacity: canRedo ? 1 : 0.4 }}>
+            <Redo size={24} />
           </button>
           
           <div className="share-group">

@@ -1,12 +1,13 @@
 import { MathInput, parseMathOrNumber } from './MathInput';
 import React, { useState, useEffect, useRef } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Plus, MinusCircle, Trash2, Download, CheckCircle2, Phone } from 'lucide-react';
+import { ChevronLeft, Plus, MinusCircle, Trash2, Download, CheckCircle2, Phone, Undo, Redo } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { MemoSignatureBox } from './MemoSignatureBox';
 import CallMenu from './CallMenu';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useHistory } from '../hooks/useHistory';
 
 interface InvestorMemoScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -45,15 +46,30 @@ interface InvestorMemo {
 }
 
 const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, investorId, memoId }) => {
-  const [memo, setMemo] = useState<InvestorMemo>({
-    id: memoId,
-    date: new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'short', day: 'numeric' }),
-    isEdited: false,
-    entries: [],
-    status: 'active',
-    investNumber: '',
-    totalInvestAmount: ''
-  });
+  const getInitialMemo = (): InvestorMemo => {
+    const memoStr = localStorage.getItem(`investor_memo_${memoId}`);
+    if (memoStr) {
+      try {
+        const parsed = JSON.parse(memoStr);
+        if (!parsed.date) {
+          parsed.date = new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'short', day: 'numeric' });
+          parsed.isEdited = false;
+        }
+        return parsed;
+      } catch (e) {}
+    }
+    return {
+      id: memoId,
+      date: new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'short', day: 'numeric' }),
+      isEdited: false,
+      entries: [],
+      status: 'active',
+      investNumber: '',
+      totalInvestAmount: ''
+    };
+  };
+
+  const [memo, setMemo, undo, redo, canUndo, canRedo] = useHistory<InvestorMemo>(getInitialMemo(), `investor_memo_${memoId}`);
   const [profile, setProfile] = useState<any>({});
   const [saveStatus, setSaveStatus] = useState('Saved');
   const [showInvestorCallMenu, setShowInvestorCallMenu] = useState(false);
@@ -283,7 +299,13 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
             {saveStatus === 'Saved' ? (language === 'bn' ? '✔ সেভ হয়েছে' : '✔ Saved') : (language === 'bn' ? 'সেভ হচ্ছে...' : 'Saving...')}
           </span>
         </div>
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+          <button className="btn-icon action-undo" onClick={undo} disabled={!canUndo} title="Undo" style={{ opacity: canUndo ? 1 : 0.4 }}>
+            <Undo size={24} />
+          </button>
+          <button className="btn-icon action-redo" onClick={redo} disabled={!canRedo} title="Redo" style={{ opacity: canRedo ? 1 : 0.4 }}>
+            <Redo size={24} />
+          </button>
           <button className="btn-icon action-download" onClick={handleDownload} title="PDF ডাউনলোড">
             <Download size={24} />
           </button>

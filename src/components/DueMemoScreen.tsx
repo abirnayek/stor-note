@@ -2,8 +2,9 @@ import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput, parseMathOrNumber } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Phone, Plus, Trash2, Share2, MessageCircle, Mail, Download } from 'lucide-react';
+import { ChevronLeft, Phone, Plus, Trash2, Share2, MessageCircle, Mail, Download, Undo, Redo } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
@@ -108,7 +109,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
     };
   };
 
-  const [memoState, setMemoState] = useState<DueMemoState>(getInitialState());
+  const [memoState, setMemoState, undo, redo, canUndo, canRedo] = useHistory<DueMemoState>(getInitialState(), `due_memo_${dueId}`);
   const [saveStatus, setSaveStatus] = useState<string>('Saved');
   const [showBusinessCallMenu, setShowBusinessCallMenu] = useState(false);
   const [showBusinessCallMenu2, setShowBusinessCallMenu2] = useState(false);
@@ -394,6 +395,12 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
         </div>
 
         <div className="header-actions">
+          <button className="btn-icon action-undo" onClick={undo} disabled={!canUndo} title="Undo" style={{ opacity: canUndo ? 1 : 0.4 }}>
+            <Undo size={24} />
+          </button>
+          <button className="btn-icon action-redo" onClick={redo} disabled={!canRedo} title="Redo" style={{ opacity: canRedo ? 1 : 0.4 }}>
+            <Redo size={24} />
+          </button>
           <div className="share-group">
             <button className="btn-icon action-fb" onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`)} title="Share on Facebook">
               <Share2 size={24} />

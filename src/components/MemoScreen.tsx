@@ -2,7 +2,7 @@ import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput, DebouncedInput, parseMathOrNumber } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { Share2, Download, Plus, Trash2, Phone, Undo, MessageCircle, Mail, ChevronLeft, Lock, X } from 'lucide-react';
+import { Share2, Download, Plus, Trash2, Phone, Undo, Redo, MessageCircle, Mail, ChevronLeft, Lock, X } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
@@ -87,7 +87,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   };
 
   const storageKey = `memo_lot_${lotNumber}`;
-  const [memoState, setMemoState, undo, canUndo] = useHistory<MemoState>(getInitialState(), storageKey);
+  const [memoState, setMemoState, undo, redo, canUndo, canRedo] = useHistory<MemoState>(getInitialState(), storageKey);
 
   useEffect(() => {
     const handleStorage = () => {
@@ -389,8 +389,11 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
           <button className="btn-icon action-undo" onClick={() => setShowPasswordModal(true)} title="Set Password">
             <Lock size={24} />
           </button>
-          <button className="btn-icon action-undo" onClick={undo} disabled={!canUndo} title="Undo">
+          <button className="btn-icon action-undo" onClick={undo} disabled={!canUndo} title="Undo" style={{ opacity: canUndo ? 1 : 0.4 }}>
             <Undo size={24} />
+          </button>
+          <button className="btn-icon action-redo" onClick={redo} disabled={!canRedo} title="Redo" style={{ opacity: canRedo ? 1 : 0.4 }}>
+            <Redo size={24} />
           </button>
 
           <div className="share-group">
