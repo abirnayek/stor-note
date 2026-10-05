@@ -225,9 +225,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
       return;
     }
 
-    const totalBill = (Number(memoState.totalPriceMain) || 0) > 0 
-      ? Number(memoState.totalPriceMain) 
-      : memoState.entries.reduce((sum, entry) => sum + (typeof entry.totalPrice === 'number' ? entry.totalPrice : 0), 0);
+    const tableTotalPrice = memoState.entries.reduce((sum, entry) => sum + (typeof entry.totalPrice === 'number' ? entry.totalPrice : 0), 0);
+    const totalBill = tableTotalPrice > 0 ? tableTotalPrice : (Number(memoState.totalPriceMain) || 0);
     const paid = Number(memoState.paidAmount) || 0;
     const due = totalBill - paid;
 
@@ -254,7 +253,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
         deposit: paid,
         type: 'purchase',
         status: currentStatus,
-        memoState: { ...memoState },
+        memoState: { ...memoState, totalPriceMain: totalBill },
         entries: memoState.entries.map((e, index) => {
           const totalKgNum = Number(e.totalKg) || 0;
           const totalPriceNum = Number(e.totalPrice) || 0;
@@ -309,7 +308,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
       }
     }
 
-    localStorage.setItem(`memo_lot_${lotNumber}`, JSON.stringify({ ...memoState, status: currentStatus }));
+    localStorage.setItem(`memo_lot_${lotNumber}`, JSON.stringify({ ...memoState, totalPriceMain: totalBill, status: currentStatus }));
+    window.dispatchEvent(new Event('storage'));
     setSaveStatus('Saving...');
     const timer = setTimeout(() => setSaveStatus('Saved'), 500);
     return () => clearTimeout(timer);
