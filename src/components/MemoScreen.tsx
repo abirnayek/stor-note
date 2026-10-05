@@ -511,6 +511,12 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                 placeholder="0.00"
               />
             </div>
+            <div className="summary-card-dark calc-card" style={{ background: 'rgba(114, 190, 68, 0.08)', borderColor: 'rgba(114, 190, 68, 0.3)' }}>
+              <span className="memo-label-dark" style={{ color: '#72be44' }}>{t('totalPriceWithCost')}</span>
+              <span className="calc-value" style={{ color: '#72be44' }}>
+                {(Number(memoState.totalPriceMain || 0) + Number(memoState.totalCostMain || 0)).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+              </span>
+            </div>
             <div className="summary-card-dark calc-card">
               <span className="memo-label-dark">{t('calcCostPercent')}</span>
               <span className="calc-value">{((Number(memoState.totalCostMain || 0) / Number(memoState.totalPriceMain || 1)) * 100).toFixed(2)}%</span>
