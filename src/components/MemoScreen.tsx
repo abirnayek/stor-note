@@ -1,5 +1,5 @@
 import { MemoSignatureBox } from './MemoSignatureBox';
-import { MathInput, parseMathOrNumber } from './MathInput';
+import { MathInput, DebouncedInput, parseMathOrNumber } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
 import { Share2, Download, Plus, Trash2, Phone, Undo, MessageCircle, Mail, ChevronLeft, Lock, X } from 'lucide-react';
@@ -419,7 +419,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
             <div className="meta-item text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center' }}>
                 <span className="memo-label-dark">{t('date')}</span>
-                <input
+                <DebouncedInput
                   type="text"
                   value={memoState.createdAt || today}
                   onChange={e => updateMemoState('createdAt', e.target.value)}
@@ -435,7 +435,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
             <div className="meta-item right-align" style={{ position: 'relative', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center' }}>
                 <span className="memo-label-dark">{t('supplierName')}</span>
-                <input
+                <DebouncedInput
                   type="text"
                   className="supplier-input"
                   value={memoState.supplierName}
@@ -445,7 +445,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <span className="memo-label-dark">{t('mobileLabel')}</span>
-                <input
+                <DebouncedInput
                   type="text"
                   className="supplier-input"
                   value={memoState.supplierPhone || ''}
@@ -546,7 +546,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber }) => {
                     <tr key={entry.id}>
                       <td data-label="#" style={{ textAlign: 'center', opacity: 0.7 }}>{formatNumber(index + 1)}</td>
                       <td data-label={t('fishName')}>
-                        <input
+                        <DebouncedInput
                           type="text"
                           placeholder={t('writeHere')}
                           value={entry.name}

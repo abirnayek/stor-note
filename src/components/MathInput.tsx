@@ -2,6 +2,12 @@ import React, { useState, useEffect, useRef, type InputHTMLAttributes } from 're
 
 interface MathInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value'> {
   value?: string | number;
+  debounceMs?: number;
+}
+
+export interface DebouncedInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value'> {
+  value?: string | number;
+  debounceMs?: number;
 }
 
 /**
@@ -40,39 +46,41 @@ export const parseMathOrNumber = (val: string | number | undefined | null): numb
   return isNaN(parsedFloat) ? '' : parsedFloat;
 };
 
-export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, onKeyDown, ...props }) => {
+/**
+ * Debounced Math Input component.
+ * Instant local typing for zero lag, debounced parent updates for reactive totals without re-render stutter,
+ * and automatic evaluation of math expressions on Enter or Blur.
+ */
+export const MathInput: React.FC<MathInputProps> = ({ 
+  value, 
+  onChange, 
+  onBlur, 
+  onFocus,
+  onKeyDown, 
+  debounceMs = 500,
+  ...props 
+}) => {
   const [localValue, setLocalValue] = useState(value !== undefined && value !== null ? value.toString() : '');
-  const localValueRef = useRef(value !== undefined && value !== null ? value.toString() : '');
-  const lastSentValueRef = useRef(value !== undefined && value !== null ? value.toString() : '');
+  const localValueRef = useRef(localValue);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isFocusedRef = useRef(false);
+  const timerRef = useRef<any>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+  // Sync with prop changes when NOT focused
   useEffect(() => {
     const strVal = value !== undefined && value !== null ? value.toString() : '';
-    const isFocused = inputRef.current && document.activeElement === inputRef.current;
-    
-    if (!isFocused) {
-      if (strVal !== localValueRef.current) {
-        setLocalValue(strVal);
-        localValueRef.current = strVal;
-        lastSentValueRef.current = strVal;
-      }
-    } else {
-      if (strVal !== lastSentValueRef.current && strVal !== localValueRef.current) {
-        setLocalValue(strVal);
-        localValueRef.current = strVal;
-        lastSentValueRef.current = strVal;
-      }
+    if (!isFocusedRef.current) {
+      setLocalValue(strVal);
+      localValueRef.current = strVal;
     }
   }, [value]);
 
   const evaluateExpression = (expr: string): string => {
     if (!expr || !expr.trim()) return '';
     try {
-      // 1. Bengali numerals conversion (০-৯ -> 0-9)
       let converted = expr.replace(/[০-৯]/g, (d) => (d.charCodeAt(0) - 0x09e6).toString());
-      // 2. Operators & commas
       converted = converted.replace(/×/g, '*').replace(/÷/g, '/').replace(/,/g, '');
       
       const sanitized = converted.replace(/[^\d.+\-*/()]/g, '');
@@ -90,7 +98,6 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
   };
 
   const triggerChange = (val: string) => {
-    lastSentValueRef.current = val;
     if (onChangeRef.current) {
       const mockEvent = {
         target: { value: val, name: props.name || '' },
@@ -103,12 +110,19 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
   };
 
   const commitValue = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
     const current = localValueRef.current;
     if (current) {
       const evaluated = evaluateExpression(current);
       setLocalValue(evaluated);
       localValueRef.current = evaluated;
-      triggerChange(evaluated);
+      
+      const parsed = parseMathOrNumber(evaluated);
+      triggerChange(parsed !== '' ? parsed.toString() : evaluated);
     } else {
       setLocalValue('');
       localValueRef.current = '';
@@ -116,7 +130,15 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
     }
   };
 
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    isFocusedRef.current = true;
+    if (onFocus) {
+      onFocus(e);
+    }
+  };
+
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    isFocusedRef.current = false;
     commitValue();
     if (onBlur) {
       onBlur(e);
@@ -141,18 +163,20 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
       type="text"
       inputMode="text"
       value={localValue}
+      onFocus={handleFocus}
       onChange={(e) => {
         const val = e.target.value;
         setLocalValue(val);
         localValueRef.current = val;
         
-        // Check if value can be parsed cleanly so linked totals update in real-time
-        const parsed = parseMathOrNumber(val);
-        if (parsed !== '') {
-          triggerChange(parsed.toString());
-        } else {
-          triggerChange(val);
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
         }
+
+        timerRef.current = setTimeout(() => {
+          const parsed = parseMathOrNumber(val);
+          triggerChange(parsed !== '' ? parsed.toString() : val);
+        }, debounceMs);
       }}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
@@ -160,3 +184,100 @@ export const MathInput: React.FC<MathInputProps> = ({ value, onChange, onBlur, o
   );
 };
 
+/**
+ * General Debounced Input component for text fields.
+ * Ensures typing text (names, phones, addresses) does not lag or stutter on keystrokes.
+ */
+export const DebouncedInput: React.FC<DebouncedInputProps> = ({
+  value,
+  onChange,
+  onBlur,
+  onFocus,
+  onKeyDown,
+  debounceMs = 500,
+  ...props
+}) => {
+  const [localValue, setLocalValue] = useState<string>(value !== undefined && value !== null ? value.toString() : '');
+  const localValueRef = useRef(localValue);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isFocusedRef = useRef(false);
+  const timerRef = useRef<any>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    const strVal = value !== undefined && value !== null ? value.toString() : '';
+    if (!isFocusedRef.current) {
+      setLocalValue(strVal);
+      localValueRef.current = strVal;
+    }
+  }, [value]);
+
+  const triggerChange = (val: string) => {
+    if (onChangeRef.current) {
+      const mockEvent = {
+        target: { value: val, name: props.name || '' },
+        currentTarget: { value: val, name: props.name || '' },
+        preventDefault: () => {},
+        stopPropagation: () => {},
+      } as unknown as React.ChangeEvent<HTMLInputElement>;
+      onChangeRef.current(mockEvent);
+    }
+  };
+
+  const commitValue = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    triggerChange(localValueRef.current);
+  };
+
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    isFocusedRef.current = true;
+    if (onFocus) {
+      onFocus(e);
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    isFocusedRef.current = false;
+    commitValue();
+    if (onBlur) {
+      onBlur(e);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      commitValue();
+    }
+    if (onKeyDown) {
+      onKeyDown(e);
+    }
+  };
+
+  return (
+    <input
+      {...props}
+      ref={inputRef}
+      value={localValue}
+      onFocus={handleFocus}
+      onChange={(e) => {
+        const val = e.target.value;
+        setLocalValue(val);
+        localValueRef.current = val;
+
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+        }
+
+        timerRef.current = setTimeout(() => {
+          triggerChange(val);
+        }, debounceMs);
+      }}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+    />
+  );
+};
