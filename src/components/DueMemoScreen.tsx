@@ -457,7 +457,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
               <div className="memo-logo-rect-dark">
                 <img src="./see fish logo.png" alt="Logo" />
               </div>
-              <h1>{t('appTitle')}</h1>
+              <h1>{t('memoHeaderTitle')}</h1>
             </div>
           </div>
 

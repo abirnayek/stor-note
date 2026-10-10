@@ -27,8 +27,93 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
   useEffect(() => {
     const loadDues = () => {
       const savedDues = localStorage.getItem(`dues_${dueType}`);
-      if (savedDues) {
-        setDues(JSON.parse(savedDues));
+      const savedPaid = localStorage.getItem(`paid_dues_${dueType}`);
+      let duesList: string[] = savedDues ? JSON.parse(savedDues) : [];
+      let paidList: string[] = savedPaid ? JSON.parse(savedPaid) : [];
+
+      let listChanged = false;
+      const validDues: string[] = [];
+
+      duesList.forEach(dueId => {
+        const memoStr = localStorage.getItem(`due_memo_${dueId}`);
+        if (!memoStr) return;
+
+        try {
+          const memo = JSON.parse(memoStr);
+          let totalPrice = 0;
+          if (memo && Array.isArray(memo.entries)) {
+            if (dueType === 'purchase') {
+              if (memo.memoState && Number(memo.memoState.totalPriceMain) > 0) {
+                totalPrice = Number(memo.memoState.totalPriceMain);
+              } else {
+                totalPrice = memo.entries.reduce((sum: number, entry: any) => {
+                  let buyRateNum = Number(entry.buyRate) || 0;
+                  let weightInKg = 0;
+                  let totalKgNum = Number(entry.totalKg) || 0;
+                  if (totalKgNum > 0) {
+                    weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
+                  }
+                  if (weightInKg > 0 && buyRateNum > 0) return sum + (buyRateNum * weightInKg);
+                  if (typeof entry.totalPrice === 'number' && entry.totalPrice > 0) return sum + entry.totalPrice;
+                  return sum;
+                }, 0);
+              }
+            } else {
+              totalPrice = memo.entries.reduce((sum: number, entry: any) => {
+                let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
+                let buyRateNum = Number(entry.buyRate) || 0;
+                let calculatedSalePriceAuto = buyRateNum > 0 ? buyRateNum + (buyRateNum * currentProfitPercent / 100) : 0;
+                let salePriceAuto = 0;
+                if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+                  let manualRateNum = Number(entry.manualSaleRate);
+                  salePriceAuto = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+                } else {
+                  salePriceAuto = calculatedSalePriceAuto;
+                }
+                let weightInKg = 0;
+                let totalKgNum = Number(entry.totalKg) || 0;
+                if (totalKgNum > 0) {
+                  weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
+                }
+                if (weightInKg > 0 && salePriceAuto > 0) {
+                  return sum + (salePriceAuto * weightInKg);
+                }
+                return sum;
+              }, 0);
+            }
+
+            const deposit = typeof memo.deposit === 'number' ? memo.deposit : (Number(memo.deposit) || 0);
+            const paid = typeof memo.paidAmount === 'number' ? memo.paidAmount : (Number(memo.paidAmount) || 0);
+            const memoStatePaid = (memo.memoState && typeof memo.memoState.paidAmount === 'number') ? memo.memoState.paidAmount : (Number(memo.memoState?.paidAmount) || 0);
+            const totalPaid = Math.max(deposit + paid, memoStatePaid);
+            const dueAmount = totalPrice - totalPaid;
+
+            if ((totalPrice > 0 && dueAmount <= 0) || memo.paidDate || memo.status === 'paid') {
+              listChanged = true;
+              if (!paidList.includes(dueId)) {
+                paidList.push(dueId);
+              }
+              memo.paidDate = memo.paidDate || Date.now();
+              memo.status = 'paid';
+              if (memo.memoState) memo.memoState.status = 'paid';
+              localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(memo));
+            } else {
+              validDues.push(dueId);
+            }
+          } else {
+            validDues.push(dueId);
+          }
+        } catch (e) {
+          validDues.push(dueId);
+        }
+      });
+
+      if (listChanged) {
+        localStorage.setItem(`dues_${dueType}`, JSON.stringify(validDues));
+        localStorage.setItem(`paid_dues_${dueType}`, JSON.stringify(paidList));
+        setDues(validDues);
+      } else {
+        setDues(duesList);
       }
     };
     loadDues();

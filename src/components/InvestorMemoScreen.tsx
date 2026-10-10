@@ -320,7 +320,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
               <div className="memo-logo-rect-dark">
                 <img src="./see fish logo.png" alt="Logo" />
               </div>
-              <h1>{t('appTitle')}</h1>
+              <h1>{t('memoHeaderTitle')}</h1>
             </div>
           </div>
 
@@ -591,7 +591,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
             </div>
           </div>
 
-          <div className="memo-dark-footer" style={{ position: 'relative' }}>
+          <div className="memo-dark-footer">
             <MemoSignatureBox 
               label={t('investorSig')}
               signatureData={memo.investorSignature}
@@ -601,18 +601,6 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
               onClear={handleClearInvestorSig}
             />
             
-            {memo.status !== 'completed' && (
-              <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '2rem' }} data-html2canvas-ignore>
-                <button 
-                  className="btn btn-primary" 
-                  onClick={handleCompleteMemo}
-                  style={{ background: '#ff9800', border: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  <CheckCircle2 size={18} /> {t('completedMemos')}
-                </button>
-              </div>
-            )}
-
             <MemoSignatureBox 
               label={t('businessSig')}
               signatureData={memo.sellerSignature}
@@ -622,6 +610,18 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
               onClear={handleClearSellerSig}
             />
           </div>
+
+          {memo.status !== 'completed' && (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem 0 2rem 0', width: '100%' }} data-html2canvas-ignore>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleCompleteMemo}
+                style={{ background: '#ff9800', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', padding: '0.8rem 1.5rem', fontSize: '1rem', borderRadius: '8px', cursor: 'pointer' }}
+              >
+                <CheckCircle2 size={18} /> {t('completedMemos')}
+              </button>
+            </div>
+          )}
 
         </div>
       </div>

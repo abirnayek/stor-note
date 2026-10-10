@@ -42,97 +42,184 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
 
   useEffect(() => {
     const loadGlobalMemos = () => {
-      const allMemos: GlobalMemo[] = [];
-      const lotKeys: (number | 'unassigned')[] = [...lots, 'unassigned'];
+      const allMemosMap = new Map<string, GlobalMemo>();
 
-      lotKeys.forEach(lotKey => {
-        const listStr = localStorage.getItem(`sales_memo_list_${lotKey}`);
-        if (listStr) {
+      const processMemo = (memoId: string, lotKey: number | null, memoObj: any) => {
+        let name = memoObj.customerName || memoObj.name || memoObj.supplierName || `Memo ${memoId}`;
+        let statusColor = '#aaa';
+        let statusText = 'Draft';
+        let timestamp = Number(memoId) || Date.now();
+        let totalAmount = 0;
+
+        if (memoObj.status === 'paid' || memoObj.paidDate) {
+          statusColor = '#72be44';
+          statusText = 'Paid';
+        } else if (memoObj.status === 'due' || memoObj.deposit !== undefined || memoObj.dueId) {
+          statusColor = '#ff9800';
+          statusText = 'Due';
+        }
+
+        if (memoObj.createdAt) {
+          const parsed = Date.parse(memoObj.createdAt);
+          if (!isNaN(parsed)) timestamp = parsed;
+        } else if (memoObj.date) {
+          const parsed = Date.parse(memoObj.date);
+          if (!isNaN(parsed)) timestamp = parsed;
+        }
+
+        if (memoObj.entries && Array.isArray(memoObj.entries)) {
+          memoObj.entries.forEach((entry: any) => {
+            let baseRate = 0;
+            if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+              baseRate = Number(entry.manualSaleRate);
+            } else {
+              baseRate = Number(entry.buyRate) || 0;
+            }
+            let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
+            let finalRate = baseRate + (baseRate * currentProfitPercent / 100);
+            let totalKgNum = Number(entry.totalKg) || 0;
+            let weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
+            if (weightInKg > 0 && finalRate > 0) {
+              totalAmount += weightInKg * finalRate;
+            }
+          });
+        }
+
+        if (totalAmount === 0 && memoObj.totalBill) {
+          totalAmount = Number(memoObj.totalBill) || 0;
+        }
+
+        allMemosMap.set(memoId, {
+          id: memoId,
+          lotNumber: lotKey,
+          name,
+          statusText,
+          statusColor,
+          timestamp,
+          totalAmount
+        });
+      };
+
+      // 1. Scan all sales_memo_list_* and sales_memo_list_lot_* keys
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+
+        if (key.startsWith('sales_memo_list_')) {
           try {
-            const memoIds = JSON.parse(listStr);
-            memoIds.forEach((memoId: string) => {
-              const memoStr = localStorage.getItem(`sales_memo_lot_${lotKey}_memo_${memoId}`);
-              let name = `Memo ${memoId}`;
-              let statusColor = '#aaa';
-              let statusText = 'Draft';
-              let timestamp = Number(memoId) || Date.now();
-              let totalAmount = 0;
-              
-              if (memoStr) {
-                try {
-                  const memo = JSON.parse(memoStr);
-                  
-                  // Auto-sync fallback for old memos that didn't sync name properly
-                  if (!memo.customerName) {
-                    const dueMemoStr = localStorage.getItem(`due_memo_${memoId}`);
-                    if (dueMemoStr) {
-                      try {
-                        const dueMemo = JSON.parse(dueMemoStr);
-                        if (dueMemo.name) {
-                          memo.customerName = dueMemo.name;
-                          memo.status = dueMemo.paidDate ? 'paid' : 'due';
-                          const memoKey = `sales_memo_lot_${lotKey}_memo_${memoId}`;
-                          localStorage.setItem(memoKey, JSON.stringify(memo));
-                        }
-                      } catch(e) {}
-                    }
-                  }
-                  
-                  if (memo.customerName) name = memo.customerName;
-                  if (memo.status === 'paid') {
-                    statusColor = '#72be44';
-                    statusText = 'Paid';
-                  } else if (memo.status === 'due') {
-                    statusColor = '#ff9800';
-                    statusText = 'Due';
-                  }
-                  // try parsing timestamp from created at or just use id
-                  if (memo.createdAt) {
-                    const parsed = Date.parse(memo.createdAt);
-                    if (!isNaN(parsed)) timestamp = parsed;
-                  }
-                  
-                  // calculate total amount
-                  if (memo.entries && Array.isArray(memo.entries)) {
-                    memo.entries.forEach((entry: any) => {
-                      let baseRate = 0;
-                      if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-                        baseRate = Number(entry.manualSaleRate);
-                      } else {
-                        baseRate = Number(entry.buyRate) || 0;
-                      }
-                      let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
-                      let finalRate = baseRate + (baseRate * currentProfitPercent / 100);
-                      let totalKgNum = Number(entry.totalKg) || 0;
-                      let weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
-                      if (weightInKg > 0 && finalRate > 0) {
-                        totalAmount += weightInKg * finalRate;
-                      }
-                    });
-                  }
-                } catch(e) {}
+            const listStr = localStorage.getItem(key);
+            if (listStr) {
+              const memoIds: string[] = JSON.parse(listStr);
+              let lotKeyNum: number | null = null;
+              const rawLotStr = key.replace('sales_memo_list_lot_', '').replace('sales_memo_list_', '');
+              if (rawLotStr !== 'unassigned' && !isNaN(Number(rawLotStr))) {
+                lotKeyNum = Number(rawLotStr);
               }
-              
-              allMemos.push({
-                id: memoId,
-                lotNumber: lotKey === 'unassigned' ? null : Number(lotKey),
-                name,
-                statusText,
-                statusColor,
-                timestamp,
-                totalAmount
+
+              memoIds.forEach(memoId => {
+                if (allMemosMap.has(memoId)) return;
+                const possibleDataKeys = [
+                  `sales_memo_lot_${lotKeyNum ?? 'unassigned'}_memo_${memoId}`,
+                  `sales_memo_lot_unassigned_memo_${memoId}`,
+                  `due_memo_${memoId}`
+                ];
+                for (let l = 1; l <= 50; l++) {
+                  possibleDataKeys.push(`sales_memo_lot_${l}_memo_${memoId}`);
+                }
+
+                let foundData: any = null;
+                for (const dKey of possibleDataKeys) {
+                  const str = localStorage.getItem(dKey);
+                  if (str) {
+                    try { foundData = JSON.parse(str); break; } catch(e) {}
+                  }
+                }
+
+                if (foundData) {
+                  processMemo(memoId, lotKeyNum, foundData);
+                } else {
+                  // Fallback: search in due_memo_*
+                  const dueStr = localStorage.getItem(`due_memo_${memoId}`);
+                  if (dueStr) {
+                    try { processMemo(memoId, lotKeyNum, JSON.parse(dueStr)); } catch(e) {}
+                  }
+                }
               });
+            }
+          } catch(e) {}
+        }
+      }
+
+      // 2. Direct scan of all sales_memo_lot_*_memo_* keys
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('sales_memo_lot_') && key.includes('_memo_')) {
+          const parts = key.split('_memo_');
+          if (parts.length === 2) {
+            const memoId = parts[1];
+            if (!allMemosMap.has(memoId)) {
+              try {
+                const memoObj = JSON.parse(localStorage.getItem(key) || '{}');
+                let lotNum: number | null = null;
+                const lotPart = parts[0].replace('sales_memo_lot_', '');
+                if (lotPart !== 'unassigned' && !isNaN(Number(lotPart))) {
+                  lotNum = Number(lotPart);
+                }
+                processMemo(memoId, lotNum, memoObj);
+              } catch(e) {}
+            }
+          }
+        }
+      }
+
+      // 3. Direct scan of all due_memo_* keys
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('due_memo_')) {
+          const memoId = key.replace('due_memo_', '');
+          if (!allMemosMap.has(memoId)) {
+            try {
+              const dueObj = JSON.parse(localStorage.getItem(key) || '{}');
+              if (dueObj.type === 'regular' || dueObj.type === 'permanent' || dueObj.customerName || (dueObj.name && dueObj.type !== 'purchase')) {
+                let lotNum: number | null = null;
+                if (dueObj.lotNumber && !isNaN(Number(dueObj.lotNumber))) {
+                  lotNum = Number(dueObj.lotNumber);
+                }
+                processMemo(memoId, lotNum, dueObj.memoState || dueObj);
+              }
+            } catch(e) {}
+          }
+        }
+      }
+
+      // 4. Scan dues_regular and dues_permanent arrays
+      ['dues_regular', 'dues_permanent'].forEach(dueType => {
+        const duesStr = localStorage.getItem(dueType);
+        if (duesStr) {
+          try {
+            const dueIds: string[] = JSON.parse(duesStr);
+            dueIds.forEach(dueId => {
+              if (!allMemosMap.has(dueId)) {
+                const dueDataStr = localStorage.getItem(`due_memo_${dueId}`);
+                if (dueDataStr) {
+                  try {
+                    const dueObj = JSON.parse(dueDataStr);
+                    processMemo(dueId, null, dueObj.memoState || dueObj);
+                  } catch(e) {}
+                }
+              }
             });
           } catch(e) {}
         }
       });
-      
+
+      const allMemos = Array.from(allMemosMap.values());
       allMemos.sort((a, b) => b.timestamp - a.timestamp);
       setGlobalMemos(allMemos);
     };
-    
+
     loadGlobalMemos();
-    
+
     window.addEventListener('storage', loadGlobalMemos);
     return () => window.removeEventListener('storage', loadGlobalMemos);
   }, [lots]);

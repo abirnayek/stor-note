@@ -18,6 +18,7 @@ export const translations = {
     grandTotal: 'সর্বমোট',
 
     appTitle: 'সামুদ্রিক মাছ নোটবুক',
+    memoHeaderTitle: 'সামুদ্রিক মাছ',
     searchPlaceholder: 'নাম, তারিখ, সবকিছু খুঁজুন...',
     noResults: 'কোন ফলাফল পাওয়া যায়নি',
     logIn: 'প্রবেশ করুন',
@@ -168,6 +169,7 @@ export const translations = {
     grandTotal: 'Grand Total',
 
     appTitle: 'Sea Fish Notebook',
+    memoHeaderTitle: 'Sea Fish',
     searchPlaceholder: 'Search Name, Date, Everything...',
     noResults: 'No results for',
     logIn: 'Log In',

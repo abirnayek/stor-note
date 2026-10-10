@@ -51,11 +51,12 @@ body {
 .app-container {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   flex-direction: column;
   position: relative;
-  
   background-color: #022b1d;
   z-index: 1;
+  overflow: hidden;
 }
 
 /* Premium Animated Mesh / Aurora Effect */
@@ -105,6 +106,7 @@ body {
   background: transparent;
   z-index: 10;
   color: #ffffff;
+  flex-shrink: 0;
 }
 
 .header-left {
@@ -226,7 +228,8 @@ body {
 .main-layout {
   display: flex;
   flex: 1;
-  
+  min-height: 0;
+  overflow: hidden;
   z-index: 1;
   position: relative;
 }
@@ -318,8 +321,10 @@ body {
 /* Content */
 .content {
   flex: 1;
-  padding: 2rem;
+  min-height: 0;
+  padding: 0;
   overflow-y: auto;
+  position: relative;
 }
 
 /* Modal */
@@ -551,14 +556,23 @@ body {
 
 /* Lots Screen */
 .lots-screen {
-  height: 100%;
+  min-height: 100%;
 }
 
 .screen-header {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 2rem;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background-color: var(--bg-color);
+  padding: 1rem 2rem;
+  margin-bottom: 0;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .btn-icon {
@@ -586,6 +600,7 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   grid-auto-rows: 1fr;
   gap: 1.5rem;
+  padding: 1.5rem 2rem;
 }
 
 .lot-card {
@@ -719,7 +734,7 @@ body {
 
 /* Memo Screen */
 .memo-screen {
-  height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -763,7 +778,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: 0 2rem 2rem 2rem;
+  padding: 1.5rem 2rem 2rem 2rem;
 }
 
 .memo-paper-dark {
@@ -1074,7 +1089,7 @@ body {
 .content-layout {
   display: flex;
   gap: 2rem;
-  margin-top: 1rem;
+  padding: 1.5rem 2rem;
   align-items: flex-start;
 }
 
@@ -1233,7 +1248,14 @@ body {
   .sidebar-icon { padding: 8px; width: 36px; height: 36px; }
 
   /* Content Area */
-  .content { padding: 1rem; padding-bottom: 100px; overflow-x: hidden; }
+  .content { padding: 0; padding-bottom: 100px; min-height: 0; overflow-y: auto; }
+
+  .screen-header {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    padding: 0.75rem 1rem;
+  }
 
   /* Dashboard Cards */
   .card-grid { 

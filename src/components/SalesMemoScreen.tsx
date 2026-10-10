@@ -545,7 +545,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
               <div className="memo-logo-rect-dark">
                 <img src="./see fish logo.png" alt="Logo" />
               </div>
-              <h1>{t('appTitle')}</h1>
+              <h1>{t('memoHeaderTitle')}</h1>
             </div>
           </div>
 

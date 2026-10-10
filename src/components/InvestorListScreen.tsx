@@ -3,6 +3,7 @@ import { type Screen } from '../App';
 import { ChevronLeft, Plus, Trash2, FolderOpen } from 'lucide-react';
 import { moveToTrash } from '../utils/trashUtils';
 import { useLanguage } from '../i18n/LanguageContext';
+import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 
 interface InvestorListScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -78,27 +79,33 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
         </div>
       </div>
 
-      <div className="lot-grid" style={{ marginTop: '2rem' }}>
+      <div className="lot-grid">
         {investors.map(id => {
           const profile = profiles[id] || { name: t('newInvestorFolder') };
+          const passwordKey = `investor_folder_password_${id}`;
           
           return (
-            <div key={id} className="lot-card" onClick={() => onSelectInvestor(id)}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <FolderOpen size={20} style={{ color: 'var(--primary-color)' }} />
-                    <span className="lot-number">{profile.name}</span>
+            <ProtectedMemoWrapper key={id} passwordKey={passwordKey} onAccessGranted={() => onSelectInvestor(id)}>
+              <div className="lot-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <FolderOpen size={20} style={{ color: 'var(--primary-color)' }} />
+                      <span className="lot-number">{profile.name}</span>
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '4px', paddingLeft: '28px' }}>
+                      {t('clickToViewFolder')}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '4px', paddingLeft: '28px' }}>
-                    {t('clickToViewFolder')}
-                  </div>
+                  <button className="btn-icon delete-btn" onClick={(e) => handleDelete(id, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
+                    <Trash2 size={16} />
+                  </button>
                 </div>
-                <button className="btn-icon delete-btn" onClick={(e) => handleDelete(id, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
-                  <Trash2 size={16} />
-                </button>
+                <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
+                  <MemoLockIcon passwordKey={passwordKey} />
+                </div>
               </div>
-            </div>
+            </ProtectedMemoWrapper>
           );
         })}
 
