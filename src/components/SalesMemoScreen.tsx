@@ -709,6 +709,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                           placeholder="Sl"
                           value={entry.serialNo || ''}
                           onChange={e => updateEntry(entry.id, 'serialNo', e.target.value)}
+                          onClick={e => { if (e.detail === 3) handleAddRow(); }}
                           style={{ width: '50px', textAlign: 'center' }}
                         />
                       </td>
@@ -718,15 +719,16 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                           placeholder={t('writeHere')}
                           value={entry.name}
                           onChange={e => updateEntry(entry.id, 'name', e.target.value)}
+                          onClick={e => { if (e.detail === 3) handleAddRow(); }}
                         />
                       </td>
                       <td data-label={t('weightKg')}>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                           <MathInput 
-                             
                             placeholder="0.00" 
                             value={entry.totalKg}
                             onChange={e => updateEntry(entry.id, 'totalKg', parseMathOrNumber(e.target.value))}
+                            onTripleClick={handleAddRow}
                             style={{ flex: 1, minWidth: '60px' }}
                           />
                           <select
@@ -741,10 +743,10 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                       </td>
                       <td data-label="Sale Rate">
                         <MathInput 
-                           
                           placeholder="0.00"
                           value={entry.manualSaleRate !== undefined ? entry.manualSaleRate : (calculatedSaleRate > 0 ? calculatedSaleRate.toFixed(2) : '')}
                           onChange={e => updateEntry(entry.id, 'manualSaleRate', parseMathOrNumber(e.target.value))}
+                          onTripleClick={handleAddRow}
                           style={{ fontWeight: '500' }}
                         />
                       </td>

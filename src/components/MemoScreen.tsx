@@ -577,6 +577,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                           placeholder={t('writeHere')}
                           value={entry.name}
                           onChange={e => updateEntry(entry.id, 'name', e.target.value)}
+                          onTripleClick={handleAddRow}
                         />
                       </td>
                       <td data-label={t('weightKg')}>
@@ -585,6 +586,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                             placeholder="0.00"
                             value={entry.totalKg}
                             onChange={e => updateEntry(entry.id, 'totalKg', parseMathOrNumber(e.target.value))}
+                            onTripleClick={handleAddRow}
                             style={{ flex: 1, minWidth: '60px' }}
                           />
                           <select
@@ -602,6 +604,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                           placeholder="0.00"
                           value={entry.totalPrice}
                           onChange={e => updateEntry(entry.id, 'totalPrice', parseMathOrNumber(e.target.value))}
+                          onTripleClick={handleAddRow}
                         />
                       </td>
                       <td data-label={t('buyRateAuto')}>{autoRate > 0 ? autoRate.toFixed(2) : '0.00'}</td>
@@ -613,6 +616,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                           placeholder="0"
                           value={hasGlobalProfit ? currentProfitPercent : (entry.profitPercent !== undefined ? entry.profitPercent : '')}
                           onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
+                          onTripleClick={handleAddRow}
                           disabled={hasGlobalProfit}
                           style={{ width: '80px', opacity: hasGlobalProfit ? 0.6 : 1 }}
                         />

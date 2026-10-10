@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef, type InputHTMLAttributes } from 'react';
 
-interface MathInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value'> {
+export interface MathInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value'> {
   value?: string | number;
   debounceMs?: number;
+  onTripleClick?: () => void;
 }
 
 export interface DebouncedInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value'> {
   value?: string | number;
   debounceMs?: number;
+  onTripleClick?: () => void;
 }
 
 /**
@@ -57,6 +59,7 @@ export const MathInput: React.FC<MathInputProps> = ({
   onBlur, 
   onFocus,
   onKeyDown, 
+  onTripleClick,
   debounceMs = 500,
   ...props 
 }) => {
@@ -67,6 +70,29 @@ export const MathInput: React.FC<MathInputProps> = ({
   const timerRef = useRef<any>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+
+  const lastClickTimeRef = useRef(0);
+  const clickCountRef = useRef(0);
+
+  const handleClick = (e: React.MouseEvent<HTMLInputElement>) => {
+    const now = Date.now();
+    if (now - lastClickTimeRef.current < 450) {
+      clickCountRef.current += 1;
+    } else {
+      clickCountRef.current = 1;
+    }
+    lastClickTimeRef.current = now;
+
+    if (clickCountRef.current >= 3 || e.detail >= 3) {
+      clickCountRef.current = 0;
+      if (onTripleClick) {
+        onTripleClick();
+      }
+    }
+    if (props.onClick) {
+      props.onClick(e);
+    }
+  };
 
   // Sync with prop changes when NOT focused
   useEffect(() => {
@@ -164,6 +190,7 @@ export const MathInput: React.FC<MathInputProps> = ({
       inputMode="text"
       value={localValue}
       onFocus={handleFocus}
+      onClick={handleClick}
       onChange={(e) => {
         const val = e.target.value;
         setLocalValue(val);
@@ -194,6 +221,7 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
   onBlur,
   onFocus,
   onKeyDown,
+  onTripleClick,
   debounceMs = 500,
   ...props
 }) => {
@@ -204,6 +232,29 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
   const timerRef = useRef<any>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+
+  const lastClickTimeRef = useRef(0);
+  const clickCountRef = useRef(0);
+
+  const handleClick = (e: React.MouseEvent<HTMLInputElement>) => {
+    const now = Date.now();
+    if (now - lastClickTimeRef.current < 450) {
+      clickCountRef.current += 1;
+    } else {
+      clickCountRef.current = 1;
+    }
+    lastClickTimeRef.current = now;
+
+    if (clickCountRef.current >= 3 || e.detail >= 3) {
+      clickCountRef.current = 0;
+      if (onTripleClick) {
+        onTripleClick();
+      }
+    }
+    if (props.onClick) {
+      props.onClick(e);
+    }
+  };
 
   useEffect(() => {
     const strVal = value !== undefined && value !== null ? value.toString() : '';
@@ -263,6 +314,7 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
       ref={inputRef}
       value={localValue}
       onFocus={handleFocus}
+      onClick={handleClick}
       onChange={(e) => {
         const val = e.target.value;
         setLocalValue(val);

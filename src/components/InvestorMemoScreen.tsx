@@ -464,6 +464,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                         type="text" 
                         value={entry.name || ''} 
                         onChange={e => updateEntry(entry.id, 'name', e.target.value)} 
+                        onClick={e => { if (e.detail === 3 && memo.status !== 'completed') addEntry(); }}
                         placeholder={t('nameCol')}
                         style={{ width: '120px' }}
                         disabled={memo.status === 'completed'}
@@ -474,6 +475,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                         type="text" 
                         value={entry.description || ''} 
                         onChange={e => updateEntry(entry.id, 'description', e.target.value)} 
+                        onClick={e => { if (e.detail === 3 && memo.status !== 'completed') addEntry(); }}
                         placeholder={t('descCol')}
                         disabled={memo.status === 'completed'}
                       />
@@ -496,6 +498,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                         <MathInput
                           value={entry.amount}
                           onChange={e => updateEntry(entry.id, 'amount', parseMathOrNumber(e.target.value))}
+                          onTripleClick={() => { if (memo.status !== 'completed') addEntry(); }}
                           placeholder="0.00"
                           style={{ color: typeColor(entry.type), width: '80px' }}
                           disabled={memo.status === 'completed'}
@@ -507,6 +510,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                         <MathInput
                           value={entry.profitPercent !== undefined ? entry.profitPercent : ''}
                           onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
+                          onTripleClick={() => { if (memo.status !== 'completed') addEntry(); }}
                           placeholder="%"
                           style={{ width: '50px' }}
                           disabled={memo.status === 'completed'}
@@ -522,6 +526,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                         <MathInput
                           value={entry.total}
                           onChange={e => updateEntry(entry.id, 'total', parseMathOrNumber(e.target.value))}
+                          onTripleClick={() => { if (memo.status !== 'completed') addEntry(); }}
                           placeholder="0.00"
                           style={{ fontWeight: 'bold', width: '80px' }}
                           disabled={memo.status === 'completed' || (entry.type === 'invest' && !!entry.profitPercent)}

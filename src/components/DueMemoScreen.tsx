@@ -590,15 +590,16 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                           placeholder={t('writeHere') || 'Write here...'}
                           value={entry.name || ''}
                           onChange={e => updateEntry(entry.id, 'name', e.target.value)}
+                          onClick={e => { if (e.detail === 3) handleAddRow(); }}
                         />
                       </td>
                       <td data-label={t('weightKg') || 'Weight/Kg'}>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                           <MathInput 
-                             
                             placeholder="0.00" 
                             value={entry.totalKg}
                             onChange={e => updateEntry(entry.id, 'totalKg', parseMathOrNumber(e.target.value))}
+                            onTripleClick={handleAddRow}
                             style={{ flex: 1, minWidth: '60px' }}
                           />
                           <select
@@ -613,28 +614,28 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                       </td>
                       <td data-label={t('price') || 'Price'}>
                         <MathInput 
-                           
                           placeholder="0.00" 
                           value={entry.buyRate}
                           onChange={e => updateEntry(entry.id, 'buyRate', parseMathOrNumber(e.target.value))}
+                          onTripleClick={handleAddRow}
                         />
                       </td>
                       <td data-label={t('profitPercent') || 'Profit %'}>
                         <MathInput 
-                           
                           className="highlight-input"
                           placeholder="20" 
                           value={entry.profitPercent !== undefined ? entry.profitPercent : 20}
                           onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
+                          onTripleClick={handleAddRow}
                           style={{ width: '80px' }}
                         />
                       </td>
                       <td data-label={t('saleRateAuto') || 'Sale Rate (Auto)'} style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>
                         <MathInput 
-                           
                           placeholder="0.00"
                           value={entry.manualSaleRate !== undefined ? entry.manualSaleRate : (calculatedSalePriceAuto > 0 ? calculatedSalePriceAuto.toFixed(2) : '')}
                           onChange={e => updateEntry(entry.id, 'manualSaleRate', parseMathOrNumber(e.target.value))}
+                          onTripleClick={handleAddRow}
                           style={{ fontWeight: '500', color: 'var(--primary-color)' }}
                         />
                       </td>
