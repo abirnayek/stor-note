@@ -34,6 +34,8 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
+        navigateFallback: 'index.html',
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,jpg}'],
         globIgnores: ['**/PC Version/**/*', '**/dist-electron/**/*', '**/Untitled-1.pdf']
       }
     })
