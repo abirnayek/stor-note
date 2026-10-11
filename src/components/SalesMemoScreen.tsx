@@ -1,5 +1,5 @@
 import { MemoSignatureBox } from './MemoSignatureBox';
-import { MathInput, parseMathOrNumber } from './MathInput';
+import { MathInput, DebouncedInput, parseMathOrNumber, focusNewTableRow } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Undo, Redo, MessageCircle, Mail, Share2, Download, Plus, Trash2, Phone } from 'lucide-react';
@@ -436,6 +436,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       ...prev,
       entries: [...prev.entries, { id: Date.now().toString(), name: '', totalKg: '', profitPercent: '' }]
     }));
+    focusNewTableRow();
   };
 
   const handleDeleteRow = (id: string) => {
@@ -673,7 +674,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 </tr>
               </thead>
               <tbody>
-                {memoState.entries.map((entry) => {
+                {memoState.entries.map((entry, index) => {
                   let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
                   let buyRateNum = Number(entry.buyRate) || 0;
                   
@@ -701,25 +702,27 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                     totalPrice = weightInKg * saleRate;
                   }
 
+                  const isLastRow = index === memoState.entries.length - 1;
+
                   return (
                     <tr key={entry.id}>
                       <td data-label="Sl No.">
-                        <input 
-                          type="text" 
+                        <DebouncedInput 
                           placeholder="Sl"
                           value={entry.serialNo || ''}
                           onChange={e => updateEntry(entry.id, 'serialNo', e.target.value)}
-                          onClick={e => { if (e.detail === 3) handleAddRow(); }}
+                          onAddRow={handleAddRow}
+                          isLastRow={isLastRow}
                           style={{ width: '50px', textAlign: 'center' }}
                         />
                       </td>
                       <td data-label={t('fishName')}>
-                        <input 
-                          type="text" 
+                        <DebouncedInput 
                           placeholder={t('writeHere')}
                           value={entry.name}
                           onChange={e => updateEntry(entry.id, 'name', e.target.value)}
-                          onClick={e => { if (e.detail === 3) handleAddRow(); }}
+                          onAddRow={handleAddRow}
+                          isLastRow={isLastRow}
                         />
                       </td>
                       <td data-label={t('weightKg')}>
@@ -728,7 +731,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                             placeholder="0.00" 
                             value={entry.totalKg}
                             onChange={e => updateEntry(entry.id, 'totalKg', parseMathOrNumber(e.target.value))}
-                            onTripleClick={handleAddRow}
+                            onAddRow={handleAddRow}
+                            isLastRow={isLastRow}
                             style={{ flex: 1, minWidth: '60px' }}
                           />
                           <select
@@ -746,17 +750,19 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                           placeholder="0.00"
                           value={entry.manualSaleRate !== undefined ? entry.manualSaleRate : (calculatedSaleRate > 0 ? calculatedSaleRate.toFixed(2) : '')}
                           onChange={e => updateEntry(entry.id, 'manualSaleRate', parseMathOrNumber(e.target.value))}
-                          onTripleClick={handleAddRow}
+                          onAddRow={handleAddRow}
+                          isLastRow={isLastRow}
                           style={{ fontWeight: '500' }}
                         />
                       </td>
                       <td data-label={t('profitPercent')} data-html2canvas-ignore>
                         <MathInput 
-                           
                           className="highlight-input"
                           placeholder="0" 
                           value={entry.profitPercent !== undefined ? entry.profitPercent : ''}
                           onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
+                          onAddRow={handleAddRow}
+                          isLastRow={isLastRow}
                           style={{ width: '70px' }}
                         />
                       </td>

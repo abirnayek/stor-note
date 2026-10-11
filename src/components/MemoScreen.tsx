@@ -1,5 +1,5 @@
 import { MemoSignatureBox } from './MemoSignatureBox';
-import { MathInput, DebouncedInput, parseMathOrNumber } from './MathInput';
+import { MathInput, DebouncedInput, parseMathOrNumber, focusNewTableRow } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
 import { Share2, Download, Plus, Trash2, Phone, Undo, Redo, MessageCircle, Mail, ChevronLeft, Lock, X } from 'lucide-react';
@@ -342,6 +342,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
       ...prev,
       entries: [...prev.entries, { id: Date.now().toString(), name: '', totalKg: '', totalPrice: '', profitPercent: '' }]
     }));
+    focusNewTableRow();
   };
 
   const handleDeleteRow = (id: string) => {
@@ -568,6 +569,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                     }
                   }
 
+                  const isLastRow = index === memoState.entries.length - 1;
+
                   return (
                     <tr key={entry.id}>
                       <td data-label="#" style={{ textAlign: 'center', opacity: 0.7 }}>{formatNumber(index + 1)}</td>
@@ -577,7 +580,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                           placeholder={t('writeHere')}
                           value={entry.name}
                           onChange={e => updateEntry(entry.id, 'name', e.target.value)}
-                          onTripleClick={handleAddRow}
+                          onAddRow={handleAddRow}
+                          isLastRow={isLastRow}
                         />
                       </td>
                       <td data-label={t('weightKg')}>
@@ -586,7 +590,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                             placeholder="0.00"
                             value={entry.totalKg}
                             onChange={e => updateEntry(entry.id, 'totalKg', parseMathOrNumber(e.target.value))}
-                            onTripleClick={handleAddRow}
+                            onAddRow={handleAddRow}
+                            isLastRow={isLastRow}
                             style={{ flex: 1, minWidth: '60px' }}
                           />
                           <select
@@ -604,7 +609,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                           placeholder="0.00"
                           value={entry.totalPrice}
                           onChange={e => updateEntry(entry.id, 'totalPrice', parseMathOrNumber(e.target.value))}
-                          onTripleClick={handleAddRow}
+                          onAddRow={handleAddRow}
+                          isLastRow={isLastRow}
                         />
                       </td>
                       <td data-label={t('buyRateAuto')}>{autoRate > 0 ? autoRate.toFixed(2) : '0.00'}</td>
@@ -616,7 +622,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                           placeholder="0"
                           value={hasGlobalProfit ? currentProfitPercent : (entry.profitPercent !== undefined ? entry.profitPercent : '')}
                           onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
-                          onTripleClick={handleAddRow}
+                          onAddRow={handleAddRow}
+                          isLastRow={isLastRow}
                           disabled={hasGlobalProfit}
                           style={{ width: '80px', opacity: hasGlobalProfit ? 0.6 : 1 }}
                         />

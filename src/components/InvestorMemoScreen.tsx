@@ -1,4 +1,4 @@
-import { MathInput, parseMathOrNumber } from './MathInput';
+import { MathInput, DebouncedInput, parseMathOrNumber, focusNewTableRow } from './MathInput';
 import React, { useState, useEffect, useRef } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Plus, MinusCircle, Trash2, Download, CheckCircle2, Phone, Undo, Redo } from 'lucide-react';
@@ -209,6 +209,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
       total: ''
     };
     setMemo(prev => ({ ...prev, entries: [...prev.entries, newEntry] }));
+    focusNewTableRow('.investor-table');
   };
 
   const addWithdrawEntry = () => {
@@ -439,100 +440,109 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                 </tr>
               </thead>
               <tbody>
-                {memo.entries.map(entry => (
-                  <tr key={entry.id}>
-                    <td data-label={t('serial')}>
-                      <input 
-                        type="text" 
-                        value={entry.serial || ''} 
-                        onChange={e => updateEntry(entry.id, 'serial', e.target.value)} 
-                        style={{ width: '50px', fontSize: '0.85rem', textAlign: 'center' }} 
-                        disabled={memo.status === 'completed'}
-                      />
-                    </td>
-                    <td>
-                      <input 
-                        type="text" 
-                        value={entry.date || ''} 
-                        onChange={e => updateEntry(entry.id, 'date', e.target.value)} 
-                        style={{ width: '100px', fontSize: '0.85rem' }} 
-                        disabled={memo.status === 'completed'}
-                      />
-                    </td>
-                    <td data-label={t('nameCol')}>
-                      <input 
-                        type="text" 
-                        value={entry.name || ''} 
-                        onChange={e => updateEntry(entry.id, 'name', e.target.value)} 
-                        onClick={e => { if (e.detail === 3 && memo.status !== 'completed') addEntry(); }}
-                        placeholder={t('nameCol')}
-                        style={{ width: '120px' }}
-                        disabled={memo.status === 'completed'}
-                      />
-                    </td>
-                    <td data-label={t('descCol')}>
-                      <input 
-                        type="text" 
-                        value={entry.description || ''} 
-                        onChange={e => updateEntry(entry.id, 'description', e.target.value)} 
-                        onClick={e => { if (e.detail === 3 && memo.status !== 'completed') addEntry(); }}
-                        placeholder={t('descCol')}
-                        disabled={memo.status === 'completed'}
-                      />
-                    </td>
-                    <td data-label={t('typeCol')}>
-                      <select
-                        value={entry.type}
-                        onChange={e => updateEntry(entry.id, 'type', e.target.value)}
-                        style={{ padding: '4px 8px', borderRadius: '4px', border: 'none', background: typeColor(entry.type), color: '#fff', cursor: memo.status === 'completed' ? 'default' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
-                        disabled={memo.status === 'completed'}
-                      >
-                        <option value="invest">{t('typeInvest')}</option>
-                        <option value="profit">{t('typeProfit')}</option>
-                        <option value="withdraw">{t('typeWithdraw')}</option>
-                      </select>
-                    </td>
-                    <td data-label={t('amountCol')} style={{ fontWeight: 'bold', color: typeColor(entry.type) }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        {entry.type === 'withdraw' && <span style={{ color: '#ff9800', fontWeight: 'bold' }}>(-)</span>}
-                        <MathInput
-                          value={entry.amount}
-                          onChange={e => updateEntry(entry.id, 'amount', parseMathOrNumber(e.target.value))}
-                          onTripleClick={() => { if (memo.status !== 'completed') addEntry(); }}
-                          placeholder="0.00"
-                          style={{ color: typeColor(entry.type), width: '80px' }}
+                {memo.entries.map((entry, index) => {
+                  const isLastRow = index === memo.entries.length - 1;
+                  const handleAdd = () => { if (memo.status !== 'completed') addEntry(); };
+
+                  return (
+                    <tr key={entry.id}>
+                      <td data-label={t('serial')}>
+                        <DebouncedInput 
+                          value={entry.serial || ''} 
+                          onChange={e => updateEntry(entry.id, 'serial', e.target.value)} 
+                          onAddRow={handleAdd}
+                          isLastRow={isLastRow}
+                          style={{ width: '50px', fontSize: '0.85rem', textAlign: 'center' }} 
                           disabled={memo.status === 'completed'}
                         />
-                      </div>
-                    </td>
-                    <td data-label={t('profitPercent')}>
-                      {entry.type === 'invest' ? (
-                        <MathInput
-                          value={entry.profitPercent !== undefined ? entry.profitPercent : ''}
-                          onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
-                          onTripleClick={() => { if (memo.status !== 'completed') addEntry(); }}
-                          placeholder="%"
-                          style={{ width: '50px' }}
+                      </td>
+                      <td>
+                        <DebouncedInput 
+                          value={entry.date || ''} 
+                          onChange={e => updateEntry(entry.id, 'date', e.target.value)} 
+                          onAddRow={handleAdd}
+                          isLastRow={isLastRow}
+                          style={{ width: '100px', fontSize: '0.85rem' }} 
                           disabled={memo.status === 'completed'}
                         />
-                      ) : (
-                        <span style={{ color: '#888' }}>-</span>
-                      )}
-                    </td>
-                    <td data-label={t('totalProfitCol')}>
-                      {entry.type === 'withdraw' ? (
-                        <span style={{ color: '#ff9800', fontWeight: 'bold' }}>-</span>
-                      ) : (
-                        <MathInput
-                          value={entry.total}
-                          onChange={e => updateEntry(entry.id, 'total', parseMathOrNumber(e.target.value))}
-                          onTripleClick={() => { if (memo.status !== 'completed') addEntry(); }}
-                          placeholder="0.00"
-                          style={{ fontWeight: 'bold', width: '80px' }}
-                          disabled={memo.status === 'completed' || (entry.type === 'invest' && !!entry.profitPercent)}
+                      </td>
+                      <td data-label={t('nameCol')}>
+                        <DebouncedInput 
+                          value={entry.name || ''} 
+                          onChange={e => updateEntry(entry.id, 'name', e.target.value)} 
+                          onAddRow={handleAdd}
+                          isLastRow={isLastRow}
+                          placeholder={t('nameCol')}
+                          style={{ width: '120px' }}
+                          disabled={memo.status === 'completed'}
                         />
-                      )}
-                    </td>
+                      </td>
+                      <td data-label={t('descCol')}>
+                        <DebouncedInput 
+                          value={entry.description || ''} 
+                          onChange={e => updateEntry(entry.id, 'description', e.target.value)} 
+                          onAddRow={handleAdd}
+                          isLastRow={isLastRow}
+                          placeholder={t('descCol')}
+                          disabled={memo.status === 'completed'}
+                        />
+                      </td>
+                      <td data-label={t('typeCol')}>
+                        <select
+                          value={entry.type}
+                          onChange={e => updateEntry(entry.id, 'type', e.target.value)}
+                          style={{ padding: '4px 8px', borderRadius: '4px', border: 'none', background: typeColor(entry.type), color: '#fff', cursor: memo.status === 'completed' ? 'default' : 'pointer', fontWeight: 'bold', fontSize: '0.85rem' }}
+                          disabled={memo.status === 'completed'}
+                        >
+                          <option value="invest">{t('typeInvest')}</option>
+                          <option value="profit">{t('typeProfit')}</option>
+                          <option value="withdraw">{t('typeWithdraw')}</option>
+                        </select>
+                      </td>
+                      <td data-label={t('amountCol')} style={{ fontWeight: 'bold', color: typeColor(entry.type) }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          {entry.type === 'withdraw' && <span style={{ color: '#ff9800', fontWeight: 'bold' }}>(-)</span>}
+                          <MathInput
+                            value={entry.amount}
+                            onChange={e => updateEntry(entry.id, 'amount', parseMathOrNumber(e.target.value))}
+                            onAddRow={handleAdd}
+                            isLastRow={isLastRow}
+                            placeholder="0.00"
+                            style={{ color: typeColor(entry.type), width: '80px' }}
+                            disabled={memo.status === 'completed'}
+                          />
+                        </div>
+                      </td>
+                      <td data-label={t('profitPercent')}>
+                        {entry.type === 'invest' ? (
+                          <MathInput
+                            value={entry.profitPercent !== undefined ? entry.profitPercent : ''}
+                            onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
+                            onAddRow={handleAdd}
+                            isLastRow={isLastRow}
+                            placeholder="%"
+                            style={{ width: '50px' }}
+                            disabled={memo.status === 'completed'}
+                          />
+                        ) : (
+                          <span style={{ color: '#888' }}>-</span>
+                        )}
+                      </td>
+                      <td data-label={t('totalProfitCol')}>
+                        {entry.type === 'withdraw' ? (
+                          <span style={{ color: '#ff9800', fontWeight: 'bold' }}>-</span>
+                        ) : (
+                          <MathInput
+                            value={entry.total}
+                            onChange={e => updateEntry(entry.id, 'total', parseMathOrNumber(e.target.value))}
+                            onAddRow={handleAdd}
+                            isLastRow={isLastRow}
+                            placeholder="0.00"
+                            style={{ fontWeight: 'bold', width: '80px' }}
+                            disabled={memo.status === 'completed' || (entry.type === 'invest' && !!entry.profitPercent)}
+                          />
+                        )}
+                      </td>
                     {memo.status !== 'completed' && (
                       <td data-label="" data-html2canvas-ignore>
                         <button className="btn-icon delete-btn" onClick={() => deleteEntry(entry.id)}>
@@ -541,7 +551,8 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
                       </td>
                     )}
                   </tr>
-                ))}
+                );
+              })}
               </tbody>
             </table>
           </div>

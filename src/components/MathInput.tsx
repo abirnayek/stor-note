@@ -4,13 +4,42 @@ export interface MathInputProps extends Omit<InputHTMLAttributes<HTMLInputElemen
   value?: string | number;
   debounceMs?: number;
   onTripleClick?: () => void;
+  onAddRow?: () => void;
+  isLastRow?: boolean;
 }
 
 export interface DebouncedInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value'> {
   value?: string | number;
   debounceMs?: number;
   onTripleClick?: () => void;
+  onAddRow?: () => void;
+  isLastRow?: boolean;
 }
+
+/**
+ * Tracks column index of the last active input for auto-focusing on the same column in newly added row.
+ */
+export let lastFocusedColIndex: number | null = null;
+
+/**
+ * Focuses the newly added row in a table.
+ */
+export const focusNewTableRow = (tableSelector = '.memo-dark-table') => {
+  setTimeout(() => {
+    const table = document.querySelector(tableSelector) || document.querySelector('table');
+    if (table) {
+      const rows = table.querySelectorAll('tbody tr');
+      const lastRow = rows[rows.length - 1];
+      if (lastRow) {
+        const inputs = Array.from(lastRow.querySelectorAll('input:not([type="hidden"]):not([disabled])')) as HTMLInputElement[];
+        if (inputs.length > 0) {
+          const idx = (lastFocusedColIndex !== null && inputs[lastFocusedColIndex]) ? lastFocusedColIndex : 0;
+          inputs[idx]?.focus();
+        }
+      }
+    }
+  }, 60);
+};
 
 /**
  * Utility to safely parse math expressions or raw numbers from input.
@@ -52,6 +81,11 @@ export const parseMathOrNumber = (val: string | number | undefined | null): numb
  * Debounced Math Input component.
  * Instant local typing for zero lag, debounced parent updates for reactive totals without re-render stutter,
  * and automatic evaluation of math expressions on Enter or Blur.
+ * Supports:
+ * - 3 Enters in any cell to add a new row
+ * - 1 Down Arrow on the last row (when no row below it) to add a new row
+ * - Up/Down arrow table row navigation
+ * - Triple click / triple tap to add a new row
  */
 export const MathInput: React.FC<MathInputProps> = ({ 
   value, 
@@ -60,6 +94,8 @@ export const MathInput: React.FC<MathInputProps> = ({
   onFocus,
   onKeyDown, 
   onTripleClick,
+  onAddRow,
+  isLastRow,
   debounceMs = 500,
   ...props 
 }) => {
@@ -73,10 +109,31 @@ export const MathInput: React.FC<MathInputProps> = ({
 
   const lastClickTimeRef = useRef(0);
   const clickCountRef = useRef(0);
+  const lastTouchTimeRef = useRef(0);
+  const touchCountRef = useRef(0);
+  const enterCountRef = useRef(0);
+  const lastEnterTimeRef = useRef(0);
+
+  const triggerAddRow = () => {
+    const fn = onAddRow || onTripleClick;
+    if (fn) {
+      fn();
+    }
+  };
+
+  const recordColIndex = () => {
+    const currentInput = inputRef.current;
+    const currentTr = currentInput?.closest('tr');
+    if (currentTr && currentInput) {
+      const currentInputs = Array.from(currentTr.querySelectorAll('input:not([type="hidden"]):not([disabled])'));
+      const colIndex = currentInputs.indexOf(currentInput);
+      lastFocusedColIndex = colIndex >= 0 ? colIndex : 0;
+    }
+  };
 
   const handleClick = (e: React.MouseEvent<HTMLInputElement>) => {
     const now = Date.now();
-    if (now - lastClickTimeRef.current < 450) {
+    if (now - lastClickTimeRef.current < 650) {
       clickCountRef.current += 1;
     } else {
       clickCountRef.current = 1;
@@ -85,12 +142,30 @@ export const MathInput: React.FC<MathInputProps> = ({
 
     if (clickCountRef.current >= 3 || e.detail >= 3) {
       clickCountRef.current = 0;
-      if (onTripleClick) {
-        onTripleClick();
-      }
+      recordColIndex();
+      triggerAddRow();
     }
     if (props.onClick) {
       props.onClick(e);
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLInputElement>) => {
+    const now = Date.now();
+    if (now - lastTouchTimeRef.current < 550) {
+      touchCountRef.current += 1;
+    } else {
+      touchCountRef.current = 1;
+    }
+    lastTouchTimeRef.current = now;
+
+    if (touchCountRef.current >= 3) {
+      touchCountRef.current = 0;
+      recordColIndex();
+      triggerAddRow();
+    }
+    if (props.onTouchEnd) {
+      props.onTouchEnd(e);
     }
   };
 
@@ -158,6 +233,7 @@ export const MathInput: React.FC<MathInputProps> = ({
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     isFocusedRef.current = true;
+    recordColIndex();
     if (onFocus) {
       onFocus(e);
     }
@@ -173,10 +249,75 @@ export const MathInput: React.FC<MathInputProps> = ({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      e.preventDefault();
       commitValue();
-      inputRef.current?.blur();
+      recordColIndex();
+
+      const now = Date.now();
+      if (now - lastEnterTimeRef.current < 1500) {
+        enterCountRef.current += 1;
+      } else {
+        enterCountRef.current = 1;
+      }
+      lastEnterTimeRef.current = now;
+
+      if (enterCountRef.current >= 3) {
+        enterCountRef.current = 0;
+        triggerAddRow();
+      }
+    } else if (e.key !== 'Shift' && e.key !== 'Control' && e.key !== 'Alt') {
+      enterCountRef.current = 0;
     }
+
+    if (e.key === 'ArrowDown') {
+      commitValue();
+      const currentInput = inputRef.current;
+      const currentTr = currentInput?.closest('tr');
+      if (currentTr) {
+        const currentInputs = Array.from(currentTr.querySelectorAll('input:not([type="hidden"]):not([disabled])'));
+        const colIndex = currentInput ? currentInputs.indexOf(currentInput) : 0;
+        lastFocusedColIndex = colIndex >= 0 ? colIndex : 0;
+
+        const nextTr = currentTr.nextElementSibling as HTMLTableRowElement | null;
+        if (nextTr && nextTr.tagName === 'TR') {
+          e.preventDefault();
+          const nextInputs = Array.from(nextTr.querySelectorAll('input:not([type="hidden"]):not([disabled])')) as HTMLInputElement[];
+          if (nextInputs.length > 0) {
+            const target = (colIndex >= 0 && nextInputs[colIndex]) ? nextInputs[colIndex] : nextInputs[0];
+            target.focus();
+          }
+        } else {
+          // No line below it! "atar niche r kono line na thakle sakhane notun line jog hobe"
+          e.preventDefault();
+          triggerAddRow();
+        }
+      } else if (isLastRow) {
+        e.preventDefault();
+        lastFocusedColIndex = 0;
+        triggerAddRow();
+      }
+    }
+
+    if (e.key === 'ArrowUp') {
+      commitValue();
+      const currentInput = inputRef.current;
+      const currentTr = currentInput?.closest('tr');
+      if (currentTr) {
+        const currentInputs = Array.from(currentTr.querySelectorAll('input:not([type="hidden"]):not([disabled])'));
+        const colIndex = currentInput ? currentInputs.indexOf(currentInput) : 0;
+        lastFocusedColIndex = colIndex >= 0 ? colIndex : 0;
+
+        const prevTr = currentTr.previousElementSibling as HTMLTableRowElement | null;
+        if (prevTr && prevTr.tagName === 'TR') {
+          e.preventDefault();
+          const prevInputs = Array.from(prevTr.querySelectorAll('input:not([type="hidden"]):not([disabled])')) as HTMLInputElement[];
+          if (prevInputs.length > 0) {
+            const target = (colIndex >= 0 && prevInputs[colIndex]) ? prevInputs[colIndex] : prevInputs[0];
+            target.focus();
+          }
+        }
+      }
+    }
+
     if (onKeyDown) {
       onKeyDown(e);
     }
@@ -191,6 +332,7 @@ export const MathInput: React.FC<MathInputProps> = ({
       value={localValue}
       onFocus={handleFocus}
       onClick={handleClick}
+      onTouchEnd={handleTouchEnd}
       onChange={(e) => {
         const val = e.target.value;
         setLocalValue(val);
@@ -214,6 +356,11 @@ export const MathInput: React.FC<MathInputProps> = ({
 /**
  * General Debounced Input component for text fields.
  * Ensures typing text (names, phones, addresses) does not lag or stutter on keystrokes.
+ * Supports:
+ * - 3 Enters in any cell to add a new row
+ * - 1 Down Arrow on the last row (when no row below it) to add a new row
+ * - Up/Down arrow table row navigation
+ * - Triple click / triple tap to add a new row
  */
 export const DebouncedInput: React.FC<DebouncedInputProps> = ({
   value,
@@ -222,6 +369,8 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
   onFocus,
   onKeyDown,
   onTripleClick,
+  onAddRow,
+  isLastRow,
   debounceMs = 500,
   ...props
 }) => {
@@ -235,10 +384,31 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
 
   const lastClickTimeRef = useRef(0);
   const clickCountRef = useRef(0);
+  const lastTouchTimeRef = useRef(0);
+  const touchCountRef = useRef(0);
+  const enterCountRef = useRef(0);
+  const lastEnterTimeRef = useRef(0);
+
+  const triggerAddRow = () => {
+    const fn = onAddRow || onTripleClick;
+    if (fn) {
+      fn();
+    }
+  };
+
+  const recordColIndex = () => {
+    const currentInput = inputRef.current;
+    const currentTr = currentInput?.closest('tr');
+    if (currentTr && currentInput) {
+      const currentInputs = Array.from(currentTr.querySelectorAll('input:not([type="hidden"]):not([disabled])'));
+      const colIndex = currentInputs.indexOf(currentInput);
+      lastFocusedColIndex = colIndex >= 0 ? colIndex : 0;
+    }
+  };
 
   const handleClick = (e: React.MouseEvent<HTMLInputElement>) => {
     const now = Date.now();
-    if (now - lastClickTimeRef.current < 450) {
+    if (now - lastClickTimeRef.current < 650) {
       clickCountRef.current += 1;
     } else {
       clickCountRef.current = 1;
@@ -247,12 +417,30 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
 
     if (clickCountRef.current >= 3 || e.detail >= 3) {
       clickCountRef.current = 0;
-      if (onTripleClick) {
-        onTripleClick();
-      }
+      recordColIndex();
+      triggerAddRow();
     }
     if (props.onClick) {
       props.onClick(e);
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLInputElement>) => {
+    const now = Date.now();
+    if (now - lastTouchTimeRef.current < 550) {
+      touchCountRef.current += 1;
+    } else {
+      touchCountRef.current = 1;
+    }
+    lastTouchTimeRef.current = now;
+
+    if (touchCountRef.current >= 3) {
+      touchCountRef.current = 0;
+      recordColIndex();
+      triggerAddRow();
+    }
+    if (props.onTouchEnd) {
+      props.onTouchEnd(e);
     }
   };
 
@@ -286,6 +474,7 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     isFocusedRef.current = true;
+    recordColIndex();
     if (onFocus) {
       onFocus(e);
     }
@@ -302,7 +491,74 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       commitValue();
+      recordColIndex();
+
+      const now = Date.now();
+      if (now - lastEnterTimeRef.current < 1500) {
+        enterCountRef.current += 1;
+      } else {
+        enterCountRef.current = 1;
+      }
+      lastEnterTimeRef.current = now;
+
+      if (enterCountRef.current >= 3) {
+        enterCountRef.current = 0;
+        triggerAddRow();
+      }
+    } else if (e.key !== 'Shift' && e.key !== 'Control' && e.key !== 'Alt') {
+      enterCountRef.current = 0;
     }
+
+    if (e.key === 'ArrowDown') {
+      commitValue();
+      const currentInput = inputRef.current;
+      const currentTr = currentInput?.closest('tr');
+      if (currentTr) {
+        const currentInputs = Array.from(currentTr.querySelectorAll('input:not([type="hidden"]):not([disabled])'));
+        const colIndex = currentInput ? currentInputs.indexOf(currentInput) : 0;
+        lastFocusedColIndex = colIndex >= 0 ? colIndex : 0;
+
+        const nextTr = currentTr.nextElementSibling as HTMLTableRowElement | null;
+        if (nextTr && nextTr.tagName === 'TR') {
+          e.preventDefault();
+          const nextInputs = Array.from(nextTr.querySelectorAll('input:not([type="hidden"]):not([disabled])')) as HTMLInputElement[];
+          if (nextInputs.length > 0) {
+            const target = (colIndex >= 0 && nextInputs[colIndex]) ? nextInputs[colIndex] : nextInputs[0];
+            target.focus();
+          }
+        } else {
+          // No line below it! "atar niche r kono line na thakle sakhane notun line jog hobe"
+          e.preventDefault();
+          triggerAddRow();
+        }
+      } else if (isLastRow) {
+        e.preventDefault();
+        lastFocusedColIndex = 0;
+        triggerAddRow();
+      }
+    }
+
+    if (e.key === 'ArrowUp') {
+      commitValue();
+      const currentInput = inputRef.current;
+      const currentTr = currentInput?.closest('tr');
+      if (currentTr) {
+        const currentInputs = Array.from(currentTr.querySelectorAll('input:not([type="hidden"]):not([disabled])'));
+        const colIndex = currentInput ? currentInputs.indexOf(currentInput) : 0;
+        lastFocusedColIndex = colIndex >= 0 ? colIndex : 0;
+
+        const prevTr = currentTr.previousElementSibling as HTMLTableRowElement | null;
+        if (prevTr && prevTr.tagName === 'TR') {
+          e.preventDefault();
+          const prevInputs = Array.from(prevTr.querySelectorAll('input:not([type="hidden"]):not([disabled])')) as HTMLInputElement[];
+          if (prevInputs.length > 0) {
+            const target = (colIndex >= 0 && prevInputs[colIndex]) ? prevInputs[colIndex] : prevInputs[0];
+            target.focus();
+          }
+        }
+      }
+    }
+
     if (onKeyDown) {
       onKeyDown(e);
     }
@@ -315,6 +571,7 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
       value={localValue}
       onFocus={handleFocus}
       onClick={handleClick}
+      onTouchEnd={handleTouchEnd}
       onChange={(e) => {
         const val = e.target.value;
         setLocalValue(val);

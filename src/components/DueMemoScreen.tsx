@@ -1,5 +1,5 @@
 import { MemoSignatureBox } from './MemoSignatureBox';
-import { MathInput, parseMathOrNumber } from './MathInput';
+import { MathInput, DebouncedInput, parseMathOrNumber, focusNewTableRow } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Phone, Plus, Trash2, Share2, MessageCircle, Mail, Download, Undo, Redo } from 'lucide-react';
@@ -316,6 +316,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
       ...prev,
       entries: [...prev.entries, { id: Date.now().toString(), serialNo: '', name: '', totalKg: '', buyRate: '', profitPercent: 20 }]
     }));
+    focusNewTableRow();
   };
 
   const handleDeleteRow = (id: string) => {
@@ -564,7 +565,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                 </tr>
               </thead>
               <tbody>
-                {memoState.entries.map((entry) => {
+                {memoState.entries.map((entry, index) => {
                   let calculatedSalePriceAuto = 0;
                   let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
                   let buyRateNum = Number(entry.buyRate) || 0;
@@ -573,24 +574,27 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                     calculatedSalePriceAuto = buyRateNum + (buyRateNum * currentProfitPercent / 100);
                   }
 
+                  const isLastRow = index === memoState.entries.length - 1;
+
                   return (
                     <tr key={entry.id}>
                       <td data-label="Sl No.">
-                        <input 
-                          type="text" 
+                        <DebouncedInput 
                           placeholder="1"
                           value={entry.serialNo || ''}
                           onChange={e => updateEntry(entry.id, 'serialNo', e.target.value)}
+                          onAddRow={handleAddRow}
+                          isLastRow={isLastRow}
                           style={{ width: '40px', textAlign: 'center' }}
                         />
                       </td>
                       <td data-label={t('fishName') || 'Fish Name'}>
-                        <input 
-                          type="text" 
+                        <DebouncedInput 
                           placeholder={t('writeHere') || 'Write here...'}
                           value={entry.name || ''}
                           onChange={e => updateEntry(entry.id, 'name', e.target.value)}
-                          onClick={e => { if (e.detail === 3) handleAddRow(); }}
+                          onAddRow={handleAddRow}
+                          isLastRow={isLastRow}
                         />
                       </td>
                       <td data-label={t('weightKg') || 'Weight/Kg'}>
@@ -599,7 +603,8 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                             placeholder="0.00" 
                             value={entry.totalKg}
                             onChange={e => updateEntry(entry.id, 'totalKg', parseMathOrNumber(e.target.value))}
-                            onTripleClick={handleAddRow}
+                            onAddRow={handleAddRow}
+                            isLastRow={isLastRow}
                             style={{ flex: 1, minWidth: '60px' }}
                           />
                           <select
@@ -617,7 +622,8 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                           placeholder="0.00" 
                           value={entry.buyRate}
                           onChange={e => updateEntry(entry.id, 'buyRate', parseMathOrNumber(e.target.value))}
-                          onTripleClick={handleAddRow}
+                          onAddRow={handleAddRow}
+                          isLastRow={isLastRow}
                         />
                       </td>
                       <td data-label={t('profitPercent') || 'Profit %'}>
@@ -626,7 +632,8 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                           placeholder="20" 
                           value={entry.profitPercent !== undefined ? entry.profitPercent : 20}
                           onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
-                          onTripleClick={handleAddRow}
+                          onAddRow={handleAddRow}
+                          isLastRow={isLastRow}
                           style={{ width: '80px' }}
                         />
                       </td>
@@ -635,7 +642,8 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                           placeholder="0.00"
                           value={entry.manualSaleRate !== undefined ? entry.manualSaleRate : (calculatedSalePriceAuto > 0 ? calculatedSalePriceAuto.toFixed(2) : '')}
                           onChange={e => updateEntry(entry.id, 'manualSaleRate', parseMathOrNumber(e.target.value))}
-                          onTripleClick={handleAddRow}
+                          onAddRow={handleAddRow}
+                          isLastRow={isLastRow}
                           style={{ fontWeight: '500', color: 'var(--primary-color)' }}
                         />
                       </td>
