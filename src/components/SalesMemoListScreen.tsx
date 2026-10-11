@@ -19,6 +19,33 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
   const [newPassword, setNewPassword] = useState('');
   const { t } = useLanguage();
 
+  const getMemoData = (memoId: string) => {
+    const memoKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
+    let memoStr = localStorage.getItem(memoKey);
+    if (!memoStr) {
+      memoStr = localStorage.getItem(`sales_memo_lot_unassigned_memo_${memoId}`);
+    }
+    if (!memoStr) {
+      for (let l = 1; l <= 50; l++) {
+        const s = localStorage.getItem(`sales_memo_lot_${l}_memo_${memoId}`);
+        if (s) { memoStr = s; break; }
+      }
+    }
+    if (!memoStr) {
+      memoStr = localStorage.getItem(`due_memo_${memoId}`);
+    }
+    if (memoStr) {
+      try {
+        const parsed = JSON.parse(memoStr);
+        if (!localStorage.getItem(memoKey)) {
+          localStorage.setItem(memoKey, JSON.stringify(parsed.memoState || parsed));
+        }
+        return parsed.memoState || parsed;
+      } catch(e) {}
+    }
+    return null;
+  };
+
   useEffect(() => {
     const loadMemos = () => {
       // Migration logic for old single memo format
@@ -26,9 +53,9 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
       const oldMemoStr = localStorage.getItem(oldMemoKey);
       
       const memoListKey = `sales_memo_list_${lotNumber}`;
-      let savedList = localStorage.getItem(memoListKey);
+      let savedListStr = localStorage.getItem(memoListKey);
       
-      if (oldMemoStr && !savedList) {
+      if (oldMemoStr && !savedListStr) {
         // Migrate
         const firstMemoId = '1';
         localStorage.setItem(`sales_memo_lot_${lotNumber}_memo_${firstMemoId}`, oldMemoStr);
@@ -36,11 +63,77 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
         
         const newList = [firstMemoId];
         localStorage.setItem(memoListKey, JSON.stringify(newList));
-        setMemos(newList);
-      } else if (savedList) {
-        setMemos(JSON.parse(savedList));
+        savedListStr = JSON.stringify(newList);
       }
+
+      const foundMemoIds = new Set<string>();
+      if (savedListStr) {
+        try {
+          const listArr: string[] = JSON.parse(savedListStr);
+          listArr.forEach(id => foundMemoIds.add(id));
+        } catch(e) {}
+      }
+
+      // Comprehensive scan for all memos belonging to this lot
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+
+        // Pattern 1: sales_memo_lot_{lotNumber}_memo_{id}
+        if (key.startsWith(`sales_memo_lot_${lotNumber}_memo_`)) {
+          const id = key.replace(`sales_memo_lot_${lotNumber}_memo_`, '');
+          if (id) foundMemoIds.add(id);
+        }
+
+        // Pattern 2: any sales memo where lotNumberInput == lotNumber
+        if (key.startsWith('sales_memo_lot_') && key.includes('_memo_')) {
+          const parts = key.split('_memo_');
+          const id = parts[1];
+          if (id && !foundMemoIds.has(id)) {
+            try {
+              const str = localStorage.getItem(key);
+              if (str) {
+                const parsed = JSON.parse(str);
+                const memoLot = parsed.lotNumberInput ? parseInt(parsed.lotNumberInput, 10) : (parsed.lotNumber ? parseInt(parsed.lotNumber, 10) : null);
+                if (memoLot === lotNumber) {
+                  foundMemoIds.add(id);
+                  const targetKey = `sales_memo_lot_${lotNumber}_memo_${id}`;
+                  if (!localStorage.getItem(targetKey)) {
+                    localStorage.setItem(targetKey, str);
+                  }
+                }
+              }
+            } catch(e) {}
+          }
+        }
+
+        // Pattern 3: due_memo_* where lotNumber == lotNumber
+        if (key.startsWith('due_memo_')) {
+          const id = key.replace('due_memo_', '');
+          if (id && !foundMemoIds.has(id)) {
+            try {
+              const str = localStorage.getItem(key);
+              if (str) {
+                const parsed = JSON.parse(str);
+                const memoLot = parsed.lotNumber ? parseInt(parsed.lotNumber, 10) : (parsed.memoState?.lotNumberInput ? parseInt(parsed.memoState.lotNumberInput, 10) : null);
+                if (memoLot === lotNumber) {
+                  foundMemoIds.add(id);
+                  const targetKey = `sales_memo_lot_${lotNumber}_memo_${id}`;
+                  if (!localStorage.getItem(targetKey)) {
+                    localStorage.setItem(targetKey, JSON.stringify(parsed.memoState || parsed));
+                  }
+                }
+              }
+            } catch(e) {}
+          }
+        }
+      }
+
+      const finalMemos = Array.from(foundMemoIds);
+      setMemos(finalMemos);
+      localStorage.setItem(memoListKey, JSON.stringify(finalMemos));
     };
+
     loadMemos();
     window.addEventListener('storage', loadMemos);
     return () => window.removeEventListener('storage', loadMemos);
@@ -76,17 +169,13 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
   };
 
   const filteredMemos = memos.filter(memoId => {
-    const memoKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
-    const memoStr = localStorage.getItem(memoKey);
+    const memo = getMemoData(memoId);
     let status = 'draft';
     let cType = '';
     
-    if (memoStr) {
-      try {
-        const memo = JSON.parse(memoStr);
-        status = memo.status || 'draft';
-        cType = memo.customerType || '';
-      } catch (e) {}
+    if (memo) {
+      status = memo.status || 'draft';
+      cType = memo.customerType || '';
     }
 
     let statusMatch = true;
@@ -165,25 +254,22 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
       <div className="lot-grid">
         {filteredMemos.map((memoId, idx) => {
           const memoKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
-          const memoStr = localStorage.getItem(memoKey);
+          const memo = getMemoData(memoId);
           let name = `Memo ${memoId}`;
           let statusColor = '#aaa';
           let statusText = 'Draft';
           
-          if (memoStr) {
-            try {
-              const memo = JSON.parse(memoStr);
-              if (memo.customerName) {
-                name = `${memo.customerName}`;
-              }
-              if (memo.status === 'paid') {
-                statusColor = '#72be44';
-                statusText = 'Paid';
-              } else if (memo.status === 'due') {
-                statusColor = '#ff9800';
-                statusText = 'Due';
-              }
-            } catch (e) {}
+          if (memo) {
+            if (memo.customerName) {
+              name = `${memo.customerName}`;
+            }
+            if (memo.status === 'paid') {
+              statusColor = '#72be44';
+              statusText = 'Paid';
+            } else if (memo.status === 'due') {
+              statusColor = '#ff9800';
+              statusText = 'Due';
+            }
           }
           
           return (

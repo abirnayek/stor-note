@@ -44,7 +44,7 @@ interface MemoState {
   entries: FishEntry[];
 }
 
-const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber, memoId, onBack }) => {
+const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber, memoId, onLotChange, onBack }) => {
   const { t, language } = useLanguage();
   const memoRef = useRef<HTMLDivElement>(null);
   
@@ -221,16 +221,78 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     handleSaveSellerSig('');
   };
 
-  const handleBack = () => {
+  const syncMemoToLot = (targetLotInput: string | undefined, currentState: MemoState) => {
     try {
-      const key = `sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`;
-      const finalState = { ...memoState };
-      localStorage.setItem(key, JSON.stringify(finalState));
+      const rawNum = targetLotInput ? parseInt(targetLotInput, 10) : null;
+      const validLot = (rawNum !== null && !isNaN(rawNum) && rawNum > 0) ? rawNum : null;
+      const effectiveLot = validLot !== null ? validLot : lotNumber;
+
+      // 1. Save to effective lot storage key
+      const mainKey = `sales_memo_lot_${effectiveLot === null ? 'unassigned' : effectiveLot}_memo_${memoId}`;
+      localStorage.setItem(mainKey, JSON.stringify(currentState));
+
+      // Also ensure unassigned key has it if lotNumber was null
+      if (lotNumber === null && validLot !== null) {
+        localStorage.setItem(`sales_memo_lot_unassigned_memo_${memoId}`, JSON.stringify(currentState));
+      }
+
+      if (validLot !== null) {
+        // 2. Add validLot to sales_lots_list
+        const salesLotsStr = localStorage.getItem('sales_lots_list');
+        let salesLots: number[] = salesLotsStr ? JSON.parse(salesLotsStr) : [];
+        if (!salesLots.includes(validLot)) {
+          salesLots.push(validLot);
+          salesLots.sort((a, b) => a - b);
+          localStorage.setItem('sales_lots_list', JSON.stringify(salesLots));
+        }
+
+        // 3. Add memoId to sales_memo_list_{validLot}
+        const targetListKey = `sales_memo_list_${validLot}`;
+        const targetListStr = localStorage.getItem(targetListKey);
+        let targetList: string[] = targetListStr ? JSON.parse(targetListStr) : [];
+        if (!targetList.includes(memoId)) {
+          targetList.push(memoId);
+          localStorage.setItem(targetListKey, JSON.stringify(targetList));
+        }
+
+        // 4. Remove memoId from old list if moving between different lots
+        if (lotNumber !== null && lotNumber !== validLot) {
+          const oldListKey = `sales_memo_list_${lotNumber}`;
+          const oldListStr = localStorage.getItem(oldListKey);
+          if (oldListStr) {
+            let oldList: string[] = JSON.parse(oldListStr);
+            if (oldList.includes(memoId)) {
+              oldList = oldList.filter(id => id !== memoId);
+              localStorage.setItem(oldListKey, JSON.stringify(oldList));
+            }
+          }
+        } else if (lotNumber === null) {
+          const uListStr = localStorage.getItem('sales_memo_list_unassigned');
+          if (uListStr) {
+            let uList: string[] = JSON.parse(uListStr);
+            if (uList.includes(memoId)) {
+              uList = uList.filter(id => id !== memoId);
+              localStorage.setItem('sales_memo_list_unassigned', JSON.stringify(uList));
+            }
+          }
+        }
+
+        if (onLotChange) {
+          onLotChange(validLot);
+        }
+      }
+      window.dispatchEvent(new Event('storage'));
     } catch(e) {}
+  };
+
+  const handleBack = () => {
+    syncMemoToLot(memoState.lotNumberInput, memoState);
     if (onBack) {
       onBack();
     } else {
-      lotNumber === null ? onNavigate('sales-lots') : onNavigate('sales-memo-list');
+      const rawNum = memoState.lotNumberInput ? parseInt(memoState.lotNumberInput, 10) : null;
+      const validLot = (rawNum !== null && !isNaN(rawNum) && rawNum > 0) ? rawNum : lotNumber;
+      validLot === null ? onNavigate('sales-lots') : onNavigate('sales-memo-list');
     }
   };
 
@@ -351,8 +413,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       }
     }
 
-    const storageKey = `sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`;
-    localStorage.setItem(storageKey, JSON.stringify(effectiveState || memoState));
+    syncMemoToLot(memoState.lotNumberInput, effectiveState || memoState);
     setSaveStatus('Saving...');
     const timer = setTimeout(() => setSaveStatus('Saved'), 500);
     return () => clearTimeout(timer);
@@ -363,8 +424,11 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const updateMemoState = (field: keyof MemoState, value: any) => {
     setMemoState(prev => {
       const newState = { ...prev, [field]: value };
-      if (field === 'lotNumberInput' && !value) {
-        newState.entries = newState.entries.map(e => ({ ...e, buyRate: 0 }));
+      if (field === 'lotNumberInput') {
+        if (!value) {
+          newState.entries = newState.entries.map(e => ({ ...e, buyRate: 0 }));
+        }
+        syncMemoToLot(value, newState);
       }
       return newState;
     });
