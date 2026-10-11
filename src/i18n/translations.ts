@@ -93,6 +93,8 @@ export const translations = {
 
     // Extra added keys
     investorAccount: 'বিনিয়োগকারী হিসাব',
+    totalAllInvestorsInvest: 'সর্বমোট বিনিয়োগ',
+    asOfDate: 'তারিখ',
     noInvestor: 'কোনো বিনিয়োগকারী নেই',
     investorsCount: 'জন বিনিয়োগকারী',
     newInvestorFolder: 'নতুন বিনিয়োগকারী ফোল্ডার',
@@ -244,6 +246,8 @@ export const translations = {
 
     // Extra added keys
     investorAccount: 'Investor Account',
+    totalAllInvestorsInvest: 'Total Investment',
+    asOfDate: 'Date',
     noInvestor: 'No Investors',
     investorsCount: 'Investors',
     newInvestorFolder: 'New Investor Folder',

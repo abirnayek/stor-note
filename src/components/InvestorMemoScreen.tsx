@@ -190,6 +190,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
     
     // Don't save if it's completely empty on first load, wait for user action
     localStorage.setItem(`investor_memo_${memoId}`, JSON.stringify(updatedMemo));
+    window.dispatchEvent(new Event('storage'));
     setSaveStatus('Saving...');
     const t = setTimeout(() => setSaveStatus('Saved'), 500);
     return () => clearTimeout(t);
@@ -265,6 +266,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
     };
     setMemo(completedMemo);
     localStorage.setItem(`investor_memo_${memoId}`, JSON.stringify(completedMemo));
+    window.dispatchEvent(new Event('storage'));
     onNavigate('investor-memos-list');
   };
 

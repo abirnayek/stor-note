@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Plus, Trash2, FolderOpen } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, FolderOpen, Wallet, Calendar, Users, TrendingUp } from 'lucide-react';
 import { moveToTrash } from '../utils/trashUtils';
 import { useLanguage } from '../i18n/LanguageContext';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
@@ -13,29 +13,101 @@ interface InvestorListScreenProps {
 const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onSelectInvestor }) => {
   const [investors, setInvestors] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
-  const { t } = useLanguage();
+  const [investorTotals, setInvestorTotals] = useState<Record<string, number>>({});
+  const [grandTotal, setGrandTotal] = useState<number>(0);
+  const [latestDate, setLatestDate] = useState<string>('');
+  const { t, language } = useLanguage();
+
+  const loadInvestors = () => {
+    const saved = localStorage.getItem('investor_list');
+    let investorIds: string[] = [];
+    if (saved) {
+      try {
+        investorIds = JSON.parse(saved);
+      } catch (e) {}
+    }
+    setInvestors(investorIds);
+    
+    const profs: Record<string, any> = {};
+    const totals: Record<string, number> = {};
+    let overall = 0;
+    let foundLatestDate = '';
+
+    investorIds.forEach((id: string) => {
+      const profStr = localStorage.getItem(`investor_profile_${id}`);
+      if (profStr) {
+        try { profs[id] = JSON.parse(profStr); } catch (e) {}
+      }
+
+      // Calculate total investment for this investor
+      let investorSum = 0;
+      const memoIdsStr = localStorage.getItem(`investor_memos_${id}`);
+      let memoIds: string[] = [];
+      if (memoIdsStr) {
+        try { memoIds = JSON.parse(memoIdsStr); } catch (e) {}
+      }
+
+      const allMemoIds = new Set<string>(memoIds);
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(`investor_memo_${id}_`)) {
+          allMemoIds.add(k.replace('investor_memo_', ''));
+        }
+      }
+
+      allMemoIds.forEach(mId => {
+        const mStr = localStorage.getItem(`investor_memo_${mId}`);
+        if (!mStr) return;
+        try {
+          const m = JSON.parse(mStr);
+          // Only active memos count toward active ongoing investment pool
+          if (m.status === 'completed') return;
+
+          let inv = 0;
+          if (m.totalInvest !== undefined && m.totalInvest !== null && !isNaN(Number(m.totalInvest))) {
+            inv = Number(m.totalInvest);
+          } else if (Array.isArray(m.entries)) {
+            inv = m.entries
+              .filter((e: any) => e.type === 'invest')
+              .reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+          }
+
+          if (inv > 0) {
+            investorSum += inv;
+          }
+
+          const mDate = m.updatedAt || m.date;
+          if (mDate && !foundLatestDate) {
+            foundLatestDate = mDate;
+          }
+        } catch (e) {}
+      });
+
+      totals[id] = investorSum;
+      overall += investorSum;
+    });
+
+    setProfiles(profs);
+    setInvestorTotals(totals);
+    setGrandTotal(overall);
+
+    const todayFormatted = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+    setLatestDate(foundLatestDate || todayFormatted);
+  };
 
   useEffect(() => {
-    const loadInvestors = () => {
-      const saved = localStorage.getItem('investor_list');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setInvestors(parsed);
-        
-        const profs: Record<string, any> = {};
-        parsed.forEach((id: string) => {
-          const profStr = localStorage.getItem(`investor_profile_${id}`);
-          if (profStr) {
-            try { profs[id] = JSON.parse(profStr); } catch (e) {}
-          }
-        });
-        setProfiles(profs);
-      }
-    };
     loadInvestors();
     window.addEventListener('storage', loadInvestors);
-    return () => window.removeEventListener('storage', loadInvestors);
-  }, []);
+    window.addEventListener('focus', loadInvestors);
+    return () => {
+      window.removeEventListener('storage', loadInvestors);
+      window.removeEventListener('focus', loadInvestors);
+    };
+  }, [language]);
 
   const handleAddInvestor = () => {
     const id = `investor_${Date.now()}`;
@@ -52,6 +124,7 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
     
     // Initialize empty memos list
     localStorage.setItem(`investor_memos_${id}`, JSON.stringify([]));
+    window.dispatchEvent(new Event('storage'));
   };
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
@@ -64,18 +137,87 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
     const newList = investors.filter(i => i !== id);
     setInvestors(newList);
     localStorage.setItem('investor_list', JSON.stringify(newList));
-    // Not deleting all memos here to keep it simple, but they are detached.
+    window.dispatchEvent(new Event('storage'));
+    loadInvestors();
   };
 
   return (
     <div className="lots-screen">
-      <div className="screen-header">
-        <button className="btn-icon" onClick={() => onNavigate('dashboard')}>
-          <ChevronLeft size={24} />
-        </button>
-        <h2>{t('investorAccount')}</h2>
-        <div style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.1)', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold' }}>
-          {investors.length === 0 ? t('noInvestor') : `${investors.length} ${t('investorsCount')}`}
+      <div className="screen-header" style={{ flexWrap: 'wrap', gap: '12px', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button className="btn-icon" onClick={() => onNavigate('dashboard')}>
+            <ChevronLeft size={24} />
+          </button>
+          <h2>{t('investorAccount')}</h2>
+        </div>
+
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {/* Total Investment Card */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(114, 190, 68, 0.16) 0%, rgba(20, 50, 24, 0.3) 100%)',
+            border: '1px solid rgba(114, 190, 68, 0.45)',
+            boxShadow: '0 4px 15px rgba(0, 0, 0, 0.25)',
+            padding: '6px 14px',
+            borderRadius: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '8px',
+              background: 'rgba(114, 190, 68, 0.22)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#72be44',
+              flexShrink: 0
+            }}>
+              <TrendingUp size={20} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.78rem', color: '#c8d6e5', fontWeight: 600 }}>
+                  {t('totalAllInvestorsInvest')}
+                </span>
+                <span style={{
+                  fontSize: '0.7rem',
+                  color: '#72be44',
+                  background: 'rgba(114, 190, 68, 0.15)',
+                  border: '1px solid rgba(114, 190, 68, 0.3)',
+                  padding: '1px 7px',
+                  borderRadius: '10px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <Calendar size={11} />
+                  {latestDate}
+                </span>
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#72be44', letterSpacing: '0.5px', lineHeight: 1.2, marginTop: '2px' }}>
+                ৳ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+          </div>
+
+          {/* Investor Count Badge */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.14)',
+            padding: '8px 16px',
+            borderRadius: '20px',
+            fontWeight: 'bold',
+            fontSize: '0.85rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            whiteSpace: 'nowrap'
+          }}>
+            <Users size={16} style={{ color: 'var(--primary-color)' }} />
+            {investors.length === 0 ? t('noInvestor') : `${investors.length} ${t('investorsCount')}`}
+          </div>
         </div>
       </div>
 
@@ -83,24 +225,46 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
         {investors.map(id => {
           const profile = profiles[id] || { name: t('newInvestorFolder') };
           const passwordKey = `investor_folder_password_${id}`;
+          const invTotal = investorTotals[id] || 0;
           
           return (
             <ProtectedMemoWrapper key={id} passwordKey={passwordKey} onAccessGranted={() => onSelectInvestor(id)}>
-              <div className="lot-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <FolderOpen size={20} style={{ color: 'var(--primary-color)' }} />
-                      <span className="lot-number">{profile.name}</span>
+              <div className="lot-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <FolderOpen size={20} style={{ color: 'var(--primary-color)' }} />
+                        <span className="lot-number">{profile.name}</span>
+                      </div>
+                      <div style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '4px', paddingLeft: '28px' }}>
+                        {t('clickToViewFolder')}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '4px', paddingLeft: '28px' }}>
-                      {t('clickToViewFolder')}
-                    </div>
+                    <button className="btn-icon delete-btn" onClick={(e) => handleDelete(id, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
+                      <Trash2 size={16} />
+                    </button>
                   </div>
-                  <button className="btn-icon delete-btn" onClick={(e) => handleDelete(id, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
-                    <Trash2 size={16} />
-                  </button>
                 </div>
+
+                <div style={{
+                  marginTop: '1rem',
+                  paddingTop: '0.6rem',
+                  borderTop: '1px dashed rgba(255, 255, 255, 0.12)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: '0.88rem'
+                }}>
+                  <span style={{ color: '#aaa', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Wallet size={14} style={{ color: '#72be44' }} />
+                    {language === 'bn' ? 'মোট বিনিয়োগ:' : 'Total Invest:'}
+                  </span>
+                  <span style={{ color: '#72be44', fontWeight: 'bold' }}>
+                    ৳ {invTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+
                 <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
                   <MemoLockIcon passwordKey={passwordKey} />
                 </div>

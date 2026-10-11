@@ -93,6 +93,7 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
       status: 'active'
     };
     localStorage.setItem(`investor_memo_${newId}`, JSON.stringify(initialMemo));
+    window.dispatchEvent(new Event('storage'));
     
     onSelectMemo(newId);
   };
