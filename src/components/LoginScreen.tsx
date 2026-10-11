@@ -78,6 +78,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         }, { onConflict: 'device_id' });
         
         localStorage.setItem('device_permission', initialPermission);
+        localStorage.setItem('cached_is_authenticated', 'true');
+        localStorage.setItem('cached_user_session', JSON.stringify({ user: authData.user, id: authData.user.id, email: authData.user.email }));
       }
       // --- End Device Tracking ---
 

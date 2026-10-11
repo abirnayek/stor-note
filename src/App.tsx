@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, User, Settings, X, Moon, Sun, Globe, ShoppingCart, Clock, ShoppingBag, Plus, Home, Trash2, Send, XCircle, TrendingUp, RefreshCw } from 'lucide-react';
+import { Search, User, Settings, X, Moon, Sun, Globe, ShoppingCart, Clock, ShoppingBag, Plus, Home, Trash2, Send, XCircle, TrendingUp, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import './index.css';
 import Dashboard from './components/Dashboard';
 import PasswordScreen from './components/PasswordScreen';
@@ -41,6 +41,7 @@ interface PendingReminder {
 }
 
 function App() {
+  const { t, language, toggleLanguage } = useLanguage();
   const [theme, setTheme] = useState('dark');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDeviceManagerOpen, setIsDeviceManagerOpen] = useState(false);
@@ -53,13 +54,68 @@ function App() {
   const [session, setSession] = useState<any>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [showLoginScreen, setShowLoginScreen] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleOnline = async () => {
+      setIsOnline(true);
+      setSyncToast(language === 'bn' ? 'অনলাইন হয়েছে! স্বয়ংক্রিয়ভাবে সিঙ্ক হচ্ছে...' : 'Back online! Syncing changes...');
+      try {
+        await pushUnsyncedLocalData(false);
+        await restoreFromCloud();
+        setupRealtimeSync();
+        setSyncToast(language === 'bn' ? 'সব মেমো সফলভাবে ক্লাউডে সিঙ্ক হয়েছে ✓' : 'All memos synced with cloud ✓');
+        setTimeout(() => setSyncToast(null), 3500);
+      } catch (e) {
+        setTimeout(() => setSyncToast(null), 3000);
+      }
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      setSyncToast(language === 'bn' ? 'অফলাইন মোড: কোনো সমস্যা নেই, আপনার সব মেমো ফোনে সেভ থাকবে।' : 'Offline mode: You can work freely, will sync when online.');
+      setTimeout(() => setSyncToast(null), 4000);
+    };
+
+    const handleNetworkSyncEvent = (e: any) => {
+      if (e.detail?.online && e.detail?.synced) {
+        setSyncToast(language === 'bn' ? 'সব মেমো সফলভাবে ক্লাউডে সিঙ্ক হয়েছে ✓' : 'All memos synced with cloud ✓');
+        setTimeout(() => setSyncToast(null), 3000);
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('network_sync_status', handleNetworkSyncEvent);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('network_sync_status', handleNetworkSyncEvent);
+    };
+  }, [language]);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
+      if (session) {
+        setSession(session);
+        localStorage.setItem('cached_is_authenticated', 'true');
+        localStorage.setItem('cached_user_session', JSON.stringify({ user: session.user, id: session.user.id, email: session.user.email }));
+      } else {
+        // Safe offline recovery if user was previously authenticated
+        const hasCachedAuth = localStorage.getItem('cached_is_authenticated') === 'true';
+        const cachedUserStr = localStorage.getItem('cached_user_session');
+        if (hasCachedAuth && cachedUserStr) {
+          try {
+            const cachedUser = JSON.parse(cachedUserStr);
+            setSession({ user: cachedUser.user || cachedUser });
+          } catch(e) {}
+        }
+      }
       setLoadingAuth(false);
 
-      if (session) {
+      if (session && navigator.onLine) {
         (async () => {
           try {
             await restoreFromCloud();
@@ -67,17 +123,20 @@ function App() {
             setupRealtimeSync();
             window.dispatchEvent(new Event('storage'));
             
-            // --- Device Validity Check ---
+            // --- Device Validity Check (Only check when online, NEVER clear data on network errors) ---
             const deviceId = localStorage.getItem('device_id');
-            if (deviceId) {
+            if (deviceId && navigator.onLine) {
               const { data, error } = await supabase.from('active_sessions').select('status, permission').eq('device_id', deviceId).single();
-              if (error || !data || data.status === 'revoked') {
+              // ONLY sign out if cloud explicitly says the device is revoked!
+              if (!error && data && data.status === 'revoked') {
+                localStorage.removeItem('cached_is_authenticated');
+                localStorage.removeItem('cached_user_session');
                 await supabase.auth.signOut();
                 localStorage.clear();
                 window.location.reload();
                 return;
               }
-              if (data.permission) {
+              if (data && data.permission) {
                  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
                  if (isLocalhost && data.permission !== 'admin') {
                     await supabase.from('active_sessions').update({ permission: 'admin' }).eq('device_id', deviceId);
@@ -92,6 +151,8 @@ function App() {
               supabase.channel(`device_${deviceId}`)
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions', filter: `device_id=eq.${deviceId}` }, async (payload) => {
                   if (payload.eventType === 'DELETE' || (payload.eventType === 'UPDATE' && payload.new.status === 'revoked')) {
+                    localStorage.removeItem('cached_is_authenticated');
+                    localStorage.removeItem('cached_user_session');
                     await supabase.auth.signOut();
                     localStorage.clear();
                     window.location.reload();
@@ -109,13 +170,25 @@ function App() {
       }
     }).catch(err => {
       console.error('Auth session error:', err);
+      const hasCachedAuth = localStorage.getItem('cached_is_authenticated') === 'true';
+      const cachedUserStr = localStorage.getItem('cached_user_session');
+      if (hasCachedAuth && cachedUserStr) {
+        try {
+          const cachedUser = JSON.parse(cachedUserStr);
+          setSession({ user: cachedUser.user || cachedUser });
+        } catch(e) {}
+      }
       setLoadingAuth(false);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+      if (session) {
+        setSession(session);
+        localStorage.setItem('cached_is_authenticated', 'true');
+        localStorage.setItem('cached_user_session', JSON.stringify({ user: session.user, id: session.user.id, email: session.user.email }));
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -169,8 +242,6 @@ function App() {
   const [currentInvestorId, setCurrentInvestorId] = useState<string | null>(null);
   const [currentInvestorMemoId, setCurrentInvestorMemoId] = useState<string | null>(null);
   const [pendingReminders, setPendingReminders] = useState<PendingReminder[]>([]);
-
-  const { t, language, toggleLanguage } = useLanguage();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -235,6 +306,8 @@ function App() {
   };
 
   const handleLogout = async () => {
+    localStorage.removeItem('cached_is_authenticated');
+    localStorage.removeItem('cached_user_session');
     await supabase.auth.signOut();
     localStorage.clear();
     window.location.reload();
@@ -467,6 +540,51 @@ function App() {
             })()}
           </div>
           <div className="user-info">
+            {/* Online / Offline status indicator */}
+            <div style={{ marginRight: '8px', display: 'flex', alignItems: 'center' }}>
+              {isOnline ? (
+                <div 
+                  title={language === 'bn' ? 'অনলাইন: ক্লাউড সিঙ্ক সক্রিয়' : 'Online: Cloud sync active'}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '3px 8px',
+                    borderRadius: '12px',
+                    background: 'rgba(114, 190, 68, 0.15)',
+                    border: '1px solid rgba(114, 190, 68, 0.35)',
+                    color: '#72be44',
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <Wifi size={13} />
+                  <span>{language === 'bn' ? 'অনলাইন' : 'Online'}</span>
+                </div>
+              ) : (
+                <div 
+                  title={language === 'bn' ? 'অফলাইন মোড: কোনো ইন্টারনেট নেই। মেমো তৈরি ও এডিট করা যাবে, নেট আসলে অটো-সিঙ্ক হবে।' : 'Offline Mode: No Internet. Memos saved locally, auto-syncs when reconnected.'}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '3px 8px',
+                    borderRadius: '12px',
+                    background: 'rgba(255, 152, 0, 0.18)',
+                    border: '1px solid rgba(255, 152, 0, 0.45)',
+                    color: '#ffb74d',
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <WifiOff size={13} />
+                  <span>{language === 'bn' ? 'অফলাইন মোড' : 'Offline'}</span>
+                </div>
+              )}
+            </div>
+
             <button className="btn-icon-wrapper" title="Language" onClick={toggleLanguage} style={{ marginRight: '10px' }}>
               <Globe size={24} className="user-icon" />
               <span style={{ fontSize: '12px', marginLeft: '4px', opacity: 0.8 }}>{language.toUpperCase()}</span>
@@ -864,6 +982,33 @@ function App() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {syncToast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 99999,
+          background: isOnline ? 'rgba(11, 46, 26, 0.95)' : 'rgba(51, 35, 12, 0.95)',
+          border: isOnline ? '1px solid #72be44' : '1px solid #ff9800',
+          color: isOnline ? '#72be44' : '#ffb74d',
+          padding: '8px 20px',
+          borderRadius: '24px',
+          boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
+          fontSize: '0.85rem',
+          fontWeight: 'bold',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          pointerEvents: 'none',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)'
+        }}>
+          {isOnline ? <Wifi size={16} /> : <WifiOff size={16} />}
+          <span>{syncToast}</span>
         </div>
       )}
     </div>
