@@ -592,8 +592,13 @@ body {
 }
 
 /* Lots Screen */
-.lots-screen {
+.lots-screen, .stock-screen {
   min-height: 100%;
+}
+
+.stock-content-wrapper {
+  padding: 1.5rem 2rem;
+  box-sizing: border-box;
 }
 
 .screen-header {
@@ -1400,9 +1405,11 @@ body {
     box-sizing: border-box;
   }
   .dashboard-card:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
+    grid-column: 1 / -1 !important;
+    justify-self: center !important;
     width: calc(50% - 0.425rem) !important;
-    margin: 0 auto;
+    max-width: calc(50% - 0.425rem) !important;
+    margin: 0 auto !important;
   }
   .dashboard-card h3 { 
     font-size: 0.88rem; 
@@ -1413,6 +1420,12 @@ body {
     line-height: 1.25;
   }
   .card-icon { width: 36px; height: 36px; margin-bottom: 0.25rem; }
+
+  /* Stock Screen Content Wrapper Mobile */
+  .stock-content-wrapper {
+    padding: 1rem !important;
+    box-sizing: border-box;
+  }
 
   /* Memos and Lots Grid - Equal 1rem (16px) margins on both sides */
   .lot-grid { 

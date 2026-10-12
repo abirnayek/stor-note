@@ -99,8 +99,9 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
         </div>
       </div>
 
-      {/* Lot Selector Tabs */}
-      <div style={{ marginBottom: '1.5rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+      <div className="stock-content-wrapper">
+        {/* Lot Selector Tabs */}
+        <div style={{ marginBottom: '1.5rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
           <button
             onClick={() => setSelectedLot('all')}
@@ -391,6 +392,7 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   );
