@@ -37,6 +37,7 @@ export const translations = {
     dueAccount: 'বকেয়া হিসাব',
     blank: 'ফাঁকা',
     purchaseAccount: 'ক্রয় হিসাব',
+    stockAccount: 'স্টক',
     
     // Due Account
     dueTypesTitle: 'বকেয়ার ধরণ',
@@ -190,6 +191,7 @@ export const translations = {
     dueAccount: 'Due Account',
     blank: 'Blank',
     purchaseAccount: 'Purchase Account',
+    stockAccount: 'Stock',
     
     // Due Account
     dueTypesTitle: 'Due Types',

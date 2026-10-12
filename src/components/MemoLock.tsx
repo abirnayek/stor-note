@@ -86,10 +86,8 @@ export const ProtectedMemoWrapper: React.FC<{
     }
 
     return (
-        <>
-            <div onClick={handleClick} style={{ display: 'contents' }}>
-                {children}
-            </div>
+        <div onClick={handleClick} style={{ display: 'contents' }}>
+            {children}
             {showPrompt && (
                 <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setShowPrompt(false); }} style={{ zIndex: 10000 }}>
                   <div className="modal-content" onClick={e => e.stopPropagation()} style={{ color: '#fff' }}>
@@ -125,6 +123,6 @@ export const ProtectedMemoWrapper: React.FC<{
                   </div>
                 </div>
             )}
-        </>
+        </div>
     );
 };

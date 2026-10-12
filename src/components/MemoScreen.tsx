@@ -2,12 +2,13 @@ import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput, DebouncedInput, parseMathOrNumber, focusNewTableRow } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { Share2, Download, Plus, Trash2, Phone, Undo, Redo, MessageCircle, Mail, ChevronLeft, Lock, X } from 'lucide-react';
+import { Share2, Download, Plus, Trash2, Phone, Undo, Redo, MessageCircle, Mail, ChevronLeft, Lock, X, Package } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
+import { getLotStock, type LotStockSummary } from '../utils/stockUtils';
 
 
 interface MemoScreenProps {
@@ -119,6 +120,19 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   const [showDueModal, setShowDueModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+  const [lotStock, setLotStock] = useState<LotStockSummary | null>(null);
+
+  const refreshLotStock = () => {
+    if (lotNumber) {
+      setLotStock(getLotStock(lotNumber));
+    }
+  };
+
+  useEffect(() => {
+    refreshLotStock();
+    window.addEventListener('storage', refreshLotStock);
+    return () => window.removeEventListener('storage', refreshLotStock);
+  }, [lotNumber, memoState]);
 
 
 
@@ -546,6 +560,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                   <th>{t('totalBuyPriceAuto')}</th>
                   <th>{t('profitPercent')}</th>
                   <th>{t('saleRateAuto')}</th>
+                  <th style={{ color: '#72be44' }}>স্টক</th>
                   <th></th>
                 </tr>
               </thead>
@@ -631,6 +646,25 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                       <td data-label={t('saleRateAuto')} style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>
                         {salePriceAuto > 0 ? salePriceAuto.toFixed(2) : '0.00'}
                       </td>
+                      <td data-label="স্টক" style={{ textAlign: 'center' }}>
+                        {(() => {
+                          const stockItem = lotStock?.items.find(it => it.serialNo === index + 1 || (entry.name && it.name.trim().toLowerCase() === entry.name.trim().toLowerCase()));
+                          if (!stockItem) return '-';
+                          return (
+                            <span style={{
+                              fontSize: '0.85rem',
+                              fontWeight: 'bold',
+                              color: stockItem.remainingKg > 0 ? '#72be44' : '#ff5252',
+                              background: stockItem.remainingKg > 0 ? 'rgba(114, 190, 68, 0.12)' : 'rgba(255, 82, 82, 0.12)',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              border: `1px solid ${stockItem.remainingKg > 0 ? '#72be4433' : '#ff525233'}`
+                            }}>
+                              {stockItem.remainingKg} kg
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td data-label="">
                         <button className="btn-icon delete-btn" onClick={() => handleDeleteRow(entry.id)}>
                           <Trash2 size={20} />
@@ -681,6 +715,104 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
               <span className="calc-value" style={{ fontSize: '1.2rem', color: (mainPrice - Number(memoState.paidAmount || 0)) > 0 ? '#ff5252' : '#72be44' }}>
                 {(mainPrice - Number(memoState.paidAmount || 0)).toFixed(2)}
               </span>
+            </div>
+          </div>
+
+          {/* Real-time Fish Stock Line & Section */}
+          <div className="lot-stock-section" style={{
+            margin: '1.5rem 2rem',
+            padding: '1.2rem',
+            background: 'linear-gradient(135deg, rgba(11, 46, 26, 0.7) 0%, rgba(18, 29, 23, 0.85) 100%)',
+            borderRadius: '12px',
+            border: '1px solid rgba(114, 190, 68, 0.3)',
+            color: '#fff'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.6rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Package size={22} style={{ color: '#72be44' }} />
+                <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#fff' }}>লট স্টক স্থিতি (Fish Stock Status)</h3>
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', flexWrap: 'wrap' }}>
+                <span style={{ color: '#aaa' }}>মোট ক্রয়: <b style={{ color: '#fff' }}>{lotStock?.totalPurchasedKg || 0} kg</b></span>
+                <span style={{ color: '#ffb74d' }}>মোট বিক্রয়: <b>{lotStock?.totalSoldKg || 0} kg</b></span>
+                <span style={{ color: '#72be44' }}>অবশিষ্ট স্টক: <b>{lotStock?.totalRemainingKg || 0} kg</b></span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              {lotStock?.items && lotStock.items.length > 0 ? (
+                lotStock.items.map(item => {
+                  const soldPercent = item.purchasedKg > 0 ? Math.min(100, Math.round((item.soldKg / item.purchasedKg) * 100)) : 0;
+                  let badgeColor = '#72be44';
+                  let badgeBg = 'rgba(114, 190, 68, 0.15)';
+                  let badgeText = 'স্টকে আছে';
+
+                  if (item.status === 'out_of_stock') {
+                    badgeColor = '#ff5252';
+                    badgeBg = 'rgba(255, 82, 82, 0.15)';
+                    badgeText = 'স্টক শেষ';
+                  } else if (item.status === 'low_stock') {
+                    badgeColor = '#ff9800';
+                    badgeBg = 'rgba(255, 152, 0, 0.15)';
+                    badgeText = 'কম স্টক';
+                  }
+
+                  return (
+                    <div key={item.id} style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: 'rgba(255,255,255,0.03)',
+                      padding: '0.6rem 1rem',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255,255,255,0.05)',
+                      gap: '0.8rem'
+                    }}>
+                      <div style={{ minWidth: '140px' }}>
+                        <span style={{ fontWeight: 'bold', fontSize: '0.95rem', color: '#fff' }}>
+                          {item.serialNo}. {item.name}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', fontSize: '0.85rem' }}>
+                        <span style={{ color: '#aaa' }}>কেনা: <b style={{ color: '#fff' }}>{item.purchasedKg} kg</b></span>
+                        <span style={{ color: '#ffb74d' }}>বিক্রি: <b>{item.soldKg} kg</b></span>
+                        <span style={{ color: item.remainingKg > 0 ? '#72be44' : '#ff5252', fontWeight: 'bold' }}>
+                          স্টক বাকি: {item.remainingKg} kg
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', minWidth: '160px' }}>
+                        <div style={{ flex: 1, height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${soldPercent}%`,
+                            height: '100%',
+                            background: soldPercent >= 100 ? '#ff5252' : '#ff9800',
+                            transition: 'width 0.3s'
+                          }} />
+                        </div>
+                        <span style={{
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          fontSize: '0.75rem',
+                          fontWeight: 'bold',
+                          color: badgeColor,
+                          background: badgeBg,
+                          border: `1px solid ${badgeColor}33`,
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {badgeText}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', textAlign: 'center', padding: '1rem' }}>
+                  এই লটে এখনো কোনো মাছ যোগ করা হয়নি
+                </div>
+              )}
             </div>
           </div>
 

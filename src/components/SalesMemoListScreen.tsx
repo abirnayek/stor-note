@@ -23,24 +23,18 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
     const memoKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
     let memoStr = localStorage.getItem(memoKey);
     if (!memoStr) {
-      memoStr = localStorage.getItem(`sales_memo_lot_unassigned_memo_${memoId}`);
-    }
-    if (!memoStr) {
-      for (let l = 1; l <= 50; l++) {
-        const s = localStorage.getItem(`sales_memo_lot_${l}_memo_${memoId}`);
-        if (s) { memoStr = s; break; }
-      }
-    }
-    if (!memoStr) {
       memoStr = localStorage.getItem(`due_memo_${memoId}`);
     }
     if (memoStr) {
       try {
         const parsed = JSON.parse(memoStr);
-        if (!localStorage.getItem(memoKey)) {
-          localStorage.setItem(memoKey, JSON.stringify(parsed.memoState || parsed));
+        const data = parsed.memoState || parsed;
+        const memoLot = data.lotNumberInput ? parseInt(data.lotNumberInput, 10) : (data.lotNumber ? parseInt(data.lotNumber, 10) : null);
+        // If explicitly assigned to another lot, do not display in this lot
+        if (memoLot !== null && !isNaN(memoLot) && memoLot !== lotNumber) {
+          return null;
         }
-        return parsed.memoState || parsed;
+        return data;
       } catch(e) {}
     }
     return null;
@@ -48,88 +42,53 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
 
   useEffect(() => {
     const loadMemos = () => {
-      // Migration logic for old single memo format
-      const oldMemoKey = `sales_memo_lot_${lotNumber}`;
-      const oldMemoStr = localStorage.getItem(oldMemoKey);
-      
-      const memoListKey = `sales_memo_list_${lotNumber}`;
-      let savedListStr = localStorage.getItem(memoListKey);
-      
-      if (oldMemoStr && !savedListStr) {
-        // Migrate
-        const firstMemoId = '1';
-        localStorage.setItem(`sales_memo_lot_${lotNumber}_memo_${firstMemoId}`, oldMemoStr);
-        localStorage.removeItem(oldMemoKey);
-        
-        const newList = [firstMemoId];
-        localStorage.setItem(memoListKey, JSON.stringify(newList));
-        savedListStr = JSON.stringify(newList);
-      }
-
       const foundMemoIds = new Set<string>();
+
+      // Check saved list for this lot
+      const memoListKey = `sales_memo_list_${lotNumber}`;
+      const savedListStr = localStorage.getItem(memoListKey);
       if (savedListStr) {
         try {
           const listArr: string[] = JSON.parse(savedListStr);
-          listArr.forEach(id => foundMemoIds.add(id));
+          listArr.forEach(id => {
+            const data = getMemoData(id);
+            if (data) {
+              foundMemoIds.add(id);
+            }
+          });
         } catch(e) {}
       }
 
-      // Comprehensive scan for all memos belonging to this lot
+      // Check all storage keys matching sales_memo_lot_{lotNumber}_memo_*
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (!key) continue;
 
-        // Pattern 1: sales_memo_lot_{lotNumber}_memo_{id}
         if (key.startsWith(`sales_memo_lot_${lotNumber}_memo_`)) {
           const id = key.replace(`sales_memo_lot_${lotNumber}_memo_`, '');
-          if (id) foundMemoIds.add(id);
-        }
-
-        // Pattern 2: any sales memo where lotNumberInput == lotNumber
-        if (key.startsWith('sales_memo_lot_') && key.includes('_memo_')) {
-          const parts = key.split('_memo_');
-          const id = parts[1];
-          if (id && !foundMemoIds.has(id)) {
-            try {
-              const str = localStorage.getItem(key);
-              if (str) {
-                const parsed = JSON.parse(str);
-                const memoLot = parsed.lotNumberInput ? parseInt(parsed.lotNumberInput, 10) : (parsed.lotNumber ? parseInt(parsed.lotNumber, 10) : null);
-                if (memoLot === lotNumber) {
-                  foundMemoIds.add(id);
-                  const targetKey = `sales_memo_lot_${lotNumber}_memo_${id}`;
-                  if (!localStorage.getItem(targetKey)) {
-                    localStorage.setItem(targetKey, str);
-                  }
-                }
-              }
-            } catch(e) {}
-          }
-        }
-
-        // Pattern 3: due_memo_* where lotNumber == lotNumber
-        if (key.startsWith('due_memo_')) {
-          const id = key.replace('due_memo_', '');
-          if (id && !foundMemoIds.has(id)) {
-            try {
-              const str = localStorage.getItem(key);
-              if (str) {
-                const parsed = JSON.parse(str);
-                const memoLot = parsed.lotNumber ? parseInt(parsed.lotNumber, 10) : (parsed.memoState?.lotNumberInput ? parseInt(parsed.memoState.lotNumberInput, 10) : null);
-                if (memoLot === lotNumber) {
-                  foundMemoIds.add(id);
-                  const targetKey = `sales_memo_lot_${lotNumber}_memo_${id}`;
-                  if (!localStorage.getItem(targetKey)) {
-                    localStorage.setItem(targetKey, JSON.stringify(parsed.memoState || parsed));
-                  }
-                }
-              }
-            } catch(e) {}
+          if (id) {
+            const data = getMemoData(id);
+            if (data) {
+              foundMemoIds.add(id);
+            } else {
+              // Memo has moved to another lot; remove stale key
+              localStorage.removeItem(key);
+            }
           }
         }
       }
 
       const finalMemos = Array.from(foundMemoIds);
+      // Deterministic sort: numeric ID descending
+      finalMemos.sort((a, b) => {
+        const numA = Number(a);
+        const numB = Number(b);
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return numB - numA;
+        }
+        return b.localeCompare(a);
+      });
+
       setMemos(finalMemos);
       localStorage.setItem(memoListKey, JSON.stringify(finalMemos));
     };

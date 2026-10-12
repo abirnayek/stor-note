@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Search, User, Settings, X, Moon, Sun, Globe, ShoppingCart, Clock, ShoppingBag, Plus, Home, Trash2, Send, XCircle, TrendingUp, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, User, Settings, X, Moon, Sun, Globe, ShoppingCart, Clock, ShoppingBag, Home, Trash2, Send, XCircle, TrendingUp, RefreshCw, Wifi, WifiOff, Package } from 'lucide-react';
 import './index.css';
 import Dashboard from './components/Dashboard';
 import PasswordScreen from './components/PasswordScreen';
@@ -18,6 +18,7 @@ import TrashScreen from './components/TrashScreen';
 import InvestorListScreen from './components/InvestorListScreen';
 import InvestorMemosListScreen from './components/InvestorMemosListScreen';
 import InvestorMemoScreen from './components/InvestorMemoScreen';
+import StockScreen from './components/StockScreen';
 import { useLanguage } from './i18n/LanguageContext';
 import { supabase } from './utils/supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -26,7 +27,67 @@ import { LotPasswordManager } from './components/LotPasswordManager';
 
 import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow } from './utils/syncEngine';
 
-export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo';
+export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock';
+
+export interface NavSnapshot {
+  screen: Screen;
+  lot?: number | null;
+  salesLot?: number | null;
+  salesMemoId?: string | null;
+  salesMemoReturnScreen?: Screen;
+  dueType?: 'regular' | 'permanent' | 'purchase';
+  dueId?: string | null;
+  isPaidDue?: boolean;
+  investorId?: string | null;
+  investorMemoId?: string | null;
+  isModal?: string | null;
+}
+
+const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
+  switch (current.screen) {
+    case 'memo':
+      return { screen: 'lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'lots':
+    case 'password':
+      return { screen: 'dashboard', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'sales-memo':
+      if (current.salesMemoReturnScreen === 'sales-memo-list' && current.salesLot !== null) {
+        return { screen: 'sales-memo-list', lot: null, salesLot: current.salesLot, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
+      return { screen: 'sales-lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'sales-memo-list':
+      return { screen: 'sales-lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'sales-lots':
+      return { screen: 'dashboard', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'due-sales-memo':
+    case 'due-memo':
+      if (current.isPaidDue) {
+        return { screen: 'paid-due-list', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: current.dueType || 'regular', dueId: null, isPaidDue: true, investorId: null, investorMemoId: null };
+      }
+      if (current.dueType === 'purchase') {
+        return { screen: 'due-purchase-list', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'purchase', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
+      return { screen: 'due-list', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: current.dueType || 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'due-list':
+    case 'paid-due-list':
+      return { screen: 'due-types', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'due-purchase-list':
+    case 'due-types':
+      return { screen: 'due-category', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'due-category':
+      return { screen: 'dashboard', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'investor-memo':
+      return { screen: 'investor-memos-list', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: current.investorId || null, investorMemoId: null };
+    case 'investor-memos-list':
+      return { screen: 'investor-list', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'investor-list':
+    case 'investor-password':
+    case 'trash':
+    case 'stock':
+    default:
+      return { screen: 'dashboard', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+  }
+};
 
 interface PendingReminder {
   dueId: string;
@@ -301,9 +362,214 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
+  const navStackRef = useRef<NavSnapshot[]>([{
+    screen: 'dashboard',
+    lot: null,
+    salesLot: null,
+    salesMemoId: null,
+    salesMemoReturnScreen: 'sales-lots',
+    dueType: 'regular',
+    dueId: null,
+    isPaidDue: false,
+    investorId: null,
+    investorMemoId: null
+  }]);
+
+  const applySnapshot = (snapshot: NavSnapshot) => {
+    setCurrentScreen(snapshot.screen);
+    setCurrentLot(snapshot.lot ?? null);
+    setCurrentSalesLot(snapshot.salesLot ?? null);
+    setCurrentSalesMemoId(snapshot.salesMemoId ?? null);
+    setSalesMemoReturnScreen(snapshot.salesMemoReturnScreen ?? 'sales-lots');
+    setCurrentDueType(snapshot.dueType ?? 'regular');
+    setCurrentDueId(snapshot.dueId ?? null);
+    setIsPaidDue(snapshot.isPaidDue ?? false);
+    setCurrentInvestorId(snapshot.investorId ?? null);
+    setCurrentInvestorMemoId(snapshot.investorMemoId ?? null);
+  };
+
+  const isSettingsOpenRef = useRef(false);
+  const isDeviceManagerOpenRef = useRef(false);
+  const isLotPasswordManagerOpenRef = useRef(false);
+  const isUserMenuOpenRef = useRef(false);
+  const showLoginScreenRef = useRef(false);
+
+  useEffect(() => { isSettingsOpenRef.current = isSettingsOpen; }, [isSettingsOpen]);
+  useEffect(() => { isDeviceManagerOpenRef.current = isDeviceManagerOpen; }, [isDeviceManagerOpen]);
+  useEffect(() => { isLotPasswordManagerOpenRef.current = isLotPasswordManagerOpen; }, [isLotPasswordManagerOpen]);
+  useEffect(() => { isUserMenuOpenRef.current = isUserMenuOpen; }, [isUserMenuOpen]);
+  useEffect(() => { showLoginScreenRef.current = showLoginScreen; }, [showLoginScreen]);
+
+  const openSettings = () => {
+    setIsSettingsOpen(true);
+    window.history.pushState({ isModal: 'settings' }, '');
+  };
+  const closeSettings = () => {
+    setIsSettingsOpen(false);
+    if (window.history.state?.isModal === 'settings') {
+      window.history.back();
+    }
+  };
+
+  const openDeviceManager = () => {
+    setIsDeviceManagerOpen(true);
+    window.history.pushState({ isModal: 'deviceManager' }, '');
+  };
+  const closeDeviceManager = () => {
+    setIsDeviceManagerOpen(false);
+    if (window.history.state?.isModal === 'deviceManager') {
+      window.history.back();
+    }
+  };
+
+  const openLotPasswordManager = () => {
+    setIsLotPasswordManagerOpen(true);
+    window.history.pushState({ isModal: 'lotPasswordManager' }, '');
+  };
+  const closeLotPasswordManager = () => {
+    setIsLotPasswordManagerOpen(false);
+    if (window.history.state?.isModal === 'lotPasswordManager') {
+      window.history.back();
+    }
+  };
+
+  const openUserMenu = () => {
+    setIsUserMenuOpen(true);
+    window.history.pushState({ isModal: 'userMenu' }, '');
+  };
+  const closeUserMenu = () => {
+    setIsUserMenuOpen(false);
+    if (window.history.state?.isModal === 'userMenu') {
+      window.history.back();
+    }
+  };
+
   const handleLogin = () => {
     setShowLoginScreen(true);
+    window.history.pushState({ isModal: 'login' }, '');
   };
+  const closeLogin = () => {
+    setShowLoginScreen(false);
+    if (window.history.state?.isModal === 'login') {
+      window.history.back();
+    }
+  };
+
+  const navigateTo = (
+    nextScreen: Screen,
+    params?: Partial<NavSnapshot>,
+    replace: boolean = false
+  ) => {
+    const currentTop = navStackRef.current[navStackRef.current.length - 1];
+    if (nextScreen === currentTop?.screen && !params && !replace) return;
+
+    // Check if nextScreen already exists in navStack behind current (backwards in-app navigation)
+    const existingIndex = navStackRef.current.findLastIndex(
+      (item, idx) => idx < navStackRef.current.length - 1 && item.screen === nextScreen
+    );
+
+    if (existingIndex !== -1 && !replace) {
+      const distance = navStackRef.current.length - 1 - existingIndex;
+      navStackRef.current = navStackRef.current.slice(0, existingIndex + 1);
+      const targetSnapshot = navStackRef.current[existingIndex];
+      applySnapshot(targetSnapshot);
+      window.history.go(-distance);
+      return;
+    }
+
+    const nextSnapshot: NavSnapshot = {
+      screen: nextScreen,
+      lot: params?.lot !== undefined ? params.lot : (nextScreen === 'memo' ? currentLot : null),
+      salesLot: params?.salesLot !== undefined ? params.salesLot : (nextScreen.startsWith('sales-') ? currentSalesLot : null),
+      salesMemoId: params?.salesMemoId !== undefined ? params.salesMemoId : (nextScreen === 'sales-memo' ? currentSalesMemoId : null),
+      salesMemoReturnScreen: params?.salesMemoReturnScreen !== undefined ? params.salesMemoReturnScreen : salesMemoReturnScreen,
+      dueType: params?.dueType !== undefined ? params.dueType : currentDueType,
+      dueId: params?.dueId !== undefined ? params.dueId : (nextScreen === 'due-memo' || nextScreen === 'due-sales-memo' ? currentDueId : null),
+      isPaidDue: params?.isPaidDue !== undefined ? params.isPaidDue : isPaidDue,
+      investorId: params?.investorId !== undefined ? params.investorId : (nextScreen.startsWith('investor-') ? currentInvestorId : null),
+      investorMemoId: params?.investorMemoId !== undefined ? params.investorMemoId : (nextScreen === 'investor-memo' ? currentInvestorMemoId : null),
+    };
+
+    if (replace) {
+      if (navStackRef.current.length > 0) {
+        navStackRef.current[navStackRef.current.length - 1] = nextSnapshot;
+      } else {
+        navStackRef.current = [nextSnapshot];
+      }
+      window.history.replaceState(nextSnapshot, '');
+    } else {
+      navStackRef.current.push(nextSnapshot);
+      window.history.pushState(nextSnapshot, '');
+    }
+
+    applySnapshot(nextSnapshot);
+  };
+
+  useEffect(() => {
+    const rootSnapshot: NavSnapshot = {
+      screen: 'dashboard',
+      lot: null,
+      salesLot: null,
+      salesMemoId: null,
+      salesMemoReturnScreen: 'sales-lots',
+      dueType: 'regular',
+      dueId: null,
+      isPaidDue: false,
+      investorId: null,
+      investorMemoId: null
+    };
+
+    if (!window.history.state || !window.history.state.screen) {
+      window.history.replaceState(rootSnapshot, '');
+      navStackRef.current = [rootSnapshot];
+    } else {
+      navStackRef.current = [window.history.state];
+      applySnapshot(window.history.state);
+    }
+
+    const handlePopState = () => {
+      // 1. If any modal is open, close it
+      if (isSettingsOpenRef.current) {
+        setIsSettingsOpen(false);
+        return;
+      }
+      if (isDeviceManagerOpenRef.current) {
+        setIsDeviceManagerOpen(false);
+        return;
+      }
+      if (isLotPasswordManagerOpenRef.current) {
+        setIsLotPasswordManagerOpen(false);
+        return;
+      }
+      if (isUserMenuOpenRef.current) {
+        setIsUserMenuOpen(false);
+        return;
+      }
+      if (showLoginScreenRef.current) {
+        setShowLoginScreen(false);
+        return;
+      }
+
+      // 2. Regular navigation back
+      if (navStackRef.current.length > 1) {
+        navStackRef.current.pop();
+        const targetSnapshot = navStackRef.current[navStackRef.current.length - 1];
+        applySnapshot(targetSnapshot);
+      } else {
+        const currentTop = navStackRef.current[0] || rootSnapshot;
+        if (currentTop.screen !== 'dashboard') {
+          const parent = getParentSnapshot(currentTop);
+          navStackRef.current = [parent];
+          applySnapshot(parent);
+        } else {
+          applySnapshot(rootSnapshot);
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const handleLogout = async () => {
     localStorage.removeItem('cached_is_authenticated');
@@ -330,16 +596,15 @@ function App() {
   };
 
   const handleNavigate = (screen: Screen) => {
-    setCurrentScreen(screen);
+    navigateTo(screen);
   };
 
   const handlePasswordSuccess = () => {
-    setCurrentScreen('lots');
+    navigateTo('lots', undefined, true);
   };
 
   const handleSelectLot = (lotNumber: number) => {
-    setCurrentLot(lotNumber);
-    setCurrentScreen('memo');
+    navigateTo('memo', { lot: lotNumber });
   };
 
   const handleUpdateReminderStatus = (dueId: string, status: 'sent' | 'failed') => {
@@ -406,7 +671,7 @@ function App() {
   // Localhost always bypasses login screen (unless user explicitly clicks Log In)
   if (!session && (!isLocalhost || showLoginScreen)) {
     return <LoginScreen onLoginSuccess={() => {
-      setShowLoginScreen(false);
+      closeLogin();
       // Force reload to apply synced localstorage data correctly
       window.location.reload();
     }} />;
@@ -516,16 +781,11 @@ function App() {
                         onClick={() => {
                           setSearchQuery('');
                           if (r.screen === 'sales-memo' && r.lotNumber && r.memoId) {
-                            setCurrentSalesLot(r.lotNumber);
-                            setCurrentSalesMemoId(r.memoId);
-                            handleNavigate('sales-memo');
+                            navigateTo('sales-memo', { salesLot: r.lotNumber, salesMemoId: r.memoId, salesMemoReturnScreen: 'sales-lots' });
                           } else if (r.screen === 'due-memo' && r.id) {
-                            setCurrentDueId(r.id);
-                            setIsPaidDue(false);
-                            handleNavigate('due-memo');
+                            navigateTo('due-memo', { dueId: r.id, isPaidDue: false });
                           } else if (r.screen === 'memo' && r.lotNumber) {
-                            setCurrentLot(r.lotNumber);
-                            handleNavigate('memo');
+                            navigateTo('memo', { lot: r.lotNumber });
                           }
                         }}
                         onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
@@ -631,11 +891,11 @@ function App() {
                 <Clock size={24} />
               </button>
               <button 
-                className="sidebar-nav-item disabled"
-                onClick={() => {}}
-                title={t('blank')}
+                className={`sidebar-nav-item ${currentScreen === 'stock' ? 'active' : ''}`}
+                onClick={() => handleNavigate('stock')}
+                title={t('stockAccount') || 'স্টক'}
               >
-                <Plus size={24} />
+                <Package size={24} />
               </button>
               <button 
                 className={`sidebar-nav-item ${currentScreen.startsWith('investor-') ? 'active' : ''}`}
@@ -664,10 +924,10 @@ function App() {
           )}
           
           <div className="sidebar-bottom-nav">
-            <button className="btn-icon-wrapper" onClick={() => setIsSettingsOpen(true)}>
+            <button className="btn-icon-wrapper" onClick={openSettings}>
               <Settings size={36} className="sidebar-icon" />
             </button>
-            <button className="btn-icon-wrapper" title={(session?.user?.email || userEmail) || "Login"} onClick={() => (session?.user?.email || userEmail) ? setIsUserMenuOpen(true) : handleLogin()}>
+            <button className="btn-icon-wrapper" title={(session?.user?.email || userEmail) || "Login"} onClick={() => (session?.user?.email || userEmail) ? openUserMenu() : handleLogin()}>
               <User size={36} className="sidebar-icon" />
             </button>
           </div>
@@ -761,14 +1021,10 @@ function App() {
             <SalesLotsScreen 
               onNavigate={handleNavigate} 
               onSelectLot={(lot) => {
-                setCurrentSalesLot(lot);
-                handleNavigate('sales-memo-list');
+                navigateTo('sales-memo-list', { salesLot: lot });
               }}
               onSelectMemo={(memoId, lotNumber) => {
-                if (lotNumber !== null) setCurrentSalesLot(lotNumber);
-                setCurrentSalesMemoId(memoId);
-                setSalesMemoReturnScreen('sales-lots');
-                handleNavigate('sales-memo');
+                navigateTo('sales-memo', { salesLot: lotNumber, salesMemoId: memoId, salesMemoReturnScreen: 'sales-lots' });
               }}
             />
           )}
@@ -777,9 +1033,7 @@ function App() {
               onNavigate={handleNavigate} 
               lotNumber={currentSalesLot}
               onSelectMemo={(memoId) => {
-                setCurrentSalesMemoId(memoId);
-                setSalesMemoReturnScreen('sales-memo-list');
-                handleNavigate('sales-memo');
+                navigateTo('sales-memo', { salesMemoId: memoId, salesMemoReturnScreen: 'sales-memo-list' });
               }}
             />
           )}
@@ -799,7 +1053,7 @@ function App() {
           )}
           {currentScreen === 'investor-password' && (
             <PasswordScreen
-              onSuccess={() => handleNavigate('investor-list')}
+              onSuccess={() => navigateTo('investor-list', undefined, true)}
               onBack={() => handleNavigate('dashboard')}
               pinKey="investorPin"
               title={t('investorAccount')}
@@ -809,8 +1063,7 @@ function App() {
             <InvestorListScreen
               onNavigate={handleNavigate}
               onSelectInvestor={(id) => {
-                setCurrentInvestorId(id);
-                handleNavigate('investor-memos-list');
+                navigateTo('investor-memos-list', { investorId: id });
               }}
             />
           )}
@@ -819,8 +1072,7 @@ function App() {
               onNavigate={handleNavigate}
               investorId={currentInvestorId}
               onSelectMemo={(memoId) => {
-                setCurrentInvestorMemoId(memoId);
-                handleNavigate('investor-memo');
+                navigateTo('investor-memo', { investorMemoId: memoId });
               }}
             />
           )}
@@ -831,16 +1083,22 @@ function App() {
               memoId={currentInvestorMemoId}
             />
           )}
+          {currentScreen === 'stock' && (
+            <StockScreen 
+              onNavigate={handleNavigate}
+              onSelectPurchaseLot={handleSelectLot}
+            />
+          )}
         </main>
       </div>
 
       {/* Settings Modal */}
       {isSettingsOpen && (
-        <div className="modal-overlay" onClick={() => setIsSettingsOpen(false)}>
+        <div className="modal-overlay" onClick={closeSettings}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{t('settings')}</h2>
-              <button className="close-button" onClick={() => setIsSettingsOpen(false)}>
+              <button className="close-button" onClick={closeSettings}>
                 <X size={24} />
               </button>
             </div>
@@ -864,7 +1122,7 @@ function App() {
             {(localStorage.getItem('device_permission') === 'admin' || true) && (
               <div className="setting-item">
                 <span>Devices & Permissions</span>
-                <button className="btn btn-primary" onClick={() => { setIsSettingsOpen(false); setIsDeviceManagerOpen(true); }} style={{ fontSize: '0.9rem' }}>
+                <button className="btn btn-primary" onClick={() => { setIsSettingsOpen(false); openDeviceManager(); }} style={{ fontSize: '0.9rem' }}>
                   Manage Devices
                 </button>
               </div>
@@ -872,7 +1130,7 @@ function App() {
 
             <div className="setting-item">
               <span>Lot Passwords</span>
-              <button className="btn btn-secondary" onClick={() => { setIsSettingsOpen(false); setIsLotPasswordManagerOpen(true); }} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button className="btn btn-secondary" onClick={() => { setIsSettingsOpen(false); openLotPasswordManager(); }} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 Manage Lot Passwords
               </button>
             </div>
@@ -886,29 +1144,29 @@ function App() {
       )}
       {/* Lot Password Manager Modal */}
       {isLotPasswordManagerOpen && (
-        <div className="modal-overlay" onClick={() => setIsLotPasswordManagerOpen(false)} style={{ zIndex: 9999 }}>
+        <div className="modal-overlay" onClick={closeLotPasswordManager} style={{ zIndex: 9999 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ minWidth: '400px', maxWidth: '450px', background: 'var(--card-bg)', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <LotPasswordManager onClose={() => setIsLotPasswordManagerOpen(false)} />
+            <LotPasswordManager onClose={closeLotPasswordManager} />
           </div>
         </div>
       )}
       
       {/* Device Manager Modal */}
       {isDeviceManagerOpen && (
-        <div className="modal-overlay" onClick={() => setIsDeviceManagerOpen(false)} style={{ zIndex: 9999 }}>
+        <div className="modal-overlay" onClick={closeDeviceManager} style={{ zIndex: 9999 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ minWidth: '400px', background: 'var(--card-bg)', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <DeviceManager onClose={() => setIsDeviceManagerOpen(false)} />
+            <DeviceManager onClose={closeDeviceManager} />
           </div>
         </div>
       )}
 
       {/* User Menu Modal */}
       {isUserMenuOpen && (
-        <div className="modal-overlay" onClick={() => setIsUserMenuOpen(false)}>
+        <div className="modal-overlay" onClick={closeUserMenu}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">{t('account')}</h2>
-              <button className="close-button" onClick={() => setIsUserMenuOpen(false)}>
+              <button className="close-button" onClick={closeUserMenu}>
                 <X size={24} />
               </button>
             </div>

@@ -8,6 +8,7 @@ import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
+import { getLotStock, type LotStockSummary } from '../utils/stockUtils';
 
 
 interface SalesMemoScreenProps {
@@ -178,6 +179,16 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const [showBusinessCallMenu, setShowBusinessCallMenu] = useState(false);
   const [showBusinessCallMenu2, setShowBusinessCallMenu2] = useState(false);
   const [showCustomerCallMenu, setShowCustomerCallMenu] = useState(false);
+  const [currentLotStock, setCurrentLotStock] = useState<LotStockSummary | null>(null);
+
+  useEffect(() => {
+    const rawLot = memoState.lotNumberInput ? parseInt(memoState.lotNumberInput, 10) : lotNumber;
+    if (rawLot && !isNaN(rawLot) && rawLot > 0) {
+      setCurrentLotStock(getLotStock(rawLot));
+    } else {
+      setCurrentLotStock(null);
+    }
+  }, [memoState.lotNumberInput, lotNumber]);
 
   const isMounted = useRef(false);
 
@@ -225,62 +236,98 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     try {
       const rawNum = targetLotInput ? parseInt(targetLotInput, 10) : null;
       const validLot = (rawNum !== null && !isNaN(rawNum) && rawNum > 0) ? rawNum : null;
-      const effectiveLot = validLot !== null ? validLot : lotNumber;
 
-      // 1. Save to effective lot storage key
-      const mainKey = `sales_memo_lot_${effectiveLot === null ? 'unassigned' : effectiveLot}_memo_${memoId}`;
-      localStorage.setItem(mainKey, JSON.stringify(currentState));
+      const stateToSave: MemoState = {
+        ...currentState,
+        lotNumberInput: validLot !== null ? validLot.toString() : ''
+      };
 
-      // Also ensure unassigned key has it if lotNumber was null
-      if (lotNumber === null && validLot !== null) {
-        localStorage.setItem(`sales_memo_lot_unassigned_memo_${memoId}`, JSON.stringify(currentState));
-      }
+      // 1. Save to destination storage key
+      const destKey = `sales_memo_lot_${validLot === null ? 'unassigned' : validLot}_memo_${memoId}`;
+      localStorage.setItem(destKey, JSON.stringify(stateToSave));
 
+      // Preserve stable local timestamp for new key so sorting in Global List never jumps
+      try {
+        const tsRaw = localStorage.getItem('local_timestamps');
+        let tsMap: Record<string, number> = tsRaw ? JSON.parse(tsRaw) : {};
+        let memoTimestamp = tsMap[`sales_memo_lot_${lotNumber ?? 'unassigned'}_memo_${memoId}`]
+          || tsMap[`due_memo_${memoId}`]
+          || (stateToSave.createdAt ? Date.parse(stateToSave.createdAt) : 0)
+          || (!isNaN(Number(memoId)) && Number(memoId) > 1000000000 ? Number(memoId) : 0);
+
+        if (!memoTimestamp || isNaN(memoTimestamp)) {
+          memoTimestamp = Date.now();
+        }
+        tsMap[destKey] = memoTimestamp;
+        localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
+      } catch(e) {}
+
+      // 2. Remove memo from all other lot storage keys so it fully moves out
       if (validLot !== null) {
-        // 2. Add validLot to sales_lots_list
-        const salesLotsStr = localStorage.getItem('sales_lots_list');
-        let salesLots: number[] = salesLotsStr ? JSON.parse(salesLotsStr) : [];
-        if (!salesLots.includes(validLot)) {
-          salesLots.push(validLot);
-          salesLots.sort((a, b) => a - b);
-          localStorage.setItem('sales_lots_list', JSON.stringify(salesLots));
-        }
-
-        // 3. Add memoId to sales_memo_list_{validLot}
-        const targetListKey = `sales_memo_list_${validLot}`;
-        const targetListStr = localStorage.getItem(targetListKey);
-        let targetList: string[] = targetListStr ? JSON.parse(targetListStr) : [];
-        if (!targetList.includes(memoId)) {
-          targetList.push(memoId);
-          localStorage.setItem(targetListKey, JSON.stringify(targetList));
-        }
-
-        // 4. Remove memoId from old list if moving between different lots
-        if (lotNumber !== null && lotNumber !== validLot) {
-          const oldListKey = `sales_memo_list_${lotNumber}`;
-          const oldListStr = localStorage.getItem(oldListKey);
-          if (oldListStr) {
-            let oldList: string[] = JSON.parse(oldListStr);
-            if (oldList.includes(memoId)) {
-              oldList = oldList.filter(id => id !== memoId);
-              localStorage.setItem(oldListKey, JSON.stringify(oldList));
-            }
-          }
-        } else if (lotNumber === null) {
-          const uListStr = localStorage.getItem('sales_memo_list_unassigned');
-          if (uListStr) {
-            let uList: string[] = JSON.parse(uListStr);
-            if (uList.includes(memoId)) {
-              uList = uList.filter(id => id !== memoId);
-              localStorage.setItem('sales_memo_list_unassigned', JSON.stringify(uList));
-            }
-          }
-        }
-
-        if (onLotChange) {
-          onLotChange(validLot);
+        localStorage.removeItem(`sales_memo_lot_unassigned_memo_${memoId}`);
+      }
+      for (let l = 1; l <= 50; l++) {
+        if (l !== validLot) {
+          localStorage.removeItem(`sales_memo_lot_${l}_memo_${memoId}`);
         }
       }
+
+      // 3. Update sales_memo_list_* for all lots
+      for (let l = 1; l <= 50; l++) {
+        const lKey = `sales_memo_list_${l}`;
+        const lStr = localStorage.getItem(lKey);
+        if (lStr) {
+          try {
+            const list: string[] = JSON.parse(lStr);
+            if (l === validLot) {
+              if (!list.includes(memoId)) {
+                list.push(memoId);
+                localStorage.setItem(lKey, JSON.stringify(list));
+              }
+            } else {
+              if (list.includes(memoId)) {
+                localStorage.setItem(lKey, JSON.stringify(list.filter(id => id !== memoId)));
+              }
+            }
+          } catch(e) {}
+        } else if (l === validLot) {
+          localStorage.setItem(lKey, JSON.stringify([memoId]));
+        }
+      }
+
+      // Handle unassigned list
+      const uKey = 'sales_memo_list_unassigned';
+      const uStr = localStorage.getItem(uKey);
+      let uList: string[] = uStr ? JSON.parse(uStr) : [];
+      if (validLot === null) {
+        if (!uList.includes(memoId)) {
+          uList.push(memoId);
+          localStorage.setItem(uKey, JSON.stringify(uList));
+        }
+      } else {
+        if (uList.includes(memoId)) {
+          localStorage.setItem(uKey, JSON.stringify(uList.filter(id => id !== memoId)));
+        }
+      }
+
+      // 4. Update due_memo if exists
+      const dueKey = `due_memo_${memoId}`;
+      const dueStr = localStorage.getItem(dueKey);
+      if (dueStr) {
+        try {
+          const dueData = JSON.parse(dueStr);
+          dueData.lotNumber = validLot !== null ? validLot.toString() : '';
+          if (dueData.memoState) {
+            dueData.memoState.lotNumberInput = validLot !== null ? validLot.toString() : '';
+          }
+          localStorage.setItem(dueKey, JSON.stringify(dueData));
+        } catch(e) {}
+      }
+
+      if (onLotChange) {
+        onLotChange(validLot);
+      }
+
       window.dispatchEvent(new Event('storage'));
     } catch(e) {}
   };
@@ -788,6 +835,20 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                           onAddRow={handleAddRow}
                           isLastRow={isLastRow}
                         />
+                        {currentLotStock && (() => {
+                          const sItem = currentLotStock.items.find(
+                            it => (entry.serialNo && it.serialNo === Number(entry.serialNo)) || 
+                                  (entry.name && it.name.trim().toLowerCase() === entry.name.trim().toLowerCase())
+                          );
+                          if (sItem) {
+                            return (
+                              <div style={{ fontSize: '0.75rem', color: sItem.remainingKg > 0 ? '#72be44' : '#ff5252', marginTop: '2px', fontWeight: 500 }}>
+                                স্টক: {sItem.remainingKg} kg {sItem.remainingKg <= 0 ? '(শেষ)' : ''}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </td>
                       <td data-label={t('weightKg')}>
                         <div style={{ display: 'flex', alignItems: 'center' }}>

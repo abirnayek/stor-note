@@ -27,8 +27,9 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
     window.addEventListener('storage', loadLots);
     return () => window.removeEventListener('storage', loadLots);
   }, []);
-      const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [showNewLotModal, setShowNewLotModal] = useState(false);
+  const [newLotNumber, setNewLotNumber] = useState('');
   const [newLotPassword, setNewLotPassword] = useState('');
   const { t, language } = useLanguage();
   const devicePermission = localStorage.getItem('device_permission');
@@ -41,22 +42,30 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
   });
 
   const handleAddLot = () => {
-    setShowNewLotModal(true);
+    const nextLot = lots.length > 0 ? Math.max(...lots) + 1 : 1;
+    setNewLotNumber(nextLot.toString());
     setNewLotPassword('');
+    setShowNewLotModal(true);
   };
 
   const confirmAddLot = (skipPassword = false) => {
-    const nextLot = lots.length > 0 ? Math.max(...lots) + 1 : 1;
-    const newLots = [...lots, nextLot];
-    setLots(newLots);
-    localStorage.setItem('purchase_lots_list', JSON.stringify(newLots));
+    const parsedNum = parseInt(newLotNumber, 10);
+    const targetLot = (!isNaN(parsedNum) && parsedNum > 0)
+      ? parsedNum
+      : (lots.length > 0 ? Math.max(...lots) + 1 : 1);
+
+    if (!lots.includes(targetLot)) {
+      const newLots = [...lots, targetLot].sort((a, b) => a - b);
+      setLots(newLots);
+      localStorage.setItem('purchase_lots_list', JSON.stringify(newLots));
+    }
     
     if (!skipPassword && newLotPassword.trim() !== '') {
-      localStorage.setItem(`lot_password_${nextLot}`, newLotPassword.trim());
+      localStorage.setItem(`lot_password_${targetLot}`, newLotPassword.trim());
     }
     
     setShowNewLotModal(false);
-    onSelectLot(nextLot);
+    onSelectLot(targetLot);
   };
 
   const handleDeleteLot = (lot: number, e: React.MouseEvent) => {
@@ -225,10 +234,23 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
         <div className="modal-overlay" onClick={() => setShowNewLotModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">লটের পাসওয়ার্ড সেট করুন</h2>
+              <h2 className="modal-title">নতুন লট তৈরি করুন</h2>
             </div>
             
-            <div className="form-group" style={{ marginTop: '1rem' }}>
+            <div className="form-group" style={{ marginTop: '1rem', marginBottom: '1rem' }}>
+              <label>লট নম্বর</label>
+              <input 
+                type="number" 
+                value={newLotNumber}
+                onChange={(e) => setNewLotNumber(e.target.value)}
+                placeholder="লট নম্বর লিখুন (যেমন: 1, 2, 3)"
+                className="modal-input"
+                min="1"
+                autoFocus
+              />
+            </div>
+
+            <div className="form-group">
               <label>পাসওয়ার্ড (ঐচ্ছিক)</label>
               <input 
                 type="password" 
@@ -236,7 +258,6 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
                 onChange={(e) => setNewLotPassword(e.target.value)}
                 placeholder="নতুন পাসওয়ার্ড দিন..."
                 className="modal-input"
-                autoFocus
               />
             </div>
             

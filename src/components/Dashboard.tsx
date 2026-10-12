@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingCart, Clock, ShoppingBag, TrendingUp } from 'lucide-react';
+import { ShoppingCart, Clock, ShoppingBag, TrendingUp, Package } from 'lucide-react';
 import { type Screen } from '../App';
 import { useLanguage } from '../i18n/LanguageContext';
 
@@ -31,6 +31,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         <div className="dashboard-card action-card" onClick={() => onNavigate('lots')}>
           <ShoppingBag size={48} className="card-icon" />
           <h3>{t('purchaseAccount')}</h3>
+        </div>
+
+        <div className="dashboard-card" onClick={() => onNavigate('stock')}>
+          <Package size={48} className="card-icon" style={{ color: '#72be44' }} />
+          <h3>{t('stockAccount')}</h3>
         </div>
       </div>
     </div>

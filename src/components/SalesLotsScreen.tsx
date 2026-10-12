@@ -12,6 +12,7 @@ interface SalesLotsScreenProps {
 }
 
 interface GlobalMemo {
+  uniqueKey: string;
   id: string;
   lotNumber: number | null;
   name: string;
@@ -28,7 +29,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
   });
   
   const [globalMemos, setGlobalMemos] = useState<GlobalMemo[]>([]);
-      const [showNewLotModal, setShowNewLotModal] = useState(false);
+  const [showNewLotModal, setShowNewLotModal] = useState(false);
+  const [newLotNumber, setNewLotNumber] = useState('');
   const [newLotPassword, setNewLotPassword] = useState('');
   const { t, language } = useLanguage();
   const devicePermission = localStorage.getItem('device_permission');
@@ -44,11 +46,37 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
     const loadGlobalMemos = () => {
       const allMemosMap = new Map<string, GlobalMemo>();
 
-      const processMemo = (memoId: string, lotKey: number | null, memoObj: any) => {
+      // Read local_timestamps for exact, stable save timestamps
+      let localTimestamps: Record<string, number> = {};
+      try {
+        const tsRaw = localStorage.getItem('local_timestamps');
+        if (tsRaw) localTimestamps = JSON.parse(tsRaw);
+      } catch (e) {}
+
+      const bnToEn = (str: string) => {
+        const bnDigits = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
+        let s = str;
+        bnDigits.forEach((d, i) => { s = s.split(d).join(i.toString()); });
+        const months: Record<string, string> = {
+          'জানু': 'Jan', 'ফেব': 'Feb', 'মার্চ': 'Mar', 'এপ্রি': 'Apr', 'মে': 'May', 'জুন': 'Jun',
+          'জুল': 'Jul', 'আগ': 'Aug', 'সেপ্টে': 'Sep', 'অক্টো': 'Oct', 'নভে': 'Nov', 'ডিসে': 'Dec'
+        };
+        Object.entries(months).forEach(([bn, en]) => { s = s.split(bn).join(en); });
+        return s;
+      };
+
+      const processMemo = (memoId: string, lotKey: number | null, memoObj: any, sourceKey?: string) => {
+        const rawLot = lotKey !== null ? lotKey : (memoObj.lotNumberInput ? Number(memoObj.lotNumberInput) : (memoObj.lotNumber ? Number(memoObj.lotNumber) : null));
+        const effectiveLot = (rawLot !== null && !isNaN(rawLot)) ? rawLot : null;
+        
+        // Globally unique identity per memo so different lots don't collide, and duplicate scans merge cleanly
+        const uniqueKey = effectiveLot !== null ? `lot_${effectiveLot}_memo_${memoId}` : `unassigned_memo_${memoId}`;
+
+        if (allMemosMap.has(uniqueKey)) return;
+
         let name = memoObj.customerName || memoObj.name || memoObj.supplierName || `Memo ${memoId}`;
         let statusColor = '#aaa';
         let statusText = 'Draft';
-        let timestamp = Number(memoId) || Date.now();
         let totalAmount = 0;
 
         if (memoObj.status === 'paid' || memoObj.paidDate) {
@@ -59,12 +87,47 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
           statusText = 'Due';
         }
 
-        if (memoObj.createdAt) {
-          const parsed = Date.parse(memoObj.createdAt);
+        // Determine stable timestamp (must be 100% deterministic, never dynamic Date.now())
+        let timestamp = 0;
+
+        // 1. Check local_timestamps
+        if (sourceKey && localTimestamps[sourceKey]) {
+          timestamp = Number(localTimestamps[sourceKey]);
+        }
+        if (!timestamp && effectiveLot !== null && localTimestamps[`sales_memo_lot_${effectiveLot}_memo_${memoId}`]) {
+          timestamp = Number(localTimestamps[`sales_memo_lot_${effectiveLot}_memo_${memoId}`]);
+        }
+        if (!timestamp && localTimestamps[`due_memo_${memoId}`]) {
+          timestamp = Number(localTimestamps[`due_memo_${memoId}`]);
+        }
+
+        // 2. Check memoObj.updatedAt
+        if (!timestamp && memoObj.updatedAt) {
+          const parsed = Date.parse(memoObj.updatedAt);
           if (!isNaN(parsed)) timestamp = parsed;
-        } else if (memoObj.date) {
-          const parsed = Date.parse(memoObj.date);
-          if (!isNaN(parsed)) timestamp = parsed;
+        }
+
+        // 3. Check memoObj.createdAt or memoObj.date (with Bengali conversion)
+        if (!timestamp && (memoObj.createdAt || memoObj.date)) {
+          const rawDate = String(memoObj.createdAt || memoObj.date);
+          const parsed = Date.parse(rawDate);
+          if (!isNaN(parsed)) {
+            timestamp = parsed;
+          } else {
+            const enParsed = Date.parse(bnToEn(rawDate));
+            if (!isNaN(enParsed)) timestamp = enParsed;
+          }
+        }
+
+        // 4. If memoId is a millisecond timestamp
+        if (!timestamp && !isNaN(Number(memoId)) && Number(memoId) > 1000000000) {
+          timestamp = Number(memoId);
+        }
+
+        // 5. Stable fallback: numeric ID or 0 (NEVER random Date.now())
+        if (!timestamp) {
+          const numId = Number(memoId);
+          timestamp = !isNaN(numId) ? numId : 0;
         }
 
         if (memoObj.entries && Array.isArray(memoObj.entries)) {
@@ -89,9 +152,10 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
           totalAmount = Number(memoObj.totalBill) || 0;
         }
 
-        allMemosMap.set(memoId, {
+        allMemosMap.set(uniqueKey, {
+          uniqueKey,
           id: memoId,
-          lotNumber: lotKey,
+          lotNumber: effectiveLot,
           name,
           statusText,
           statusColor,
@@ -100,7 +164,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         });
       };
 
-      // 1. Scan all sales_memo_list_* and sales_memo_list_lot_* keys
+      // 1. Scan all sales_memo_list_* keys
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (!key) continue;
@@ -117,7 +181,6 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
               }
 
               memoIds.forEach(memoId => {
-                if (allMemosMap.has(memoId)) return;
                 const possibleDataKeys = [
                   `sales_memo_lot_${lotKeyNum ?? 'unassigned'}_memo_${memoId}`,
                   `sales_memo_lot_unassigned_memo_${memoId}`,
@@ -128,20 +191,24 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                 }
 
                 let foundData: any = null;
+                let foundKey = '';
                 for (const dKey of possibleDataKeys) {
                   const str = localStorage.getItem(dKey);
                   if (str) {
-                    try { foundData = JSON.parse(str); break; } catch(e) {}
+                    try { 
+                      foundData = JSON.parse(str); 
+                      foundKey = dKey;
+                      break; 
+                    } catch(e) {}
                   }
                 }
 
                 if (foundData) {
-                  processMemo(memoId, lotKeyNum, foundData);
+                  processMemo(memoId, lotKeyNum, foundData, foundKey);
                 } else {
-                  // Fallback: search in due_memo_*
                   const dueStr = localStorage.getItem(`due_memo_${memoId}`);
                   if (dueStr) {
-                    try { processMemo(memoId, lotKeyNum, JSON.parse(dueStr)); } catch(e) {}
+                    try { processMemo(memoId, lotKeyNum, JSON.parse(dueStr), `due_memo_${memoId}`); } catch(e) {}
                   }
                 }
               });
@@ -157,17 +224,15 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
           const parts = key.split('_memo_');
           if (parts.length === 2) {
             const memoId = parts[1];
-            if (!allMemosMap.has(memoId)) {
-              try {
-                const memoObj = JSON.parse(localStorage.getItem(key) || '{}');
-                let lotNum: number | null = null;
-                const lotPart = parts[0].replace('sales_memo_lot_', '');
-                if (lotPart !== 'unassigned' && !isNaN(Number(lotPart))) {
-                  lotNum = Number(lotPart);
-                }
-                processMemo(memoId, lotNum, memoObj);
-              } catch(e) {}
-            }
+            try {
+              const memoObj = JSON.parse(localStorage.getItem(key) || '{}');
+              let lotNum: number | null = null;
+              const lotPart = parts[0].replace('sales_memo_lot_', '');
+              if (lotPart !== 'unassigned' && !isNaN(Number(lotPart))) {
+                lotNum = Number(lotPart);
+              }
+              processMemo(memoId, lotNum, memoObj, key);
+            } catch(e) {}
           }
         }
       }
@@ -177,18 +242,16 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         const key = localStorage.key(i);
         if (key && key.startsWith('due_memo_')) {
           const memoId = key.replace('due_memo_', '');
-          if (!allMemosMap.has(memoId)) {
-            try {
-              const dueObj = JSON.parse(localStorage.getItem(key) || '{}');
-              if (dueObj.type === 'regular' || dueObj.type === 'permanent' || dueObj.customerName || (dueObj.name && dueObj.type !== 'purchase')) {
-                let lotNum: number | null = null;
-                if (dueObj.lotNumber && !isNaN(Number(dueObj.lotNumber))) {
-                  lotNum = Number(dueObj.lotNumber);
-                }
-                processMemo(memoId, lotNum, dueObj.memoState || dueObj);
+          try {
+            const dueObj = JSON.parse(localStorage.getItem(key) || '{}');
+            if (dueObj.type === 'regular' || dueObj.type === 'permanent' || dueObj.customerName || (dueObj.name && dueObj.type !== 'purchase')) {
+              let lotNum: number | null = null;
+              if (dueObj.lotNumber && !isNaN(Number(dueObj.lotNumber))) {
+                lotNum = Number(dueObj.lotNumber);
               }
-            } catch(e) {}
-          }
+              processMemo(memoId, lotNum, dueObj.memoState || dueObj, key);
+            }
+          } catch(e) {}
         }
       }
 
@@ -199,14 +262,12 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
           try {
             const dueIds: string[] = JSON.parse(duesStr);
             dueIds.forEach(dueId => {
-              if (!allMemosMap.has(dueId)) {
-                const dueDataStr = localStorage.getItem(`due_memo_${dueId}`);
-                if (dueDataStr) {
-                  try {
-                    const dueObj = JSON.parse(dueDataStr);
-                    processMemo(dueId, null, dueObj.memoState || dueObj);
-                  } catch(e) {}
-                }
+              const dueDataStr = localStorage.getItem(`due_memo_${dueId}`);
+              if (dueDataStr) {
+                try {
+                  const dueObj = JSON.parse(dueDataStr);
+                  processMemo(dueId, null, dueObj.memoState || dueObj, `due_memo_${dueId}`);
+                } catch(e) {}
               }
             });
           } catch(e) {}
@@ -214,7 +275,32 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
       });
 
       const allMemos = Array.from(allMemosMap.values());
-      allMemos.sort((a, b) => b.timestamp - a.timestamp);
+      
+      // Deterministic 4-level stable sorting: prevents any jumping/shuffling
+      allMemos.sort((a, b) => {
+        // 1. Primary: descending by timestamp (newest first)
+        if (b.timestamp !== a.timestamp) {
+          return b.timestamp - a.timestamp;
+        }
+        // 2. Secondary tie-breaker: Lot Number (Lot 2 before Lot 1)
+        const lotA = a.lotNumber ?? -1;
+        const lotB = b.lotNumber ?? -1;
+        if (lotB !== lotA) {
+          return lotB - lotA;
+        }
+        // 3. Tertiary tie-breaker: Memo ID descending
+        if (a.id !== b.id) {
+          const numA = Number(a.id);
+          const numB = Number(b.id);
+          if (!isNaN(numA) && !isNaN(numB)) {
+            return numB - numA;
+          }
+          return b.id.localeCompare(a.id, undefined, { numeric: true });
+        }
+        // 4. Quaternary tie-breaker: Name alphabetical
+        return a.name.localeCompare(b.name);
+      });
+
       setGlobalMemos(allMemos);
     };
 
@@ -225,8 +311,10 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
   }, [lots]);
 
   const handleAddLot = () => {
-    setShowNewLotModal(true);
+    const nextLot = lots.length > 0 ? Math.max(...lots) + 1 : 1;
+    setNewLotNumber(nextLot.toString());
     setNewLotPassword('');
+    setShowNewLotModal(true);
   };
   
   const handleAddMemo = () => {
@@ -239,74 +327,32 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
   };
 
   const confirmAddLot = (skipPassword = false) => {
-    const nextLot = lots.length > 0 ? Math.max(...lots) + 1 : 1;
-    const newLots = [...lots, nextLot];
-    setLots(newLots);
-    localStorage.setItem('sales_lots_list', JSON.stringify(newLots));
+    const parsedNum = parseInt(newLotNumber, 10);
+    const targetLot = (!isNaN(parsedNum) && parsedNum > 0)
+      ? parsedNum
+      : (lots.length > 0 ? Math.max(...lots) + 1 : 1);
+
+    if (!lots.includes(targetLot)) {
+      const newLots = [...lots, targetLot].sort((a, b) => a - b);
+      setLots(newLots);
+      localStorage.setItem('sales_lots_list', JSON.stringify(newLots));
+    }
     
     if (!skipPassword && newLotPassword.trim() !== '') {
-      localStorage.setItem(`sales_lot_password_${nextLot}`, newLotPassword.trim());
+      localStorage.setItem(`sales_lot_password_${targetLot}`, newLotPassword.trim());
     }
     
     setShowNewLotModal(false);
-    onSelectLot(nextLot);
+    onSelectLot(targetLot);
   };
 
   const handleDeleteLot = (lot: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('লট নম্বরটি ডিলিট করতে চান? এই লটের সকল মেমো "সকল মেমো (Global List)" এবং বকেয়া হিসাবে স্থানান্তরিত ও সংরক্ষিত থাকবে।')) {
-      const listStr = localStorage.getItem(`sales_memo_list_${lot}`);
-      if (listStr) {
-        try {
-          const memoIds: string[] = JSON.parse(listStr);
-          const unassignedListStr = localStorage.getItem('sales_memo_list_unassigned');
-          const unassignedList: string[] = unassignedListStr ? JSON.parse(unassignedListStr) : [];
-          
-          memoIds.forEach((mId: string) => {
-            const oldKey = `sales_memo_lot_${lot}_memo_${mId}`;
-            const memoStr = localStorage.getItem(oldKey);
-            
-            if (memoStr) {
-              try {
-                const memo = JSON.parse(memoStr);
-                memo.lotNumberInput = '';
-                const newKey = `sales_memo_lot_unassigned_memo_${mId}`;
-                localStorage.setItem(newKey, JSON.stringify(memo));
-                localStorage.removeItem(oldKey);
-              } catch(err) {
-                localStorage.setItem(`sales_memo_lot_unassigned_memo_${mId}`, memoStr);
-                localStorage.removeItem(oldKey);
-              }
-            }
-            
-            const dueKey = `due_memo_${mId}`;
-            const dueStr = localStorage.getItem(dueKey);
-            if (dueStr) {
-              try {
-                const dueData = JSON.parse(dueStr);
-                dueData.lotNumber = '';
-                if (dueData.memoState) {
-                  dueData.memoState.lotNumberInput = '';
-                }
-                localStorage.setItem(dueKey, JSON.stringify(dueData));
-              } catch(err) {}
-            }
-            
-            if (!unassignedList.includes(mId)) {
-              unassignedList.push(mId);
-            }
-          });
-          
-          localStorage.setItem('sales_memo_list_unassigned', JSON.stringify(unassignedList));
-        } catch(e) {}
-      }
-      
-      localStorage.removeItem(`sales_memo_list_${lot}`);
-      localStorage.removeItem(`sales_lot_password_${lot}`);
-
+    if (window.confirm(`লট নম্বর ${lot} ফোল্ডারটি ডিলিট করতে চান? এই লটের মেমোগুলো অক্ষত থাকবে এবং "সকল মেমো (Global List)" এ দেখতে পাবেন।`)) {
       const newLots = lots.filter(l => l !== lot);
       setLots(newLots);
       localStorage.setItem('sales_lots_list', JSON.stringify(newLots));
+      localStorage.removeItem(`sales_lot_password_${lot}`);
       window.dispatchEvent(new Event('storage'));
     }
   };
@@ -416,8 +462,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         </div>
         )}
 
-        {globalMemos.map((memo, idx) => (
-            <ProtectedMemoWrapper key={`global_memo_${memo.lotNumber ?? 'unassigned'}_${memo.id}_${idx}`} passwordKey={`memo_password_${memo.id}`} onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}>
+        {globalMemos.map(memo => (
+            <ProtectedMemoWrapper key={memo.uniqueKey} passwordKey={`memo_password_${memo.id}`} onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}>
             <div className="lot-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
@@ -459,10 +505,23 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         <div className="modal-overlay" onClick={() => setShowNewLotModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">লটের পাসওয়ার্ড সেট করুন</h2>
+              <h2 className="modal-title">নতুন লট ফোল্ডার তৈরি করুন</h2>
             </div>
             
-            <div className="form-group" style={{ marginTop: '1rem' }}>
+            <div className="form-group" style={{ marginTop: '1rem', marginBottom: '1rem' }}>
+              <label>লট নম্বর</label>
+              <input 
+                type="number" 
+                value={newLotNumber}
+                onChange={(e) => setNewLotNumber(e.target.value)}
+                placeholder="লট নম্বর লিখুন (যেমন: 1, 2, 3)"
+                className="modal-input"
+                min="1"
+                autoFocus
+              />
+            </div>
+
+            <div className="form-group">
               <label>পাসওয়ার্ড (ঐচ্ছিক)</label>
               <input 
                 type="password" 
@@ -470,7 +529,6 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                 onChange={(e) => setNewLotPassword(e.target.value)}
                 placeholder="নতুন পাসওয়ার্ড দিন..."
                 className="modal-input"
-                autoFocus
               />
             </div>
             
