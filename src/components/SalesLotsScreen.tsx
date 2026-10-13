@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { type Screen } from '../App';
-import { Plus, ChevronLeft, Package, Calendar, Trash2, FileText } from 'lucide-react';
+import { Plus, ChevronLeft, Package, Calendar, Trash2, FileText, Folder } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { moveToTrash } from '../utils/trashUtils';
+import { MONTHS, parseMemoMonthYear, enToBnDigits } from '../utils/dateUtils';
 
 interface SalesLotsScreenProps {
   onNavigate: (screen: Screen) => void;
   onSelectLot: (lotNumber: number) => void;
   onSelectMemo: (memoId: string, lotNumber: number | null) => void;
+  onSelectMonth?: (monthIndex: number, year: number) => void;
 }
 
 interface GlobalMemo {
@@ -21,15 +23,20 @@ interface GlobalMemo {
   timestamp: number;
   totalAmount: number;
   sourceKey?: string;
+  month?: number;
+  year?: number;
+  dateStr?: string;
+  timeStr?: string;
 }
 
-const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectLot, onSelectMemo }) => {
+const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectLot, onSelectMemo, onSelectMonth }) => {
   const [lots, setLots] = useState<number[]>(() => {
     const saved = localStorage.getItem('sales_lots_list');
     return saved ? JSON.parse(saved) : [];
   });
   
   const [globalMemos, setGlobalMemos] = useState<GlobalMemo[]>([]);
+  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
   const [showNewLotModal, setShowNewLotModal] = useState(false);
   const [newLotNumber, setNewLotNumber] = useState('');
   const [newLotPassword, setNewLotPassword] = useState('');
@@ -42,6 +49,18 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
     day: 'numeric',
     year: 'numeric'
   });
+
+  const getMonthStats = (mIndex: number, yr: number) => {
+    let count = 0;
+    let totalAmount = 0;
+    globalMemos.forEach(m => {
+      if (m.month === mIndex && m.year === yr) {
+        count++;
+        totalAmount += m.totalAmount;
+      }
+    });
+    return { count, totalAmount };
+  };
 
   useEffect(() => {
     const loadGlobalMemos = () => {
@@ -163,6 +182,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
           totalAmount = Number(memoObj.totalBill) || 0;
         }
 
+        const { month: mIdx, year: mYear, dateStr, timeStr } = parseMemoMonthYear(memoObj, timestamp);
+
         allMemosMap.set(memoId, {
           uniqueKey: memoId,
           id: memoId,
@@ -172,7 +193,11 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
           statusColor,
           timestamp,
           totalAmount,
-          sourceKey
+          sourceKey,
+          month: mIdx,
+          year: mYear,
+          dateStr: dateStr || memoObj.createdAt || '',
+          timeStr: timeStr || memoObj.createdAtTime || ''
         });
       };
 
@@ -515,7 +540,98 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
             ))}
           </div>
       
-      <h3 style={{ margin: '1rem 0', opacity: 0.8, fontSize: '1.1rem', borderTop: lots.length > 0 ? '1px solid rgba(255,255,255,0.1)' : 'none', paddingTop: lots.length > 0 ? '1.5rem' : '0' }}>
+      {/* 12 Monthly Folders Ribbon/Grid */}
+      <div style={{ margin: '1.5rem 0 1.2rem', borderTop: lots.length > 0 ? '1px solid rgba(255,255,255,0.1)' : 'none', paddingTop: lots.length > 0 ? '1.5rem' : '0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.9rem', flexWrap: 'wrap', gap: '0.8rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <Calendar size={22} style={{ color: '#72be44' }} />
+            <h3 style={{ margin: 0, opacity: 0.9, fontSize: '1.15rem', fontWeight: 'bold' }}>
+              {language === 'bn' ? `মাসভিত্তিক ফোল্ডারসমূহ (${enToBnDigits(selectedYear)})` : `Monthly Folders (${selectedYear})`}
+            </h3>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '8px' }}>
+            <button 
+              className="btn-icon" 
+              style={{ padding: '2px 6px', margin: 0, fontSize: '0.85rem' }}
+              onClick={() => setSelectedYear(prev => prev - 1)}
+              title="পূর্ববর্তী বছর"
+            >
+              ◀
+            </button>
+            <span style={{ fontWeight: 'bold', fontSize: '0.9rem', minWidth: '45px', textAlign: 'center' }}>
+              {language === 'bn' ? enToBnDigits(selectedYear) : selectedYear}
+            </span>
+            <button 
+              className="btn-icon" 
+              style={{ padding: '2px 6px', margin: 0, fontSize: '0.85rem' }}
+              onClick={() => setSelectedYear(prev => prev + 1)}
+              title="পরবর্তী বছর"
+            >
+              ▶
+            </button>
+          </div>
+        </div>
+
+        {/* 12 Months Cards Scroll Container */}
+        <div style={{
+          display: 'flex',
+          gap: '0.75rem',
+          overflowX: 'auto',
+          paddingBottom: '0.8rem',
+          scrollbarWidth: 'thin',
+          WebkitOverflowScrolling: 'touch'
+        }}>
+          {MONTHS.map(m => {
+            const mStats = getMonthStats(m.index, selectedYear);
+            return (
+              <div
+                key={m.index}
+                onClick={() => onSelectMonth && onSelectMonth(m.index, selectedYear)}
+                style={{
+                  flex: '0 0 auto',
+                  minWidth: '135px',
+                  background: mStats.count > 0 
+                    ? 'linear-gradient(135deg, rgba(20, 60, 40, 0.85), rgba(10, 35, 22, 0.95))' 
+                    : 'rgba(255, 255, 255, 0.04)',
+                  border: mStats.count > 0 
+                    ? '1px solid rgba(114, 190, 68, 0.45)' 
+                    : '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '12px',
+                  padding: '0.75rem 0.9rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.35rem'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#aaa', fontWeight: 'bold' }}>
+                    {language === 'bn' ? enToBnDigits(m.index.toString().padStart(2, '0')) : m.index.toString().padStart(2, '0')}
+                  </span>
+                  <Folder size={18} style={{ color: mStats.count > 0 ? '#72be44' : '#666' }} />
+                </div>
+                <div style={{ fontWeight: 'bold', fontSize: '0.98rem', color: '#fff' }}>
+                  {language === 'bn' ? m.nameBn : m.nameEn}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: mStats.count > 0 ? '#72be44' : '#666', fontWeight: 'bold' }}>
+                    {language === 'bn' ? enToBnDigits(mStats.count) : mStats.count} {language === 'bn' ? 'টি মেমো' : 'memos'}
+                  </span>
+                  {mStats.totalAmount > 0 && (
+                    <span style={{ fontSize: '0.75rem', color: '#ffb74d', fontWeight: 'bold' }}>
+                      ৳{Math.round(mStats.totalAmount).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <h3 style={{ margin: '1rem 0', opacity: 0.8, fontSize: '1.1rem' }}>
         সকল মেমো (Global List)
       </h3>
       
@@ -551,6 +667,13 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                       </span>
                     )}
                   </div>
+                  {memo.dateStr && (
+                    <div style={{ fontSize: '0.75rem', color: '#aaa', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                      <Calendar size={12} opacity={0.7} />
+                      <span>{memo.dateStr}</span>
+                      {memo.timeStr && <span>({memo.timeStr})</span>}
+                    </div>
+                  )}
                 </div>
                 {hasEditPermission && (
                         <div className="card-top-actions">

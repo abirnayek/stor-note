@@ -11,6 +11,7 @@ import DueListScreen from './components/DueListScreen';
 import SalesLotsScreen from './components/SalesLotsScreen';
 import SalesMemoScreen from './components/SalesMemoScreen';
 import SalesMemoListScreen from './components/SalesMemoListScreen';
+import MonthlySalesScreen from './components/MonthlySalesScreen';
 import DueMemoScreen from './components/DueMemoScreen';
 import DueSalesMemoScreen from './components/DueSalesMemoScreen';
 import PaidDueListScreen from './components/PaidDueListScreen';
@@ -27,7 +28,7 @@ import { LotPasswordManager } from './components/LotPasswordManager';
 
 import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow } from './utils/syncEngine';
 
-export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock';
+export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock' | 'sales-month-memos';
 
 export interface NavSnapshot {
   screen: Screen;
@@ -35,6 +36,8 @@ export interface NavSnapshot {
   salesLot?: number | null;
   salesMemoId?: string | null;
   salesMemoReturnScreen?: Screen;
+  selectedMonth?: number | null;
+  selectedYear?: number | null;
   dueType?: 'regular' | 'permanent' | 'purchase';
   dueId?: string | null;
   isPaidDue?: boolean;
@@ -54,7 +57,11 @@ const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
       if (current.salesMemoReturnScreen === 'sales-memo-list' && current.salesLot !== null) {
         return { screen: 'sales-memo-list', lot: null, salesLot: current.salesLot, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
+      if (current.salesMemoReturnScreen === 'sales-month-memos' && current.selectedMonth) {
+        return { screen: 'sales-month-memos', selectedMonth: current.selectedMonth, selectedYear: current.selectedYear, lot: null, salesLot: current.salesLot, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
       return { screen: 'sales-lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'sales-month-memos':
     case 'sales-memo-list':
       return { screen: 'sales-lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'sales-lots':
@@ -302,6 +309,8 @@ function App() {
   const [currentSalesLot, setCurrentSalesLot] = useState<number | null>(null);
   const [currentSalesMemoId, setCurrentSalesMemoId] = useState<string | null>(null);
   const [salesMemoReturnScreen, setSalesMemoReturnScreen] = useState<Screen>('sales-lots');
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
   const [currentDueType, setCurrentDueType] = useState<'regular' | 'permanent' | 'purchase'>('regular');
   const [currentDueId, setCurrentDueId] = useState<string | null>(null);
   const [isPaidDue, setIsPaidDue] = useState<boolean>(false);
@@ -386,6 +395,8 @@ function App() {
     setCurrentSalesLot(snapshot.salesLot ?? null);
     setCurrentSalesMemoId(snapshot.salesMemoId ?? null);
     setSalesMemoReturnScreen(snapshot.salesMemoReturnScreen ?? 'sales-lots');
+    setSelectedMonth(snapshot.selectedMonth ?? null);
+    setSelectedYear(snapshot.selectedYear ?? new Date().getFullYear());
     setCurrentDueType(snapshot.dueType ?? 'regular');
     setCurrentDueId(snapshot.dueId ?? null);
     setIsPaidDue(snapshot.isPaidDue ?? false);
@@ -488,6 +499,8 @@ function App() {
       salesLot: params?.salesLot !== undefined ? params.salesLot : (nextScreen.startsWith('sales-') ? currentSalesLot : null),
       salesMemoId: params?.salesMemoId !== undefined ? params.salesMemoId : (nextScreen === 'sales-memo' ? currentSalesMemoId : null),
       salesMemoReturnScreen: params?.salesMemoReturnScreen !== undefined ? params.salesMemoReturnScreen : salesMemoReturnScreen,
+      selectedMonth: params?.selectedMonth !== undefined ? params.selectedMonth : selectedMonth,
+      selectedYear: params?.selectedYear !== undefined ? params.selectedYear : selectedYear,
       dueType: params?.dueType !== undefined ? params.dueType : currentDueType,
       dueId: params?.dueId !== undefined ? params.dueId : (nextScreen === 'due-memo' || nextScreen === 'due-sales-memo' ? currentDueId : null),
       isPaidDue: params?.isPaidDue !== undefined ? params.isPaidDue : isPaidDue,
@@ -1030,6 +1043,28 @@ function App() {
               }}
               onSelectMemo={(memoId, lotNumber) => {
                 navigateTo('sales-memo', { salesLot: lotNumber, salesMemoId: memoId, salesMemoReturnScreen: 'sales-lots' });
+              }}
+              onSelectMonth={(mIdx, yr) => {
+                setSelectedMonth(mIdx);
+                setSelectedYear(yr);
+                navigateTo('sales-month-memos', { selectedMonth: mIdx, selectedYear: yr });
+              }}
+            />
+          )}
+          {currentScreen === 'sales-month-memos' && selectedMonth !== null && (
+            <MonthlySalesScreen
+              onNavigate={handleNavigate}
+              monthIndex={selectedMonth}
+              year={selectedYear}
+              onBack={() => handleNavigate('sales-lots')}
+              onSelectMemo={(memoId, lotNumber) => {
+                navigateTo('sales-memo', {
+                  salesLot: lotNumber,
+                  salesMemoId: memoId,
+                  salesMemoReturnScreen: 'sales-month-memos',
+                  selectedMonth,
+                  selectedYear
+                });
               }}
             />
           )}

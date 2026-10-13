@@ -239,6 +239,31 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
 
     localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(memoState));
     
+    // Also sync to canonical sales memo if this due memo is linked to sales
+    const salesMemoStr = localStorage.getItem(`sales_memo_${dueId}`);
+    if (salesMemoStr) {
+      try {
+        const parsedSales = JSON.parse(salesMemoStr);
+        if (memoState.name) parsedSales.customerName = memoState.name;
+        if (memoState.address) parsedSales.address = memoState.address;
+        if (memoState.mobile) parsedSales.mobile = memoState.mobile;
+        if (memoState.deposit !== undefined) parsedSales.paidAmount = memoState.deposit;
+        if (memoState.lotNumber) parsedSales.lotNumberInput = memoState.lotNumber;
+        if (memoState.entries && memoState.entries.length > 0) {
+          parsedSales.entries = memoState.entries.map((e: any) => ({
+            id: e.id,
+            name: e.name,
+            totalKg: e.totalKg,
+            weightUnit: e.weightUnit,
+            buyRate: e.buyRate,
+            profitPercent: e.profitPercent,
+            manualSaleRate: e.manualSaleRate
+          }));
+        }
+        localStorage.setItem(`sales_memo_${dueId}`, JSON.stringify(parsedSales));
+      } catch(err) {}
+    }
+    
     if (!isPaid) {
       // Add to dues list if it's a new due and not paid
       const existingDuesStr = localStorage.getItem(`dues_${dueType}`);

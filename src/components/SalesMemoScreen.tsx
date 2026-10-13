@@ -39,7 +39,11 @@ interface MemoState {
   customerType?: 'regular' | 'permanent' | '';
   status?: 'due' | 'paid' | 'draft';
   createdAt?: string;
+  createdAtTime?: string;
   updatedAt?: string;
+  updatedAtTime?: string;
+  isOriginalDate?: boolean;
+  customDate?: string;
   receiverSignature?: string;
   sellerSignature?: string;
   entries: FishEntry[];
@@ -49,10 +53,16 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const { t, language } = useLanguage();
   const memoRef = useRef<HTMLDivElement>(null);
   
-  const today = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
+  const now = new Date();
+  const today = now.toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
+  });
+  const currentTime = now.toLocaleTimeString(language === 'bn' ? 'bn-BD' : 'en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
   });
 
     const getInitialState = (): MemoState => {
@@ -107,6 +117,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
               customerType: dueData.type || 'regular',
               status: dueData.paidDate ? 'paid' : 'due',
               createdAt: dueData.date || today,
+              createdAtTime: currentTime,
               entries: dueData.entries || []
             });
           }
@@ -118,6 +129,14 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       try {
         const parsed = JSON.parse(saved);
         if (!parsed.createdAt) parsed.createdAt = today;
+        let createdTime = parsed.createdAtTime;
+        if (!createdTime && !isNaN(Number(memoId)) && Number(memoId) > 1000000000) {
+          createdTime = new Date(Number(memoId)).toLocaleTimeString(language === 'bn' ? 'bn-BD' : 'en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+          });
+        }
         return {
           customerName: parsed.customerName || parsed.supplierName || '',
           address: parsed.address || '',
@@ -127,7 +146,11 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           customerType: parsed.customerType || 'regular',
           status: parsed.status || 'draft',
           createdAt: parsed.createdAt || today,
+          createdAtTime: createdTime || currentTime,
           updatedAt: parsed.updatedAt,
+          updatedAtTime: parsed.updatedAtTime,
+          isOriginalDate: parsed.isOriginalDate !== undefined ? parsed.isOriginalDate : true,
+          customDate: parsed.customDate || '',
           receiverSignature: parsed.receiverSignature || '',
           sellerSignature: parsed.sellerSignature || localStorage.getItem('default_seller_signature') || '',
           entries: (parsed.entries && parsed.entries.length > 0) ? parsed.entries : [{ id: Date.now().toString(), name: '', totalKg: '', profitPercent: '' }]
@@ -145,6 +168,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       customerType: 'regular',
       status: 'draft',
       createdAt: today,
+      createdAtTime: currentTime,
+      isOriginalDate: true,
+      customDate: '',
       sellerSignature: localStorage.getItem('default_seller_signature') || '',
       entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', profitPercent: '' }]
     };
@@ -374,7 +400,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     }
 
     if (memoState.createdAt && memoState.createdAt !== today && memoState.updatedAt !== today) {
-      setMemoState(prev => ({ ...prev, updatedAt: today }));
+      const editTime = new Date().toLocaleTimeString(language === 'bn' ? 'bn-BD' : 'en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+      setMemoState(prev => ({ ...prev, updatedAt: today, updatedAtTime: editTime }));
       return;
     }
 
@@ -743,19 +774,72 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
             </div>
             
             <div className="meta-item right-align" style={{ alignSelf: 'flex-start', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <span className="memo-label-dark">{t('date')}: </span>
-                  <input
-                    type="text"
-                    value={memoState.createdAt || today}
-                    onChange={e => updateMemoState('createdAt', e.target.value)}
-                    style={{ background: 'transparent', border: 'none', color: '#fff', width: '120px', marginLeft: 10, textAlign: 'center', fontSize: 'inherit', fontFamily: 'inherit', outline: 'none' }}
-                  />
+
+                  {/* Date Mode Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextMode = !memoState.isOriginalDate;
+                      updateMemoState('isOriginalDate', nextMode);
+                      if (!nextMode && !memoState.customDate) {
+                        updateMemoState('customDate', memoState.updatedAt || memoState.createdAt || today);
+                      }
+                    }}
+                    title={memoState.isOriginalDate !== false ? 'বর্তমানে অরিজিনাল তারিখ দেখাচ্ছে। পরিবর্তন করতে ক্লিক করুন।' : 'বর্তমানে কাস্টম তারিখ দেখাচ্ছে। অরিজিনালে ফিরতে ক্লিক করুন।'}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      background: memoState.isOriginalDate !== false ? 'rgba(114, 190, 68, 0.2)' : 'rgba(255, 152, 0, 0.2)',
+                      border: memoState.isOriginalDate !== false ? '1px solid #72be44' : '1px solid #ff9800',
+                      color: memoState.isOriginalDate !== false ? '#72be44' : '#ffb74d',
+                      borderRadius: '16px',
+                      padding: '2px 8px',
+                      fontSize: '0.72rem',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {memoState.isOriginalDate !== false ? '🔘 অরিজিনাল' : '✏️ কাস্টম'}
+                  </button>
+
+                  {/* Date Display / Input */}
+                  {memoState.isOriginalDate !== false ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#fff', fontSize: '0.9rem' }}>
+                      <span style={{ fontWeight: 'bold' }}>{memoState.createdAt || today}</span>
+                      {memoState.createdAtTime && (
+                        <span style={{ fontSize: '0.75rem', color: '#aaa' }}>({memoState.createdAtTime})</span>
+                      )}
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={memoState.customDate || memoState.createdAt || today}
+                      onChange={e => updateMemoState('customDate', e.target.value)}
+                      placeholder="তারিখ লিখুন..."
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '4px',
+                        color: '#fff',
+                        width: '130px',
+                        padding: '2px 6px',
+                        textAlign: 'center',
+                        fontSize: '0.85rem',
+                        fontFamily: 'inherit',
+                        outline: 'none'
+                      }}
+                    />
+                  )}
                 </div>
+
                 {memoState.updatedAt && (
-                  <div style={{ fontSize: '0.75rem', color: '#ffb74d', marginTop: '2px' }}>
-                    পরিবর্তিত তারিখ: {memoState.updatedAt}
+                  <div style={{ fontSize: '0.72rem', color: '#ffb74d', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>পরিবর্তিত: {memoState.updatedAt}</span>
+                    {memoState.updatedAtTime && <span>({memoState.updatedAtTime})</span>}
                   </div>
                 )}
               </div>
