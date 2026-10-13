@@ -66,6 +66,8 @@ interface MemoState {
   entries: FishEntry[];
   deductions?: MemoDeduction[];
   note?: string;
+  commissionValue?: number | '';
+  commissionType?: 'percent' | 'flat';
 }
 
 const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber, memoId, onLotChange, onBack, defaultCustomerType }) => {
@@ -218,7 +220,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         sellerSignature: src.sellerSignature || dueData?.sellerSignature || localStorage.getItem('default_seller_signature') || '',
         entries: entriesToSet,
         deductions: rawDeductions,
-        note: src.note || dueData?.note || ''
+        note: src.note || dueData?.note || '',
+        commissionValue: src.commissionValue !== undefined ? src.commissionValue : (dueData?.commissionValue !== undefined ? dueData.commissionValue : ''),
+        commissionType: src.commissionType || dueData?.commissionType || 'percent'
       };
     }
 
@@ -237,7 +241,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       sellerSignature: localStorage.getItem('default_seller_signature') || '',
       entries: [{ id: Date.now().toString(), serialNo: '1', name: '', totalKg: '', weightUnit: 'kg', profitPercent: '', manualSaleRate: '' }],
       deductions: [],
-      note: ''
+      note: '',
+      commissionValue: '',
+      commissionType: 'percent'
     };
   };
 
@@ -537,7 +543,17 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     });
 
     const totalDeductions = (memoState.deductions || []).reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
-    const grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions) * 100) / 100);
+    const commVal = Number(memoState.commissionValue) || 0;
+    const commType = memoState.commissionType || 'percent';
+    let commissionAmount = 0;
+    if (commVal > 0) {
+      if (commType === 'flat') {
+        commissionAmount = commVal;
+      } else {
+        commissionAmount = Math.round((fishTotal * commVal / 100) * 100) / 100;
+      }
+    }
+    const grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions - commissionAmount) * 100) / 100);
     const dueAmount = Math.max(0, Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100);
     let currentStatus = memoState.status || 'draft';
 
@@ -585,6 +601,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         status: currentStatus,
         autoMessage: existingDueObj.autoMessage,
         deductions: memoState.deductions || [],
+        commissionValue: memoState.commissionValue !== undefined ? memoState.commissionValue : '',
+        commissionType: memoState.commissionType || 'percent',
+        commissionAmount: commissionAmount,
         entries: memoState.entries.map((e, i) => ({
           id: e.id,
           serialNo: (i+1).toString(),
@@ -778,6 +797,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
 
   let fishTotal = 0;
+  let totalProfitAmount = 0;
+  let totalLossAmount = 0;
+
   memoState.entries.forEach(entry => {
     let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
     let buyRateNum = Number(entry.buyRate) || 0;
@@ -802,13 +824,39 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     }
 
     if (weightInKg > 0 && saleRate > 0) {
-      fishTotal += weightInKg * saleRate;
+      const itemSale = weightInKg * saleRate;
+      fishTotal += itemSale;
+
+      if (buyRateNum > 0) {
+        const itemCost = weightInKg * buyRateNum;
+        const diff = itemSale - itemCost;
+        if (diff > 0) {
+          totalProfitAmount += diff;
+        } else if (diff < 0) {
+          totalLossAmount += Math.abs(diff);
+        }
+      } else if (currentProfitPercent > 0) {
+        const itemProfit = (itemSale * currentProfitPercent) / (100 + currentProfitPercent);
+        totalProfitAmount += itemProfit;
+      }
     }
   });
 
   const deductionsList = memoState.deductions || [];
   const totalDeductions = deductionsList.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
-  const grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions) * 100) / 100);
+
+  const commVal = Number(memoState.commissionValue) || 0;
+  const commType = memoState.commissionType || 'percent';
+  let commissionAmount = 0;
+  if (commVal > 0) {
+    if (commType === 'flat') {
+      commissionAmount = commVal;
+    } else {
+      commissionAmount = Math.round((fishTotal * commVal / 100) * 100) / 100;
+    }
+  }
+
+  const grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions - commissionAmount) * 100) / 100);
   const dueAmount = Math.max(0, Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100);
 
   const totalKgSum = memoState.entries.reduce((sum, entry) => {
@@ -816,6 +864,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     return sum + (entry.weightUnit === 'g' ? kg / 1000 : kg);
   }, 0);
   const totalItemsCount = memoState.entries.filter(e => (e.name && e.name.trim() !== '') || (Number(e.totalKg) > 0)).length;
+
 
   return (
     <div className="memo-screen">
@@ -869,8 +918,179 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
             </div>
           </div>
 
-          <div className="memo-dark-title">
-            <h2>{t('salesAccount')}</h2>
+          <div className="memo-sales-header-title-bar" style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0.8rem 2rem 0.6rem 2rem',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            marginBottom: '0.5rem',
+            gap: '12px',
+            flexWrap: 'wrap'
+          }}>
+            <h2 style={{
+              color: '#ffffff',
+              fontSize: '1.45rem',
+              fontWeight: 800,
+              margin: 0,
+              textDecoration: 'underline',
+              textUnderlineOffset: '6px',
+              whiteSpace: 'nowrap'
+            }}>
+              {t('salesAccount')}
+            </h2>
+
+            {/* 4 Header Metric & Action Boxes */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              flexWrap: 'wrap'
+            }}>
+              {/* Box 1: মোট বিক্রয় */}
+              <div style={{
+                background: 'linear-gradient(145deg, rgba(16, 44, 28, 0.9) 0%, rgba(8, 26, 16, 0.95) 100%)',
+                border: '1.5px solid rgba(114, 190, 68, 0.5)',
+                borderRadius: '8px',
+                padding: '4px 10px',
+                minWidth: '95px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
+              }}>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  {language === 'bn' ? 'মোট বিক্রয়' : 'Total Sales'}
+                </span>
+                <span style={{ fontSize: '0.96rem', color: '#ffffff', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  ৳ {fishTotal.toFixed(2)}
+                </span>
+              </div>
+
+              {/* Box 2: মোট লাভ */}
+              <div style={{
+                background: 'linear-gradient(145deg, rgba(20, 83, 45, 0.5) 0%, rgba(6, 46, 24, 0.85) 100%)',
+                border: '1.5px solid rgba(74, 222, 128, 0.6)',
+                borderRadius: '8px',
+                padding: '4px 10px',
+                minWidth: '90px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
+              }}>
+                <span style={{ fontSize: '0.72rem', color: '#86efac', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  {language === 'bn' ? 'মোট লাভ' : 'Total Profit'}
+                </span>
+                <span style={{ fontSize: '0.96rem', color: '#4ade80', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  + ৳ {totalProfitAmount.toFixed(2)}
+                </span>
+              </div>
+
+              {/* Box 3: মোট লস */}
+              <div style={{
+                background: 'linear-gradient(145deg, rgba(127, 29, 29, 0.35) 0%, rgba(69, 10, 10, 0.8) 100%)',
+                border: totalLossAmount > 0 ? '1.5px solid rgba(248, 113, 113, 0.7)' : '1.5px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: '8px',
+                padding: '4px 10px',
+                minWidth: '90px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
+              }}>
+                <span style={{ fontSize: '0.72rem', color: totalLossAmount > 0 ? '#fca5a5' : '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  {language === 'bn' ? 'মোট লস' : 'Total Loss'}
+                </span>
+                <span style={{ fontSize: '0.96rem', color: totalLossAmount > 0 ? '#f87171' : '#94a3b8', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  {totalLossAmount > 0 ? `- ৳ ${totalLossAmount.toFixed(2)}` : '৳ 0.00'}
+                </span>
+              </div>
+
+              {/* Box 4: কমিশন (% / ৳ toggle & input) */}
+              <div style={{
+                background: 'linear-gradient(145deg, rgba(16, 44, 28, 0.95) 0%, rgba(8, 26, 16, 0.95) 100%)',
+                border: '1.5px solid rgba(234, 179, 8, 0.7)',
+                borderRadius: '8px',
+                padding: '3px 8px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px',
+                minWidth: '135px',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                  <span style={{ fontSize: '0.72rem', color: '#fde047', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    {language === 'bn' ? 'কমিশন' : 'Commission'}
+                  </span>
+                  <div style={{
+                    display: 'inline-flex',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                    border: '1px solid rgba(234, 179, 8, 0.5)',
+                    background: 'rgba(0, 0, 0, 0.4)'
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => updateMemoState('commissionType', 'percent')}
+                      style={{
+                        padding: '1px 6px',
+                        fontSize: '0.72rem',
+                        fontWeight: 'bold',
+                        background: (memoState.commissionType || 'percent') === 'percent' ? '#eab308' : 'transparent',
+                        color: (memoState.commissionType || 'percent') === 'percent' ? '#000000' : '#cbd5e1',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                      title="Percentage (%)"
+                    >
+                      %
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateMemoState('commissionType', 'flat')}
+                      style={{
+                        padding: '1px 6px',
+                        fontSize: '0.72rem',
+                        fontWeight: 'bold',
+                        background: memoState.commissionType === 'flat' ? '#eab308' : 'transparent',
+                        color: memoState.commissionType === 'flat' ? '#000000' : '#cbd5e1',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                      title="Flat Amount (৳)"
+                    >
+                      ৳
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <MathInput
+                    style={{
+                      width: '65px',
+                      height: '24px',
+                      padding: '1px 5px',
+                      fontSize: '0.86rem',
+                      fontWeight: 'bold',
+                      background: 'rgba(0, 0, 0, 0.5)',
+                      border: '1px solid rgba(234, 179, 8, 0.45)',
+                      borderRadius: '4px',
+                      color: '#ffffff',
+                      textAlign: 'right'
+                    }}
+                    placeholder="0"
+                    value={memoState.commissionValue ?? ''}
+                    onChange={(val: any) => updateMemoState('commissionValue', val)}
+                  />
+                  {commissionAmount > 0 && (
+                    <span style={{ fontSize: '0.74rem', color: '#fca5a5', fontWeight: 700, whiteSpace: 'nowrap' }} title="Deducted commission">
+                      -৳{commissionAmount.toFixed(0)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="memo-top-meta" style={{ alignItems: 'flex-start' }}>
@@ -1619,6 +1839,27 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   ৳ {fishTotal.toFixed(2)}
                 </span>
               </div>
+
+              {/* Commission Deduction */}
+              {commissionAmount > 0 && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  color: '#fde047',
+                  fontSize: '0.84rem',
+                  paddingLeft: '8px',
+                  borderLeft: '2px solid rgba(234, 179, 8, 0.7)'
+                }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
+                    [-] {language === 'bn' ? 'কমিশন কর্তন' : 'Commission'}{' '}
+                    <span style={{ fontSize: '0.75rem', color: '#fef08a' }}>
+                      ({memoState.commissionType === 'flat' ? '৳' : `${memoState.commissionValue}%`}):
+                    </span>
+                  </span>
+                  <span style={{ fontWeight: 600, color: '#fef08a' }}>- ৳ {commissionAmount.toFixed(2)}</span>
+                </div>
+              )}
 
               {/* Render each deduction item */}
               {deductionsList.map(d => {

@@ -75,6 +75,8 @@ export const calculateMemoTotals = (memoData: any): { totalBill: number; paidAmo
     }
   }
 
+  const grossTotal = totalBill;
+
   // Subtract any custom memo deductions (e.g., ice cost, transport, etc.)
   const rawDeductions = (memo.deductions && Array.isArray(memo.deductions))
     ? memo.deductions
@@ -82,6 +84,16 @@ export const calculateMemoTotals = (memoData: any): { totalBill: number; paidAmo
   const totalDeductions = rawDeductions.reduce((sum: number, d: any) => sum + (Number(d.amount) || 0), 0);
   if (totalDeductions > 0) {
     totalBill = Math.max(0, totalBill - totalDeductions);
+  }
+
+  // Subtract commission if present
+  const commVal = Number(memo.commissionValue !== undefined ? memo.commissionValue : memoData.commissionValue) || 0;
+  const commType = memo.commissionType || memoData.commissionType || 'percent';
+  if (commVal > 0) {
+    const commAmt = commType === 'flat' ? commVal : Math.round((grossTotal * commVal / 100) * 100) / 100;
+    if (commAmt > 0) {
+      totalBill = Math.max(0, totalBill - commAmt);
+    }
   }
 
   const deposit = Number(memo.deposit !== undefined ? memo.deposit : (memoData.deposit !== undefined ? memoData.deposit : 0)) || 0;
