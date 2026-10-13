@@ -21,6 +21,7 @@ import InvestorMemosListScreen from './components/InvestorMemosListScreen';
 import InvestorMemoScreen from './components/InvestorMemoScreen';
 import StockScreen from './components/StockScreen';
 import ResellerScreen from './components/ResellerScreen';
+import AratdarScreen from './components/AratdarScreen';
 import { useLanguage } from './i18n/LanguageContext';
 import { supabase } from './utils/supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -29,7 +30,7 @@ import { LotPasswordManager } from './components/LotPasswordManager';
 
 import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow } from './utils/syncEngine';
 
-export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock' | 'sales-month-memos' | 'reseller';
+export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock' | 'sales-month-memos' | 'reseller' | 'aratdar';
 
 export interface NavSnapshot {
   screen: Screen;
@@ -50,7 +51,9 @@ export interface NavSnapshot {
 const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
   switch (current.screen) {
     case 'reseller':
-      return { screen: 'dashboard', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      return { screen: current.salesMemoReturnScreen === 'sales-lots' ? 'sales-lots' : 'dashboard', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'aratdar':
+      return { screen: 'sales-lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'memo':
       return { screen: 'lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'lots':
@@ -59,6 +62,9 @@ const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
     case 'sales-memo':
       if (current.salesMemoReturnScreen === 'reseller') {
         return { screen: 'reseller', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'reseller', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
+      if (current.salesMemoReturnScreen === 'aratdar') {
+        return { screen: 'aratdar', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'aratdar', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
       if (current.salesMemoReturnScreen === 'sales-memo-list' && current.salesLot !== null) {
         return { screen: 'sales-memo-list', lot: null, salesLot: current.salesLot, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
@@ -1126,11 +1132,25 @@ function App() {
           {currentScreen === 'reseller' && (
             <ResellerScreen
               onNavigate={handleNavigate}
+              onBack={() => handleNavigate(salesMemoReturnScreen === 'sales-lots' ? 'sales-lots' : 'dashboard')}
               onSelectMemo={(memoId, lotNumber) => {
                 navigateTo('sales-memo', {
                   salesLot: lotNumber,
                   salesMemoId: memoId,
                   salesMemoReturnScreen: 'reseller'
+                });
+              }}
+            />
+          )}
+          {currentScreen === 'aratdar' && (
+            <AratdarScreen
+              onNavigate={handleNavigate}
+              onBack={() => handleNavigate('sales-lots')}
+              onSelectMemo={(memoId, lotNumber) => {
+                navigateTo('sales-memo', {
+                  salesLot: lotNumber,
+                  salesMemoId: memoId,
+                  salesMemoReturnScreen: 'aratdar'
                 });
               }}
             />

@@ -821,3 +821,11 @@ export const getResellerMemos = (): SalesMemoGlobalItem[] => {
   return all.filter(m => m.customerType === 'reseller');
 };
 
+/**
+ * Returns all sales memos that belong to the 'permanent' (Aratdar) category.
+ */
+export const getAratdarMemos = (): SalesMemoGlobalItem[] => {
+  const all = getAllGlobalSalesMemos();
+  return all.filter(m => m.customerType === 'permanent');
+};
+

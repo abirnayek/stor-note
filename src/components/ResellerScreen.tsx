@@ -9,9 +9,10 @@ import { ProtectedMemoWrapper } from './MemoLock';
 interface ResellerScreenProps {
   onNavigate: (screen: Screen) => void;
   onSelectMemo: (memoId: string, lotNumber: number | null) => void;
+  onBack?: () => void;
 }
 
-const ResellerScreen: React.FC<ResellerScreenProps> = ({ onNavigate, onSelectMemo }) => {
+const ResellerScreen: React.FC<ResellerScreenProps> = ({ onNavigate, onSelectMemo, onBack }) => {
   const [memos, setMemos] = useState<SalesMemoGlobalItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'due' | 'paid'>('all');
@@ -142,7 +143,7 @@ const ResellerScreen: React.FC<ResellerScreenProps> = ({ onNavigate, onSelectMem
       {/* Header */}
       <div className="screen-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button className="btn-icon" onClick={() => onNavigate('dashboard')} title="Back to Dashboard">
+          <button className="btn-icon" onClick={() => onBack ? onBack() : onNavigate('dashboard')} title="Back">
             <ChevronLeft size={24} />
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>

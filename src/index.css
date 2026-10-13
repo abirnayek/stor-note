@@ -2079,3 +2079,53 @@ body.view-only-mode .weight-unit-toggle {
   pointer-events: none !important;
 }
 
+/* Custom Horizontal Scrollbar for Lots & Categories sliders */
+.custom-h-scrollbar::-webkit-scrollbar {
+  height: 6px;
+}
+.custom-h-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+.custom-h-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(114, 190, 68, 0.4);
+  border-radius: 4px;
+}
+.custom-h-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(114, 190, 68, 0.7);
+}
+
+/* Split Layout for Sales Lots & Aratdar/Reseller */
+.sales-lots-split-container {
+  display: flex;
+  align-items: stretch;
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+  width: 100%;
+}
+
+.sales-lots-split-container .split-divider {
+  width: 3px;
+  min-width: 3px;
+  align-self: stretch;
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.25) 0%, #ef4444 30%, #ff4d4d 70%, rgba(239, 68, 68, 0.25) 100%);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.75), 0 0 3px #ef4444;
+  border-radius: 4px;
+  margin: 0 0.25rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 992px) {
+  .sales-lots-split-container {
+    flex-direction: column;
+  }
+  .sales-lots-split-container .split-divider {
+    width: 100% !important;
+    min-width: unset !important;
+    height: 3px !important;
+    min-height: 3px !important;
+    margin: 1rem 0 !important;
+    background: linear-gradient(90deg, rgba(239, 68, 68, 0.25) 0%, #ef4444 30%, #ff4d4d 70%, rgba(239, 68, 68, 0.25) 100%);
+  }
+}
+
