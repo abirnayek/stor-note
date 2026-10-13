@@ -22,13 +22,17 @@ const DueSalesMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType 
     }
   };
 
+  const effectiveType = normMemo.customerType === 'permanent' || normMemo.customerType === 'regular'
+    ? normMemo.customerType
+    : (dueType === 'permanent' ? 'permanent' : 'regular');
+
   return (
     <SalesMemoScreen
       onNavigate={onNavigate}
       onBack={handleBack}
       lotNumber={targetLotNumber}
       memoId={dueId}
-      defaultCustomerType={dueType === 'permanent' ? 'permanent' : 'regular'}
+      defaultCustomerType={effectiveType}
     />
   );
 };

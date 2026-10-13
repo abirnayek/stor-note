@@ -41,8 +41,8 @@ export const translations = {
     
     // Due Account
     dueTypesTitle: 'বকেয়ার ধরণ',
-    regularDue: 'রেগুলার ডিউ',
-    permanentDue: 'পার্মানেন্ট বা আড়তদারের ডিউ',
+    regularDue: 'সাধারণ বকেয়া (রেগুলার)',
+    permanentDue: 'আড়তদারের বকেয়া (পার্মানেন্ট)',
     dueListTitle: 'বকেয়া তালিকা',
     duesCount: 'টি ডিউ',
     noDues: '0 ডিউ',
@@ -197,8 +197,8 @@ export const translations = {
     
     // Due Account
     dueTypesTitle: 'Due Types',
-    regularDue: 'Regular Due',
-    permanentDue: 'Permanent / Aratdar Due',
+    regularDue: 'Regular Due (General)',
+    permanentDue: 'Aratdar Due (Permanent)',
     dueListTitle: 'Due List',
     duesCount: 'Dues',
     noDues: '0 Dues',

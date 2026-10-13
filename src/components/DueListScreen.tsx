@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Plus, Trash2, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, Clock, CheckCircle, AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
-import { syncAllDueAccounts, getNormalizedMemo, deleteDueMemo, type NormalizedDueMemo } from '../utils/dueSyncUtils';
+import { syncAllDueAccounts, getNormalizedMemo, deleteDueMemo, changeDueCustomerType, type NormalizedDueMemo } from '../utils/dueSyncUtils';
 
 interface AutoMessageConfig {
   scheduledFor: number;
@@ -15,18 +15,23 @@ interface DueListScreenProps {
   onNavigate: (screen: Screen) => void;
   dueType: 'regular' | 'permanent' | 'purchase';
   onSelectDue: (dueId: string) => void;
+  onSelectType?: (type: 'regular' | 'permanent') => void;
 }
 
-const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSelectDue }) => {
+const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSelectDue, onSelectType }) => {
   const [dues, setDues] = useState<string[]>([]);
+  const [regularCount, setRegularCount] = useState(0);
+  const [permanentCount, setPermanentCount] = useState(0);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [msgTimeframe, setMsgTimeframe] = useState<'24h' | '7d' | 'custom'>('7d');
   const [msgCustomDate, setMsgCustomDate] = useState<string>('');
   const [msgType, setMsgType] = useState<'whatsapp' | 'sms'>('whatsapp');
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const loadDues = useCallback(() => {
     const synced = syncAllDueAccounts();
+    setRegularCount(synced.regularDues.length);
+    setPermanentCount(synced.permanentDues.length);
     const list = dueType === 'regular'
       ? synced.regularDues
       : dueType === 'permanent'
@@ -46,6 +51,19 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
     if (window.confirm('Are you sure you want to delete this due memo?')) {
       deleteDueMemo(dueId, dueType, false);
       setDues(prev => prev.filter(d => d !== dueId));
+    }
+  };
+
+  const handleToggleCategory = (dueId: string, currentType: 'regular' | 'permanent' | 'purchase', e: React.MouseEvent) => {
+    e.stopPropagation();
+    const targetType = currentType === 'permanent' ? 'regular' : 'permanent';
+    const confirmMsg = language === 'bn'
+      ? `এই মেমোটি ${targetType === 'regular' ? 'সাধারণ বকেয়া' : 'আড়তদারের বকেয়া'}-তে স্থানান্তর করতে চান?`
+      : `Move this memo to ${targetType === 'regular' ? 'Regular Due' : 'Aratdar Due'}?`;
+
+    if (window.confirm(confirmMsg)) {
+      changeDueCustomerType(dueId, targetType);
+      loadDues();
     }
   };
 
@@ -118,10 +136,46 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
         </div>
       </div>
 
-      <div className="due-summary-bar">
+      {/* Switcher tabs between Regular and Aratdar Dues for instant navigation */}
+      {dueType !== 'purchase' && (
+        <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => onSelectType ? onSelectType('regular') : onNavigate('due-types')}
+            style={{
+              background: dueType === 'regular' ? '#2196f3' : 'rgba(255,255,255,0.06)',
+              color: dueType === 'regular' ? '#fff' : '#bbb',
+              border: dueType === 'regular' ? '1px solid #2196f3' : '1px solid rgba(255,255,255,0.15)',
+              borderRadius: '20px',
+              padding: '6px 14px',
+              fontSize: '0.85rem',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            {language === 'bn' ? 'সাধারণ বকেয়া (রেগুলার)' : 'Regular Dues'} ({regularCount})
+          </button>
+          <button
+            onClick={() => onSelectType ? onSelectType('permanent') : onNavigate('due-types')}
+            style={{
+              background: dueType === 'permanent' ? '#ab47bc' : 'rgba(255,255,255,0.06)',
+              color: dueType === 'permanent' ? '#fff' : '#bbb',
+              border: dueType === 'permanent' ? '1px solid #ab47bc' : '1px solid rgba(255,255,255,0.15)',
+              borderRadius: '20px',
+              padding: '6px 14px',
+              fontSize: '0.85rem',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            {language === 'bn' ? 'আড়তদারের বকেয়া (পার্মানেন্ট)' : 'Aratdar Dues'} ({permanentCount})
+          </button>
+        </div>
+      )}
+
+      <div className="due-summary-bar" style={{ marginTop: '1.2rem' }}>
         <div className="due-stats">
           <div className="stat-item main-stat">
-            <span className="stat-label">Total {dueType === 'regular' ? 'Regular' : dueType === 'permanent' ? 'Arotder' : 'Purchase'} Due:</span>
+            <span className="stat-label">Total {dueType === 'regular' ? 'Regular' : dueType === 'permanent' ? 'Aratdar' : 'Purchase'} Due:</span>
             <div className="stat-value highlight">৳ {totalCategoryDue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </div>
           <div className="stat-divider"></div>
@@ -156,17 +210,58 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
             const autoMsg = memo.autoMessage;
             return (
               <ProtectedMemoWrapper key={dueId} passwordKey={`memo_password_due_memo_${dueId}`} onAccessGranted={() => onSelectDue(dueId)}>
-                <div className="lot-card" style={{ position: 'relative' }}>
+                <div className="lot-card" style={{ position: 'relative', cursor: 'pointer' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '80%' }}>
                     <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--text-color)', wordBreak: 'break-word', textAlign: 'left' }}>{name}</span>
                     <span style={{ fontSize: '0.95rem', color: '#ff9800', marginTop: '0.3rem', fontWeight: '600' }}>
                       Due: ৳ {memo.dueAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
+                    {memo.totalBill > 0 && (
+                      <span style={{ fontSize: '0.78rem', color: '#aaa', marginTop: '0.15rem' }}>
+                        মোট: ৳{memo.totalBill.toFixed(0)} | পরিশোধ: ৳{memo.paidAmount.toFixed(0)}
+                      </span>
+                    )}
                     {memo.mobile && (
                       <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: '0.2rem' }}>
                         📞 {memo.mobile}
                       </span>
+                    )}
+
+                    {/* Customer Type Indicator & Category Mover Button */}
+                    {dueType !== 'purchase' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                        <span style={{
+                          fontSize: '0.72rem',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          background: memo.customerType === 'permanent' ? 'rgba(171, 71, 188, 0.2)' : 'rgba(33, 150, 243, 0.2)',
+                          color: memo.customerType === 'permanent' ? '#ce93d8' : '#90caf9',
+                          border: `1px solid ${memo.customerType === 'permanent' ? 'rgba(171, 71, 188, 0.4)' : 'rgba(33, 150, 243, 0.4)'}`,
+                          fontWeight: 'bold'
+                        }}>
+                          {memo.customerType === 'permanent' ? 'আড়তদার' : 'সাধারণ ক্রেতা'}
+                        </span>
+                        <button
+                          onClick={(e) => handleToggleCategory(dueId, memo.customerType, e)}
+                          title={memo.customerType === 'permanent' ? 'সাধারণ বকেয়ায় স্থানান্তর করুন' : 'আড়তদারের বকেয়ায় স্থানান্তর করুন'}
+                          style={{
+                            background: 'rgba(255,255,255,0.08)',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            borderRadius: '4px',
+                            color: '#eee',
+                            fontSize: '0.7rem',
+                            padding: '2px 7px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <ArrowLeftRight size={11} />
+                          {memo.customerType === 'permanent' ? 'সাধারণে নিন' : 'আড়তদারে নিন'}
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="card-top-actions">

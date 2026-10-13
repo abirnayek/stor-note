@@ -981,8 +981,7 @@ function App() {
             <DueTypesScreen 
               onNavigate={handleNavigate} 
               onSelectType={(type) => {
-                setCurrentDueType(type);
-                handleNavigate('due-list');
+                navigateTo('due-list', { dueType: type });
               }} 
             />
           )}
@@ -990,10 +989,11 @@ function App() {
             <DueListScreen 
               onNavigate={handleNavigate} 
               dueType={currentDueType} 
+              onSelectType={(type) => {
+                navigateTo('due-list', { dueType: type });
+              }}
               onSelectDue={(id) => {
-                setCurrentDueId(id);
-                setIsPaidDue(false);
-                handleNavigate('due-sales-memo');
+                navigateTo('due-sales-memo', { dueId: id, isPaidDue: false, dueType: currentDueType });
               }}
             />
           )}
@@ -1002,9 +1002,7 @@ function App() {
               onNavigate={handleNavigate} 
               dueType="purchase"
               onSelectDue={(id) => {
-                setCurrentDueId(id);
-                setIsPaidDue(false);
-                handleNavigate('due-memo');
+                navigateTo('due-memo', { dueId: id, isPaidDue: false, dueType: 'purchase' });
               }}
             />
           )}
@@ -1012,28 +1010,53 @@ function App() {
             <PaidDueListScreen 
               onNavigate={handleNavigate} 
               dueType={currentDueType} 
+              onSelectType={(type) => {
+                navigateTo('paid-due-list', { dueType: type });
+              }}
               onSelectDue={(id) => {
-                setCurrentDueId(id);
-                setIsPaidDue(true);
-                handleNavigate(currentDueType === 'purchase' ? 'due-memo' : 'due-sales-memo');
+                navigateTo(currentDueType === 'purchase' ? 'due-memo' : 'due-sales-memo', { 
+                  dueId: id, 
+                  isPaidDue: true, 
+                  dueType: currentDueType 
+                });
               }}
             />
           )}
-          {currentScreen === 'due-memo' && currentDueId !== null && (
-            <DueMemoScreen 
-              onNavigate={handleNavigate} 
-              dueId={currentDueId}
-              isPaid={isPaidDue}
-              dueType="purchase"
-            />
+          {currentScreen === 'due-memo' && (
+            currentDueId !== null ? (
+              <DueMemoScreen 
+                onNavigate={handleNavigate} 
+                dueId={currentDueId}
+                isPaid={isPaidDue}
+                dueType="purchase"
+              />
+            ) : (
+              <DueListScreen 
+                onNavigate={handleNavigate} 
+                dueType="purchase"
+                onSelectDue={(id) => {
+                  navigateTo('due-memo', { dueId: id, isPaidDue: false, dueType: 'purchase' });
+                }}
+              />
+            )
           )}
-          {currentScreen === 'due-sales-memo' && currentDueId !== null && (
-            <DueSalesMemoScreen 
-              onNavigate={handleNavigate} 
-              dueId={currentDueId}
-              isPaid={isPaidDue}
-              dueType={currentDueType === 'purchase' ? 'regular' : currentDueType}
-            />
+          {currentScreen === 'due-sales-memo' && (
+            currentDueId !== null ? (
+              <DueSalesMemoScreen 
+                onNavigate={handleNavigate} 
+                dueId={currentDueId}
+                isPaid={isPaidDue}
+                dueType={currentDueType === 'purchase' ? 'regular' : currentDueType}
+              />
+            ) : (
+              <DueListScreen 
+                onNavigate={handleNavigate} 
+                dueType={currentDueType} 
+                onSelectDue={(id) => {
+                  navigateTo('due-sales-memo', { dueId: id, isPaidDue: false, dueType: currentDueType });
+                }}
+              />
+            )
           )}
           {currentScreen === 'sales-lots' && (
             <SalesLotsScreen 

@@ -101,65 +101,98 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       saved = savedKey ? localStorage.getItem(savedKey) : null;
     }
 
-    if (!saved || !hasValidEntries(saved)) {
-      const dueStr = localStorage.getItem(`due_memo_${memoId}`);
-      if (dueStr) {
-        try {
-          const dueData = JSON.parse(dueStr);
-          if (dueData.memoState && hasValidEntries(JSON.stringify(dueData.memoState))) {
-            saved = JSON.stringify(dueData.memoState);
-          } else if (dueData.name || (dueData.entries && dueData.entries.length > 0)) {
-            saved = JSON.stringify({
-              customerName: dueData.name || '',
-              address: dueData.address || '',
-              mobile: dueData.mobile || '',
-              lotNumberInput: dueData.lotNumber || (lotNumber ? lotNumber.toString() : ''),
-              paidAmount: dueData.deposit || '',
-              customerType: dueData.type || 'regular',
-              status: dueData.paidDate ? 'paid' : 'due',
-              createdAt: dueData.date || today,
-              createdAtTime: currentTime,
-              entries: dueData.entries || []
-            });
-          }
-        } catch(e) {}
-      }
+    let dueData: any = null;
+    const dueStr = localStorage.getItem(`due_memo_${memoId}`);
+    if (dueStr) {
+      try { dueData = JSON.parse(dueStr); } catch(e) {}
     }
 
+    let parsed: any = null;
     if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (!parsed.createdAt) parsed.createdAt = today;
-        let createdTime = parsed.createdAtTime;
-        if (!createdTime && !isNaN(Number(memoId)) && Number(memoId) > 1000000000) {
-          createdTime = new Date(Number(memoId)).toLocaleTimeString(language === 'bn' ? 'bn-BD' : 'en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-          });
-        }
-        return {
-          customerName: parsed.customerName || parsed.supplierName || '',
-          address: parsed.address || '',
-          mobile: parsed.mobile || '',
-          lotNumberInput: parsed.lotNumberInput || (lotNumber ? lotNumber.toString() : ''),
-          paidAmount: parsed.paidAmount !== undefined ? parsed.paidAmount : '',
-          customerType: parsed.customerType || defaultCustomerType || 'regular',
-          status: parsed.status || 'draft',
-          createdAt: parsed.createdAt || today,
-          createdAtTime: createdTime || currentTime,
-          updatedAt: parsed.updatedAt,
-          updatedAtTime: parsed.updatedAtTime,
-          isOriginalDate: parsed.isOriginalDate !== undefined ? parsed.isOriginalDate : true,
-          customDate: parsed.customDate || '',
-          receiverSignature: parsed.receiverSignature || '',
-          sellerSignature: parsed.sellerSignature || localStorage.getItem('default_seller_signature') || '',
-          entries: (parsed.entries && parsed.entries.length > 0) ? parsed.entries : [{ id: Date.now().toString(), name: '', totalKg: '', profitPercent: '' }]
-        };
-      } catch (e) {
-        console.error('Failed to parse saved memo');
-      }
+      try { parsed = JSON.parse(saved); } catch(e) {}
     }
+
+    if (parsed || dueData) {
+      const src = parsed || dueData.memoState || dueData;
+      if (!src.createdAt && dueData?.date) src.createdAt = dueData.date;
+      if (!src.createdAt) src.createdAt = today;
+
+      let createdTime = src.createdAtTime || dueData?.createdAtTime;
+      if (!createdTime && !isNaN(Number(memoId)) && Number(memoId) > 1000000000) {
+        createdTime = new Date(Number(memoId)).toLocaleTimeString(language === 'bn' ? 'bn-BD' : 'en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+      }
+
+      const finalCustomerName = src.customerName || src.name || src.supplierName || dueData?.customerName || dueData?.name || '';
+      const finalAddress = src.address || dueData?.address || '';
+      const finalMobile = src.mobile || dueData?.mobile || '';
+      const finalLotNumber = src.lotNumberInput || (src.lotNumber ? src.lotNumber.toString() : '') || (dueData?.lotNumber ? dueData.lotNumber.toString() : '') || (lotNumber ? lotNumber.toString() : '');
+      const finalPaidAmount = src.paidAmount !== undefined && src.paidAmount !== ''
+        ? src.paidAmount
+        : (src.deposit !== undefined && src.deposit !== ''
+          ? src.deposit
+          : (dueData?.paidAmount !== undefined && dueData?.paidAmount !== ''
+            ? dueData.paidAmount
+            : (dueData?.deposit !== undefined ? dueData.deposit : '')));
+      const finalCustomerType = src.customerType || src.type || dueData?.customerType || dueData?.type || defaultCustomerType || 'regular';
+
+      const rawEntries = (src.entries && Array.isArray(src.entries) && src.entries.some((e: any) => e.name || e.totalKg || e.manualSaleRate || e.buyRate))
+        ? src.entries
+        : ((dueData?.entries && Array.isArray(dueData.entries) && dueData.entries.length > 0)
+          ? dueData.entries
+          : ((dueData?.memoState?.entries && Array.isArray(dueData.memoState.entries) && dueData.memoState.entries.length > 0)
+            ? dueData.memoState.entries
+            : (src.entries || [])));
+
+      const entriesToSet = (rawEntries && rawEntries.length > 0)
+        ? rawEntries.map((e: any, idx: number) => {
+            let saleRateVal = '';
+            if (e.manualSaleRate !== undefined && e.manualSaleRate !== '') {
+              saleRateVal = e.manualSaleRate;
+            } else if (e.saleRate !== undefined && e.saleRate !== '') {
+              saleRateVal = e.saleRate;
+            } else if (e.rate !== undefined && e.rate !== '') {
+              saleRateVal = e.rate;
+            } else if (e.buyRate && (!e.profitPercent || Number(e.profitPercent) === 0)) {
+              saleRateVal = e.buyRate;
+            }
+
+            return {
+              id: e.id || `entry_${Date.now()}_${idx}`,
+              serialNo: e.serialNo ? e.serialNo.toString() : (idx + 1).toString(),
+              name: e.name || e.fishName || '',
+              totalKg: e.totalKg !== undefined ? e.totalKg : (e.kg !== undefined ? e.kg : ''),
+              weightUnit: e.weightUnit || 'kg',
+              buyRate: e.buyRate !== undefined ? e.buyRate : '',
+              profitPercent: e.profitPercent !== undefined ? e.profitPercent : '',
+              manualSaleRate: saleRateVal
+            };
+          })
+        : [{ id: Date.now().toString(), serialNo: '1', name: '', totalKg: '', weightUnit: 'kg', profitPercent: '', manualSaleRate: '' }];
+
+      return {
+        customerName: finalCustomerName,
+        address: finalAddress,
+        mobile: finalMobile,
+        lotNumberInput: finalLotNumber,
+        paidAmount: finalPaidAmount,
+        customerType: finalCustomerType,
+        status: src.status || dueData?.status || 'draft',
+        createdAt: src.createdAt || today,
+        createdAtTime: createdTime || currentTime,
+        updatedAt: src.updatedAt,
+        updatedAtTime: src.updatedAtTime,
+        isOriginalDate: src.isOriginalDate !== undefined ? src.isOriginalDate : true,
+        customDate: src.customDate || '',
+        receiverSignature: src.receiverSignature || dueData?.receiverSignature || '',
+        sellerSignature: src.sellerSignature || dueData?.sellerSignature || localStorage.getItem('default_seller_signature') || '',
+        entries: entriesToSet
+      };
+    }
+
     return {
       customerName: '',
       address: '',
@@ -173,7 +206,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       isOriginalDate: true,
       customDate: '',
       sellerSignature: localStorage.getItem('default_seller_signature') || '',
-      entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', profitPercent: '' }]
+      entries: [{ id: Date.now().toString(), serialNo: '1', name: '', totalKg: '', weightUnit: 'kg', profitPercent: '', manualSaleRate: '' }]
     };
   };
 

@@ -124,8 +124,19 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
   const primary = canonicalData || lotData || dueData || {};
   const innerMemo = primary.memoState || (dueData && dueData.memoState) || primary;
 
+  // Combine entries from all available sources so entries are never lost
+  const combinedEntries = (innerMemo.entries && Array.isArray(innerMemo.entries) && innerMemo.entries.length > 0)
+    ? innerMemo.entries
+    : ((primary.entries && Array.isArray(primary.entries) && primary.entries.length > 0)
+      ? primary.entries
+      : ((dueData?.entries && Array.isArray(dueData.entries) && dueData.entries.length > 0)
+        ? dueData.entries
+        : ((dueData?.memoState?.entries && Array.isArray(dueData.memoState.entries))
+          ? dueData.memoState.entries
+          : [])));
+
   // Name resolution
-  const name = primary.customerName || innerMemo.customerName || primary.name || innerMemo.name || primary.supplierName || 'Unknown';
+  const name = primary.customerName || innerMemo.customerName || primary.name || innerMemo.name || dueData?.name || primary.supplierName || 'Unknown';
   const mobile = primary.mobile || innerMemo.mobile || (dueData && dueData.mobile) || '';
   const address = primary.address || innerMemo.address || (dueData && dueData.address) || '';
 
@@ -138,7 +149,7 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
 
   // Customer Type resolution ('regular' | 'permanent' | 'purchase')
   let customerType: 'regular' | 'permanent' | 'purchase' = 'regular';
-  const rawType = primary.customerType || innerMemo.customerType || primary.type || innerMemo.type || (dueData && dueData.type);
+  const rawType = primary.customerType || innerMemo.customerType || primary.type || innerMemo.type || (dueData && (dueData.customerType || dueData.type));
   if (rawType === 'permanent') {
     customerType = 'permanent';
   } else if (rawType === 'purchase') {
@@ -156,10 +167,11 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
   // Status
   let status: 'due' | 'paid' | 'draft' = primary.status || innerMemo.status || (dueData && dueData.status) || 'draft';
 
-  // Calculate totals
+  // Calculate totals with combined entries
   const { totalBill, paidAmount, dueAmount } = calculateMemoTotals({
     ...primary,
-    memoState: innerMemo,
+    entries: combinedEntries,
+    memoState: { ...innerMemo, entries: combinedEntries },
     deposit: (dueData && dueData.deposit) ?? primary.deposit ?? innerMemo.deposit,
     paidAmount: primary.paidAmount ?? innerMemo.paidAmount ?? (dueData && dueData.paidAmount)
   });
@@ -202,7 +214,20 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
     paidDate,
     autoMessage,
     timestamp: timestamp || Date.now(),
-    raw: primary
+    raw: {
+      ...primary,
+      customerName: name,
+      mobile,
+      address,
+      entries: combinedEntries,
+      memoState: {
+        ...innerMemo,
+        customerName: name,
+        mobile,
+        address,
+        entries: combinedEntries
+      }
+    }
   };
 };
 
@@ -220,7 +245,7 @@ export const syncAllDueAccounts = (): {
 } => {
   const allCandidateIds = new Set<string>();
 
-  // 1. Scan canonical sales_memo_*
+  // 1. Scan canonical sales_memo_*, due_memo_*, and lot-specific sales memos
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (!key) continue;
@@ -230,6 +255,9 @@ export const syncAllDueAccounts = (): {
     } else if (key.startsWith('due_memo_')) {
       const id = key.replace('due_memo_', '');
       if (id) allCandidateIds.add(id);
+    } else if (key.startsWith('sales_memo_lot_') && key.includes('_memo_')) {
+      const parts = key.split('_memo_');
+      if (parts[1]) allCandidateIds.add(parts[1]);
     }
   }
 
@@ -307,6 +335,12 @@ export const syncAllDueAccounts = (): {
         try { existingDueObj = JSON.parse(existingDueStr); } catch (e) {}
       }
 
+      const entriesToSave = (memo.raw?.entries && Array.isArray(memo.raw.entries) && memo.raw.entries.length > 0)
+        ? memo.raw.entries
+        : ((memo.raw?.memoState?.entries && Array.isArray(memo.raw.memoState.entries) && memo.raw.memoState.entries.length > 0)
+          ? memo.raw.memoState.entries
+          : (existingDueObj.entries || existingDueObj.memoState?.entries || []));
+
       const syncedDueData = {
         ...existingDueObj,
         id: memo.id,
@@ -318,13 +352,14 @@ export const syncAllDueAccounts = (): {
         deposit: memo.paidAmount,
         paidAmount: memo.paidAmount,
         type: memo.customerType,
+        customerType: memo.customerType,
         status: memo.dueAmount > 0 ? 'due' : 'paid',
         date: memo.dateStr,
         createdAt: memo.dateStr,
         createdAtTime: memo.timeStr,
         paidDate: memo.dueAmount <= 0 ? (memo.paidDate || existingDueObj.paidDate || Date.now()) : undefined,
         autoMessage: memo.autoMessage,
-        entries: memo.raw?.entries || existingDueObj.entries || [],
+        entries: entriesToSave,
         memoState: {
           ...(memo.raw?.memoState || memo.raw || existingDueObj.memoState || {}),
           customerName: memo.name,
@@ -334,7 +369,7 @@ export const syncAllDueAccounts = (): {
           paidAmount: memo.paidAmount,
           customerType: memo.customerType,
           status: memo.dueAmount > 0 ? 'due' : 'paid',
-          entries: memo.raw?.entries || existingDueObj.entries || []
+          entries: entriesToSave
         }
       };
 
@@ -378,6 +413,59 @@ export const syncAllDueAccounts = (): {
     paidPermanentDues,
     paidPurchaseDues
   };
+};
+
+/**
+ * Changes customer type of a due memo between 'regular' and 'permanent'
+ * and immediately updates all corresponding localStorage keys and lists.
+ */
+export const changeDueCustomerType = (dueId: string, newType: 'regular' | 'permanent') => {
+  // 1. Update due_memo_${dueId}
+  const dueKey = `due_memo_${dueId}`;
+  const dueStr = localStorage.getItem(dueKey);
+  if (dueStr) {
+    try {
+      const obj = JSON.parse(dueStr);
+      obj.type = newType;
+      obj.customerType = newType;
+      if (obj.memoState) {
+        obj.memoState.customerType = newType;
+      }
+      localStorage.setItem(dueKey, JSON.stringify(obj));
+    } catch (e) {}
+  }
+
+  // 2. Update canonical sales_memo_${dueId}
+  const canKey = `sales_memo_${dueId}`;
+  const canStr = localStorage.getItem(canKey);
+  if (canStr) {
+    try {
+      const obj = JSON.parse(canStr);
+      obj.customerType = newType;
+      if (obj.memoState) {
+        obj.memoState.customerType = newType;
+      }
+      localStorage.setItem(canKey, JSON.stringify(obj));
+    } catch (e) {}
+  }
+
+  // 3. Update any sales_memo_lot_*_memo_${dueId}
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('sales_memo_lot_') && k.endsWith(`_memo_${dueId}`)) {
+      try {
+        const obj = JSON.parse(localStorage.getItem(k) || '');
+        obj.customerType = newType;
+        if (obj.memoState) obj.memoState.customerType = newType;
+        localStorage.setItem(k, JSON.stringify(obj));
+      } catch (e) {}
+    }
+  }
+
+  // 4. Update memory & sync
+  syncAllDueAccounts();
+  window.dispatchEvent(new Event('storage'));
+  window.dispatchEvent(new Event('settingsChange'));
 };
 
 /**
