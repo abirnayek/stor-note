@@ -38,6 +38,7 @@ export interface NavSnapshot {
   salesLot?: number | null;
   salesMemoId?: string | null;
   salesMemoReturnScreen?: Screen;
+  resellerReturnScreen?: Screen;
   selectedMonth?: number | null;
   selectedYear?: number | null;
   dueType?: 'regular' | 'permanent' | 'purchase' | 'reseller';
@@ -51,7 +52,7 @@ export interface NavSnapshot {
 const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
   switch (current.screen) {
     case 'reseller':
-      return { screen: current.salesMemoReturnScreen === 'sales-lots' ? 'sales-lots' : 'dashboard', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      return { screen: current.resellerReturnScreen === 'dashboard' ? 'dashboard' : 'sales-lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', resellerReturnScreen: current.resellerReturnScreen, dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'aratdar':
       return { screen: 'sales-lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'memo':
@@ -321,6 +322,7 @@ function App() {
   const [currentSalesLot, setCurrentSalesLot] = useState<number | null>(null);
   const [currentSalesMemoId, setCurrentSalesMemoId] = useState<string | null>(null);
   const [salesMemoReturnScreen, setSalesMemoReturnScreen] = useState<Screen>('sales-lots');
+  const [resellerReturnScreen, setResellerReturnScreen] = useState<Screen>('sales-lots');
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
   const [currentDueType, setCurrentDueType] = useState<'regular' | 'permanent' | 'purchase' | 'reseller'>('regular');
@@ -394,6 +396,7 @@ function App() {
     salesLot: null,
     salesMemoId: null,
     salesMemoReturnScreen: 'sales-lots',
+    resellerReturnScreen: 'dashboard',
     dueType: 'regular',
     dueId: null,
     isPaidDue: false,
@@ -407,6 +410,7 @@ function App() {
     setCurrentSalesLot(snapshot.salesLot ?? null);
     setCurrentSalesMemoId(snapshot.salesMemoId ?? null);
     setSalesMemoReturnScreen(snapshot.salesMemoReturnScreen ?? 'sales-lots');
+    setResellerReturnScreen(snapshot.resellerReturnScreen ?? (snapshot.screen === 'sales-lots' ? 'sales-lots' : (snapshot.screen === 'dashboard' ? 'dashboard' : resellerReturnScreen)));
     setSelectedMonth(snapshot.selectedMonth ?? null);
     setSelectedYear(snapshot.selectedYear ?? new Date().getFullYear());
     setCurrentDueType(snapshot.dueType ?? 'regular');
@@ -505,6 +509,11 @@ function App() {
       salesLot: params?.salesLot !== undefined ? params.salesLot : (nextScreen.startsWith('sales-') ? currentSalesLot : null),
       salesMemoId: params?.salesMemoId !== undefined ? params.salesMemoId : (nextScreen === 'sales-memo' ? currentSalesMemoId : null),
       salesMemoReturnScreen: params?.salesMemoReturnScreen !== undefined ? params.salesMemoReturnScreen : salesMemoReturnScreen,
+      resellerReturnScreen: params?.resellerReturnScreen !== undefined 
+        ? params.resellerReturnScreen 
+        : (nextScreen === 'reseller' 
+            ? (currentTop?.screen === 'sales-lots' || currentTop?.screen === 'dashboard' ? currentTop.screen : resellerReturnScreen)
+            : resellerReturnScreen),
       selectedMonth: params?.selectedMonth !== undefined ? params.selectedMonth : selectedMonth,
       selectedYear: params?.selectedYear !== undefined ? params.selectedYear : selectedYear,
       dueType: params?.dueType !== undefined ? params.dueType : currentDueType,
@@ -539,6 +548,7 @@ function App() {
       salesLot: null,
       salesMemoId: null,
       salesMemoReturnScreen: 'sales-lots',
+      resellerReturnScreen: 'dashboard',
       dueType: 'regular',
       dueId: null,
       isPaidDue: false,
@@ -1137,12 +1147,13 @@ function App() {
           {currentScreen === 'reseller' && (
             <ResellerScreen
               onNavigate={handleNavigate}
-              onBack={() => handleNavigate(salesMemoReturnScreen === 'sales-lots' ? 'sales-lots' : 'dashboard')}
+              onBack={() => handleNavigate(resellerReturnScreen === 'dashboard' ? 'dashboard' : 'sales-lots')}
               onSelectMemo={(memoId, lotNumber) => {
                 navigateTo('sales-memo', {
                   salesLot: lotNumber,
                   salesMemoId: memoId,
-                  salesMemoReturnScreen: 'reseller'
+                  salesMemoReturnScreen: 'reseller',
+                  resellerReturnScreen: resellerReturnScreen
                 });
               }}
             />

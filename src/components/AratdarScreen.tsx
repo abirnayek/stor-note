@@ -143,7 +143,19 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
       {/* Header */}
       <div className="screen-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button className="btn-icon" onClick={() => onBack ? onBack() : onNavigate('sales-lots')} title="Back">
+          <button
+            key="btn-back-aratdar"
+            className="btn-icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onBack) {
+                onBack();
+              } else {
+                onNavigate('sales-lots');
+              }
+            }}
+            title="Back"
+          >
             <ChevronLeft size={24} />
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
