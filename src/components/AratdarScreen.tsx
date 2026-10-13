@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Plus, Search, Trash2, UserCheck, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ChevronLeft, Plus, Search, Trash2, UserCheck, CheckCircle2, AlertCircle, Calendar, FileText } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getAllGlobalSalesMemos, getAratdarMemos, type SalesMemoGlobalItem } from '../utils/dueSyncUtils';
 import { moveToTrash } from '../utils/trashUtils';
@@ -379,7 +379,13 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
             </button>
           </div>
         ) : (
-          <div className="lot-grid" style={{ marginTop: 0 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: '1.25rem',
+            marginTop: 0,
+            padding: '1rem 0'
+          }}>
             {filteredMemos.map(memo => {
               const isDue = memo.status === 'due' || memo.dueAmount > 0;
               const isPaid = memo.status === 'paid' && memo.dueAmount <= 0;
@@ -395,39 +401,55 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                     style={{
                       position: 'relative',
                       cursor: 'pointer',
-                      border: isDue ? '1px solid rgba(255, 152, 0, 0.35)' : '1px solid var(--border-color)',
-                      transition: 'all 0.2s ease'
+                      border: isDue ? '1px solid rgba(255, 152, 0, 0.45)' : (isPaid ? '1px solid rgba(114, 190, 68, 0.45)' : '1px solid var(--border-color)'),
+                      borderRadius: '14px',
+                      padding: '1.15rem 1.25rem',
+                      background: 'rgba(18, 48, 32, 0.85)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: '0.9rem',
+                      minHeight: 'auto',
+                      height: 'auto',
+                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
+                      transition: 'all 0.2s ease',
+                      boxSizing: 'border-box'
                     }}
                   >
                     {/* Header line of card */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '0.6rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{
-                          background: 'rgba(171, 71, 188, 0.2)',
-                          color: '#ce93d8',
-                          border: '1px solid rgba(171, 71, 188, 0.4)',
-                          borderRadius: '6px',
-                          padding: '2px 8px',
-                          fontSize: '0.75rem',
-                          fontWeight: 'bold'
-                        }}>
-                          #{memo.id}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                        <span
+                          title={`Memo #${memo.id}`}
+                          style={{
+                            background: 'rgba(171, 71, 188, 0.2)',
+                            color: '#ce93d8',
+                            border: '1px solid rgba(171, 71, 188, 0.4)',
+                            borderRadius: '6px',
+                            padding: '2px 8px',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          #{memo.id.length > 8 ? memo.id.slice(-6) : memo.id}
                         </span>
                         {memo.lotNumber && (
                           <span style={{
                             background: 'rgba(255, 255, 255, 0.08)',
-                            color: '#bbb',
+                            color: '#cbd5e1',
                             border: '1px solid rgba(255, 255, 255, 0.15)',
                             borderRadius: '6px',
-                            padding: '2px 6px',
-                            fontSize: '0.72rem'
+                            padding: '2px 7px',
+                            fontSize: '0.72rem',
+                            whiteSpace: 'nowrap'
                           }}>
                             Lot {memo.lotNumber}
                           </span>
                         )}
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                         {isPaid && (
                           <span style={{
                             background: 'rgba(114, 190, 68, 0.2)',
@@ -439,7 +461,8 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                             fontWeight: 'bold',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px'
+                            gap: '4px',
+                            whiteSpace: 'nowrap'
                           }}>
                             <CheckCircle2 size={12} /> {language === 'bn' ? 'পরিশোধিত' : 'Paid'}
                           </span>
@@ -455,7 +478,8 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                             fontWeight: 'bold',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px'
+                            gap: '4px',
+                            whiteSpace: 'nowrap'
                           }}>
                             <AlertCircle size={12} /> {language === 'bn' ? 'বকেয়া' : 'Due'}
                           </span>
@@ -466,7 +490,8 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                             color: '#aaa',
                             borderRadius: '6px',
                             padding: '2px 8px',
-                            fontSize: '0.72rem'
+                            fontSize: '0.72rem',
+                            whiteSpace: 'nowrap'
                           }}>
                             {language === 'bn' ? 'খসড়া' : 'Draft'}
                           </span>
@@ -476,7 +501,17 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                           className="btn-icon delete-btn"
                           title="Delete Memo"
                           onClick={(e) => handleDeleteMemo(memo, e)}
-                          style={{ margin: 0, padding: '4px', opacity: 0.6 }}
+                          style={{
+                            margin: 0,
+                            padding: '4px',
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#ff5252',
+                            cursor: 'pointer',
+                            opacity: 0.75,
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -484,13 +519,25 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                     </div>
 
                     {/* Customer Info */}
-                    <div style={{ width: '100%', marginBottom: '0.8rem' }}>
-                      <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fff', wordBreak: 'break-word', textAlign: 'left' }}>
-                        {memo.name || (language === 'bn' ? 'বেনামী আড়তদার' : 'Unnamed Aratdar')}
+                    <div style={{ width: '100%' }}>
+                      <div style={{
+                        fontSize: '1.2rem',
+                        fontWeight: 'bold',
+                        color: '#ffffff',
+                        wordBreak: 'break-word',
+                        textAlign: 'left',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '7px'
+                      }}>
+                        <FileText size={17} style={{ color: '#ce93d8', opacity: 0.9, flexShrink: 0 }} />
+                        <span>{memo.name || (language === 'bn' ? 'বেনামী আড়তদার' : 'Unnamed Aratdar')}</span>
                       </div>
                       {memo.dateStr && (
-                        <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '2px', textAlign: 'left' }}>
-                          📅 {memo.dateStr} {memo.timeStr ? `• ${memo.timeStr}` : ''}
+                        <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <Calendar size={12} style={{ opacity: 0.7 }} />
+                          <span>{memo.dateStr}</span>
+                          {memo.timeStr && <span>• {memo.timeStr}</span>}
                         </div>
                       )}
                     </div>
@@ -498,31 +545,38 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                     {/* Financial summary bar inside card */}
                     <div style={{
                       width: '100%',
-                      background: 'rgba(0, 0, 0, 0.25)',
-                      borderRadius: '8px',
+                      background: 'rgba(0, 0, 0, 0.35)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '10px',
                       padding: '8px 10px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr',
+                      gap: '6px',
                       boxSizing: 'border-box'
                     }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                        <span style={{ fontSize: '0.72rem', color: '#aaa' }}>{language === 'bn' ? 'মোট বিল' : 'Total Bill'}</span>
-                        <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#fff' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                          {language === 'bn' ? 'মোট বিল' : 'Total Bill'}
+                        </span>
+                        <span style={{ fontSize: '0.92rem', fontWeight: 'bold', color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
                           ৳ {memo.totalAmount ? formatNumber(memo.totalAmount) : '0.00'}
                         </span>
                       </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.72rem', color: '#aaa' }}>{language === 'bn' ? 'জমা' : 'Paid'}</span>
-                        <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#72be44' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0, borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)', padding: '0 4px' }}>
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                          {language === 'bn' ? 'জমা' : 'Paid'}
+                        </span>
+                        <span style={{ fontSize: '0.92rem', fontWeight: 'bold', color: '#4ade80', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
                           ৳ {memo.paidAmount ? formatNumber(memo.paidAmount) : '0.00'}
                         </span>
                       </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                        <span style={{ fontSize: '0.72rem', color: '#aaa' }}>{language === 'bn' ? 'বাকি' : 'Due'}</span>
-                        <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: memo.dueAmount > 0 ? '#ff9800' : '#888' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                          {language === 'bn' ? 'বাকি' : 'Due'}
+                        </span>
+                        <span style={{ fontSize: '0.92rem', fontWeight: 'bold', color: memo.dueAmount > 0 ? '#fb923c' : '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
                           ৳ {memo.dueAmount ? formatNumber(memo.dueAmount) : '0.00'}
                         </span>
                       </div>
