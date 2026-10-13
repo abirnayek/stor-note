@@ -130,7 +130,15 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
   return (
     <div className="lots-screen">
       <div className="screen-header">
-        <button className="btn-icon" onClick={() => onNavigate(dueType === 'purchase' ? 'due-category' : 'due-types')}>
+        <button
+          key="btn-back-due-list"
+          className="btn-icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            onNavigate(dueType === 'purchase' ? 'due-category' : 'due-types');
+          }}
+          title="Back"
+        >
           <ChevronLeft size={24} />
         </button>
         <h2>{title} - {t('dueListTitle')}</h2>

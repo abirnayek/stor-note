@@ -125,7 +125,15 @@ const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueTy
   return (
     <div className="lots-screen">
       <div className="screen-header" style={{ display: 'flex', alignItems: 'center' }}>
-        <button className="btn-icon" onClick={() => onNavigate(dueType === 'purchase' ? 'due-purchase-list' : 'due-list')}>
+        <button
+          key="btn-back-paid-due-list"
+          className="btn-icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            onNavigate(dueType === 'purchase' ? 'due-purchase-list' : 'due-list');
+          }}
+          title="Back"
+        >
           <ChevronLeft size={24} />
         </button>
         <h2 style={{ marginLeft: '1rem' }}>{title} - Paid Memos</h2>

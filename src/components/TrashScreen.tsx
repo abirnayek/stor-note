@@ -46,7 +46,15 @@ const TrashScreen: React.FC<TrashScreenProps> = ({ onNavigate }) => {
   return (
     <div className="lots-screen">
       <div className="screen-header">
-        <button className="btn-icon" onClick={() => onNavigate('dashboard')}>
+        <button
+          key="btn-back-trash"
+          className="btn-icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            onNavigate('dashboard');
+          }}
+          title="Back"
+        >
           <ChevronLeft size={24} />
         </button>
         <h2>Trash Bin</h2>

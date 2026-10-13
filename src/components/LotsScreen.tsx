@@ -125,7 +125,15 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
     <div className="lots-screen">
       <div className="screen-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button className="btn-icon" onClick={() => onNavigate('dashboard')}>
+          <button
+            key="btn-back-lots"
+            className="btn-icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate('dashboard');
+            }}
+            title="Back"
+          >
             <ChevronLeft size={24} />
           </button>
           <h2>{t('lotsList')}</h2>

@@ -234,7 +234,15 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
     <div className="lots-screen" style={{ paddingBottom: '2rem' }}>
       <div className="screen-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button className="btn-icon" onClick={() => onNavigate('dashboard')}>
+          <button
+            key="btn-back-sales-lots"
+            className="btn-icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate('dashboard');
+            }}
+            title="Back"
+          >
             <ChevronLeft size={24} />
           </button>
           <h2>{t('salesAccount')}</h2>

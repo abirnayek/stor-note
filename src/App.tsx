@@ -421,6 +421,7 @@ function App() {
   const isLotPasswordManagerOpenRef = useRef(false);
   const isUserMenuOpenRef = useRef(false);
   const showLoginScreenRef = useRef(false);
+  const lastNavTimeRef = useRef<number>(0);
 
   useEffect(() => { isSettingsOpenRef.current = isSettingsOpen; }, [isSettingsOpen]);
   useEffect(() => { isDeviceManagerOpenRef.current = isDeviceManagerOpen; }, [isDeviceManagerOpen]);
@@ -490,6 +491,13 @@ function App() {
   ) => {
     const currentTop = navStackRef.current[navStackRef.current.length - 1];
     if (nextScreen === currentTop?.screen && !params && !replace) return;
+
+    // Prevent rapid double back / duplicate navigation triggers within 350ms
+    const now = Date.now();
+    if (now - lastNavTimeRef.current < 350 && !replace) {
+      return;
+    }
+    lastNavTimeRef.current = now;
 
     const nextSnapshot: NavSnapshot = {
       screen: nextScreen,
@@ -1007,7 +1015,7 @@ function App() {
               onNavigate={handleNavigate} 
               dueType={currentDueType} 
               onSelectType={(type) => {
-                navigateTo('due-list', { dueType: type });
+                navigateTo('due-list', { dueType: type }, true);
               }}
               onSelectDue={(id) => {
                 navigateTo('due-sales-memo', { dueId: id, isPaidDue: false, dueType: currentDueType });
@@ -1028,7 +1036,7 @@ function App() {
               onNavigate={handleNavigate} 
               dueType={currentDueType} 
               onSelectType={(type) => {
-                navigateTo('paid-due-list', { dueType: type });
+                navigateTo('paid-due-list', { dueType: type }, true);
               }}
               onSelectDue={(id) => {
                 navigateTo(currentDueType === 'purchase' ? 'due-memo' : 'due-sales-memo', { 

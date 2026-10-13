@@ -10,7 +10,15 @@ const DueCategoryScreen: React.FC<DueCategoryScreenProps> = ({ onNavigate }) => 
   return (
     <div className="lots-screen">
       <div className="screen-header">
-        <button className="btn-icon" onClick={() => onNavigate('dashboard')}>
+        <button
+          key="btn-back-due-category"
+          className="btn-icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            onNavigate('dashboard');
+          }}
+          title="Back"
+        >
           <ChevronLeft size={24} />
         </button>
         <h2>বকেয়া হিসাব (Due Account)</h2>

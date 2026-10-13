@@ -60,7 +60,15 @@ const DueTypesScreen: React.FC<DueTypesScreenProps> = ({ onNavigate, onSelectTyp
   return (
     <div className="lots-screen">
       <div className="screen-header">
-        <button className="btn-icon" onClick={() => onNavigate('due-category')}>
+        <button
+          key="btn-back-due-types"
+          className="btn-icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            onNavigate('due-category');
+          }}
+          title="Back"
+        >
           <ChevronLeft size={24} />
         </button>
         <h2>বিক্রয় বকেয়া (Sales Due)</h2>
