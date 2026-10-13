@@ -394,14 +394,14 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
           <h2>{t('salesAccount')}</h2>
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem', marginLeft: 'auto' }}>
-          <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'center' }}>
-            <div style={{ fontSize: '0.75rem', color: '#aaa', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Total Lots</div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fff' }}>{lots.length}</div>
+        <div style={{ display: 'flex', gap: '0.5rem', marginLeft: 'auto', flexWrap: 'wrap' }}>
+          <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '6px 12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.7rem', color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Total Lots</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#fff' }}>{lots.length}</div>
           </div>
-          <div style={{ background: 'rgba(255, 152, 0, 0.1)', padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255, 152, 0, 0.3)', textAlign: 'center' }}>
-            <div style={{ fontSize: '0.75rem', color: '#ff9800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Total Memos</div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#ffb74d' }}>{globalMemos.length}</div>
+          <div style={{ background: 'rgba(255, 152, 0, 0.1)', padding: '6px 12px', borderRadius: '8px', border: '1px solid rgba(255, 152, 0, 0.3)', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.7rem', color: '#ff9800', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Total Memos</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#ffb74d' }}>{globalMemos.length}</div>
           </div>
         </div>
       </div>

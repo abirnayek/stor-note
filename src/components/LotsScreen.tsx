@@ -131,15 +131,15 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
           <h2>{t('lotsList')}</h2>
         </div>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {totalPurchaseDue > 0 && (
-            <div style={{ border: '1px solid #ff5252', padding: '0.4rem 1rem', borderRadius: '4px', color: '#ff5252', fontWeight: 'bold', background: 'rgba(255, 82, 82, 0.1)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.9rem' }}>Total Due:</span> 
+            <div style={{ border: '1px solid #ff5252', padding: '0.35rem 0.75rem', borderRadius: '6px', color: '#ff5252', fontWeight: 'bold', background: 'rgba(255, 82, 82, 0.1)', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+              <span style={{ opacity: 0.85 }}>Total Due:</span> 
               <span>{totalPurchaseDue.toFixed(2)}</span>
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.2rem 0.5rem', borderRadius: '8px' }}>
-            <Search size={18} opacity={0.7} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(0,0,0,0.2)', padding: '0.25rem 0.6rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <Search size={16} opacity={0.7} />
             <input 
               type="text" 
               value={searchQuery}
@@ -151,7 +151,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
                 border: 'none', 
                 outline: 'none',
                 padding: '0.2rem',
-                width: '150px'
+                width: '110px'
               }}
             />
           </div>
