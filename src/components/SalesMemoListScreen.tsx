@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Plus, Trash2, Filter, Lock } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, Filter, Lock, FileText, Calendar } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
+import { getAllGlobalSalesMemos, type SalesMemoGlobalItem } from '../utils/dueSyncUtils';
 
 interface SalesMemoListScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -11,126 +12,26 @@ interface SalesMemoListScreenProps {
 }
 
 const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, lotNumber, onSelectMemo }) => {
-  const [memos, setMemos] = useState<string[]>([]);
+  const [memos, setMemos] = useState<SalesMemoGlobalItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'paid' | 'due'>('all');
   const [customerTypeFilter, setCustomerTypeFilter] = useState<'all' | 'regular' | 'permanent'>('all');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const { t, language } = useLanguage();
-
-  const getMemoData = (memoId: string) => {
-    let memoStr = localStorage.getItem(`sales_memo_${memoId}`);
-    if (!memoStr) {
-      memoStr = localStorage.getItem(`sales_memo_lot_${lotNumber}_memo_${memoId}`);
-    }
-    if (!memoStr) {
-      memoStr = localStorage.getItem(`due_memo_${memoId}`);
-    }
-    if (memoStr) {
-      try {
-        const parsed = JSON.parse(memoStr);
-        const data = parsed.memoState || parsed;
-        const rawLot = (data.lotNumberInput !== undefined && data.lotNumberInput !== '')
-          ? data.lotNumberInput
-          : (data.lotNumber !== undefined && data.lotNumber !== '' ? data.lotNumber : null);
-        const memoLot = rawLot !== null ? parseInt(String(rawLot), 10) : null;
-        
-        // This screen ONLY displays memos that specifically belong to lotNumber.
-        // If unassigned (null/NaN) or assigned to another lot, do NOT display in this lot!
-        if (memoLot === null || isNaN(memoLot) || memoLot !== lotNumber) {
-          return null;
-        }
-        return data;
-      } catch(e) {}
-    }
-    return null;
-  };
+  const devicePermission = localStorage.getItem('device_permission');
+  const hasEditPermission = devicePermission === 'edit' || devicePermission === 'admin';
 
   useEffect(() => {
     const loadMemos = () => {
-      const foundMemoIds = new Set<string>();
+      const allGlobal = getAllGlobalSalesMemos();
+      // Strictly only memos belonging to this specific lotNumber
+      const lotMemos = allGlobal.filter(m => m.lotNumber === lotNumber);
+      setMemos(lotMemos);
 
-      // 1. Check saved list for this lot
-      const memoListKey = `sales_memo_list_${lotNumber}`;
-      const savedListStr = localStorage.getItem(memoListKey);
-      if (savedListStr) {
-        try {
-          const listArr: string[] = JSON.parse(savedListStr);
-          listArr.forEach(id => {
-            const data = getMemoData(id);
-            if (data) {
-              foundMemoIds.add(id);
-            }
-          });
-        } catch(e) {}
-      }
-
-      // 2. Check storage keys matching sales_memo_lot_${lotNumber}_memo_* and sales_memo_*
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key) continue;
-
-        let id = '';
-        if (key.startsWith(`sales_memo_lot_${lotNumber}_memo_`)) {
-          id = key.replace(`sales_memo_lot_${lotNumber}_memo_`, '');
-          if (id) {
-            const data = getMemoData(id);
-            if (data) {
-              foundMemoIds.add(id);
-            } else {
-              // Memo does not belong to this lot anymore.
-              // Make sure its data is preserved in unassigned before removing from this lot!
-              const rawStr = localStorage.getItem(key);
-              if (rawStr) {
-                try {
-                  const parsed = JSON.parse(rawStr);
-                  const inner = parsed.memoState || parsed;
-                  const rawLot = (inner.lotNumberInput !== undefined && inner.lotNumberInput !== '')
-                    ? inner.lotNumberInput
-                    : (inner.lotNumber !== undefined && inner.lotNumber !== '' ? inner.lotNumber : null);
-                  const mLot = rawLot !== null ? parseInt(String(rawLot), 10) : null;
-                  if (mLot === null || isNaN(mLot)) {
-                    const uKey = `sales_memo_lot_unassigned_memo_${id}`;
-                    if (!localStorage.getItem(uKey)) {
-                      localStorage.setItem(uKey, rawStr);
-                    }
-                    const uListKey = 'sales_memo_list_unassigned';
-                    const uListStr = localStorage.getItem(uListKey);
-                    let uList: string[] = uListStr ? JSON.parse(uListStr) : [];
-                    if (!uList.includes(id)) {
-                      uList.push(id);
-                      localStorage.setItem(uListKey, JSON.stringify(uList));
-                    }
-                  }
-                } catch(e) {}
-              }
-              localStorage.removeItem(key);
-            }
-          }
-        } else if (key.startsWith('sales_memo_') && !key.startsWith('sales_memo_lot_') && !key.startsWith('sales_memo_list_')) {
-          id = key.replace('sales_memo_', '');
-          if (id) {
-            const data = getMemoData(id);
-            if (data) {
-              foundMemoIds.add(id);
-            }
-          }
-        }
-      }
-
-      const finalMemos = Array.from(foundMemoIds);
-      // Deterministic sort: numeric ID descending
-      finalMemos.sort((a, b) => {
-        const numA = Number(a);
-        const numB = Number(b);
-        if (!isNaN(numA) && !isNaN(numB)) {
-          return numB - numA;
-        }
-        return b.localeCompare(a);
-      });
-
-      setMemos(finalMemos);
-      localStorage.setItem(memoListKey, JSON.stringify(finalMemos));
+      // Keep sales_memo_list_${lotNumber} in sync and clean
+      try {
+        localStorage.setItem(`sales_memo_list_${lotNumber}`, JSON.stringify(lotMemos.map(m => m.id)));
+      } catch (e) {}
     };
 
     loadMemos();
@@ -140,15 +41,13 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
 
   const handleAddMemo = () => {
     let nextId = Date.now().toString();
-    const numericIds = memos.map(Number).filter(n => !isNaN(n) && n > 0 && n < 1000000000);
+    const allGlobal = getAllGlobalSalesMemos();
+    const numericIds = allGlobal.map(m => Number(m.id)).filter(n => !isNaN(n) && n > 0 && n < 1000000000);
     if (numericIds.length > 0) {
       nextId = (Math.max(...numericIds) + 1).toString();
-    } else if (memos.length === 0) {
+    } else {
       nextId = '1';
     }
-    const newMemos = [...memos, nextId];
-    setMemos(newMemos);
-    localStorage.setItem(`sales_memo_list_${lotNumber}`, JSON.stringify(newMemos));
 
     // Pre-initialize memo state with lotNumberInput set to this lot
     const today = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
@@ -156,59 +55,69 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
       day: 'numeric',
       year: 'numeric'
     });
+    const currentTime = new Date().toLocaleTimeString(language === 'bn' ? 'bn-BD' : 'en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
     const initialState = {
       customerName: '',
       address: '',
       mobile: '',
       lotNumberInput: lotNumber.toString(),
+      lotNumber: lotNumber.toString(),
       paidAmount: '',
       customerType: 'regular',
       status: 'draft',
       createdAt: today,
+      createdAtTime: currentTime,
       sellerSignature: localStorage.getItem('default_seller_signature') || '',
       entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', profitPercent: '' }]
     };
     localStorage.setItem(`sales_memo_${nextId}`, JSON.stringify(initialState));
     localStorage.setItem(`sales_memo_lot_${lotNumber}_memo_${nextId}`, JSON.stringify(initialState));
 
+    // Preserve local timestamps for strict ordering
+    try {
+      const tsRaw = localStorage.getItem('local_timestamps');
+      let tsMap: Record<string, number> = tsRaw ? JSON.parse(tsRaw) : {};
+      const now = Date.now();
+      tsMap[`sales_memo_${nextId}`] = now;
+      tsMap[`sales_memo_lot_${lotNumber}_memo_${nextId}`] = now;
+      localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
+    } catch (e) {}
+
+    // Dispatch storage event so global memos & lot list update simultaneously
+    window.dispatchEvent(new Event('storage'));
     onSelectMemo(nextId);
   };
 
-  const handleDeleteMemo = (memoId: string, e: React.MouseEvent) => {
+  const handleDeleteMemo = (memo: SalesMemoGlobalItem, e: React.MouseEvent) => {
     e.stopPropagation();
     const confirmMsg = language === 'bn'
-      ? 'আপনি কি এই মেমোটি এই লট থেকে মুছে দিতে চান?\n(মেমোটির লট নম্বর মুছে যাবে এবং এটি গ্লোবাল মেমোতে সংরক্ষিত থাকবে)'
-      : 'Do you want to remove this memo from this lot?\n(The lot number will be cleared and it will remain in global memos)';
+      ? `আপনি কি "${memo.name}" মেমোটি এই লট (${lotNumber}) থেকে সরাতে চান?\n\n(মেমোটির লট নম্বর মুছে যাবে এবং এটি গ্লোবাল মেমোতে সংরক্ষিত থাকবে)`
+      : `Do you want to remove memo "${memo.name}" from Lot ${lotNumber}?\n\n(The lot number will be cleared and it will remain in global memos)`;
 
     if (window.confirm(confirmMsg)) {
+      const memoId = memo.id;
       const oldKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
-      let memoData: any = null;
       const canonicalKey = `sales_memo_${memoId}`;
+
+      let memoData: any = null;
       const canonicalStr = localStorage.getItem(canonicalKey);
       if (canonicalStr) {
-        try { memoData = JSON.parse(canonicalStr); } catch(e) {}
+        try { memoData = JSON.parse(canonicalStr); } catch (e) {}
       }
       if (!memoData) {
         const oldStr = localStorage.getItem(oldKey);
         if (oldStr) {
-          try { memoData = JSON.parse(oldStr); } catch(e) {}
+          try { memoData = JSON.parse(oldStr); } catch (e) {}
         }
       }
       if (!memoData) {
         const dueStr = localStorage.getItem(`due_memo_${memoId}`);
         if (dueStr) {
-          try { memoData = JSON.parse(dueStr); } catch(e) {}
-        }
-      }
-      if (!memoData) {
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && k.endsWith(`_memo_${memoId}`)) {
-            try { 
-              memoData = JSON.parse(localStorage.getItem(k) || '');
-              break; 
-            } catch(e) {}
-          }
+          try { memoData = JSON.parse(dueStr); } catch (e) {}
         }
       }
 
@@ -239,25 +148,12 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
           tsMap[canonicalKey] = Date.now();
           tsMap[unassignedKey] = tsMap[canonicalKey];
         }
+        delete tsMap[oldKey];
         localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
-      } catch(e) {}
+      } catch (e) {}
 
       // Remove from current lot storage key
       localStorage.removeItem(oldKey);
-
-      // Remove from current lot list
-      const newMemos = memos.filter(m => m !== memoId);
-      setMemos(newMemos);
-      localStorage.setItem(`sales_memo_list_${lotNumber}`, JSON.stringify(newMemos));
-
-      // Add to unassigned list
-      const uKey = 'sales_memo_list_unassigned';
-      const uStr = localStorage.getItem(uKey);
-      let uList: string[] = uStr ? JSON.parse(uStr) : [];
-      if (!uList.includes(memoId)) {
-        uList.push(memoId);
-        localStorage.setItem(uKey, JSON.stringify(uList));
-      }
 
       // Update due_memo_${memoId} if exists
       const dueKey = `due_memo_${memoId}`;
@@ -271,31 +167,22 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
             dueData.memoState.lotNumber = '';
           }
           localStorage.setItem(dueKey, JSON.stringify(dueData));
-        } catch(e) {}
+        } catch (e) {}
       }
 
-      // Trigger storage event so both this screen and global list refresh
+      // Trigger storage event so both this screen and global list refresh instantly
       window.dispatchEvent(new Event('storage'));
     }
   };
 
-  const filteredMemos = memos.filter(memoId => {
-    const memo = getMemoData(memoId);
-    let status = 'draft';
-    let cType = '';
-    
-    if (memo) {
-      status = memo.status || 'draft';
-      cType = memo.customerType || '';
-    }
-
+  const filteredMemos = memos.filter(memo => {
     let statusMatch = true;
-    if (filter === 'paid') statusMatch = (status === 'paid');
-    else if (filter === 'due') statusMatch = (status === 'due' || status === 'draft');
+    if (filter === 'paid') statusMatch = (memo.status === 'paid');
+    else if (filter === 'due') statusMatch = (memo.status === 'due' || memo.status === 'draft');
 
     let typeMatch = true;
-    if (customerTypeFilter === 'regular') typeMatch = (cType === 'regular');
-    else if (customerTypeFilter === 'permanent') typeMatch = (cType === 'permanent');
+    if (customerTypeFilter === 'regular') typeMatch = (memo.customerType === 'regular');
+    else if (customerTypeFilter === 'permanent') typeMatch = (memo.customerType === 'permanent');
 
     return statusMatch && typeMatch;
   });
@@ -363,66 +250,88 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
       </div>
 
       <div className="lot-grid">
-        {filteredMemos.map((memoId, idx) => {
-          const memoKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
-          const memo = getMemoData(memoId);
-          let name = `Memo ${memoId}`;
-          let statusColor = '#aaa';
-          let statusText = 'Draft';
-          
-          if (memo) {
-            if (memo.customerName) {
-              name = `${memo.customerName}`;
-            }
-            if (memo.status === 'paid') {
-              statusColor = '#72be44';
-              statusText = 'Paid';
-            } else if (memo.status === 'due') {
-              statusColor = '#ff9800';
-              statusText = 'Due';
-            }
-          }
-          
-          const memoPasswordKey = localStorage.getItem(`memo_password_${memoKey}`) ? `memo_password_${memoKey}` : `memo_password_${memoId}`;
+        {hasEditPermission && (
+          <div className="lot-card add-lot-card" onClick={handleAddMemo}>
+            <div className="add-lot-content">
+              <Plus size={48} />
+              <h3>{t('newMemo')}</h3>
+            </div>
+          </div>
+        )}
+
+        {filteredMemos.map((memo) => {
+          const memoPasswordKey = localStorage.getItem(`memo_password_sales_memo_lot_${lotNumber}_memo_${memo.id}`) 
+            ? `memo_password_sales_memo_lot_${lotNumber}_memo_${memo.id}` 
+            : `memo_password_${memo.id}`;
 
           return (
-            <ProtectedMemoWrapper key={`sales_memo_${lotNumber}_${memoId}_${idx}`} passwordKey={memoPasswordKey} onAccessGranted={() => onSelectMemo(memoId)}>
+            <ProtectedMemoWrapper 
+              key={memo.uniqueKey || `sales_memo_${lotNumber}_${memo.id}`} 
+              passwordKey={memoPasswordKey} 
+              onAccessGranted={() => onSelectMemo(memo.id)}
+            >
               <div className="lot-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                    <span className="lot-status" style={{ margin: 0 }}>Memo {memoId}</span>
-                    <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', background: `${statusColor}33`, color: statusColor, fontWeight: 'bold' }}>
-                      {statusText}
-                    </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <FileText size={16} style={{ opacity: 0.7 }} />
+                      <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{memo.name}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ 
+                        fontSize: '0.75rem', 
+                        padding: '2px 6px', 
+                        borderRadius: '4px', 
+                        background: `${memo.statusColor}33`, 
+                        color: memo.statusColor, 
+                        fontWeight: 'bold' 
+                      }}>
+                        {memo.statusText}
+                      </span>
+                      <span style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                        Lot: {memo.lotNumber !== null ? memo.lotNumber : 'N/A'}
+                      </span>
+                      {memo.totalAmount > 0 && (
+                        <span style={{ 
+                          fontSize: '0.8rem', 
+                          background: 'rgba(76, 175, 80, 0.1)', 
+                          color: '#4caf50', 
+                          padding: '2px 6px', 
+                          borderRadius: '4px', 
+                          fontWeight: 'bold' 
+                        }}>
+                          ৳ {memo.totalAmount.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                    {memo.dateStr && (
+                      <div style={{ fontSize: '0.75rem', color: '#aaa', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                        <Calendar size={12} opacity={0.7} />
+                        <span>{memo.dateStr}</span>
+                        {memo.timeStr && <span>({memo.timeStr})</span>}
+                      </div>
+                    )}
                   </div>
-                  <span className="lot-number">{name}</span>
+                  {hasEditPermission && (
+                    <div className="card-top-actions">
+                      <button 
+                        className="btn-icon delete-btn" 
+                        onClick={(e) => handleDeleteMemo(memo, e)} 
+                        title={language === 'bn' ? 'লট থেকে সরান (মেমোটি গ্লোবাল মেমোতে থাকবে)' : 'Remove from lot (kept in global memos)'}
+                        style={{ padding: '4px', margin: 0, color: '#ff5252' }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
+                  <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
+                    <MemoLockIcon passwordKey={memoPasswordKey} />
+                  </div>
                 </div>
-                <div className="card-top-actions">
-                  <button 
-                    className="btn-icon delete-btn" 
-                    onClick={(e) => handleDeleteMemo(memoId, e)} 
-                    title={language === 'bn' ? 'লট থেকে সরান (মেমোটি গ্লোবাল মেমোতে থাকবে)' : 'Remove from lot (kept in global memos)'}
-                    style={{ padding: '4px', margin: 0, color: '#ff5252' }}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                      </div>
-                      <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
-                        <MemoLockIcon passwordKey={memoPasswordKey} />
-                      </div>
               </div>
-            </div>
             </ProtectedMemoWrapper>
           );
         })}
-        
-        <div className="lot-card add-lot-card" onClick={handleAddMemo}>
-          <div className="add-lot-content">
-            <Plus size={48} />
-            <h3>{t('newMemo')}</h3>
-          </div>
-        </div>
       </div>
 
       {showPasswordModal && (
@@ -468,6 +377,3 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
 };
 
 export default SalesMemoListScreen;
-
-
-

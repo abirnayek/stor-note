@@ -415,3 +415,266 @@ export const deleteDueMemo = (dueId: string, _dueType?: 'regular' | 'permanent' 
 
   window.dispatchEvent(new Event('storage'));
 };
+
+export const isInvalidMemoId = (id: string): boolean => {
+  if (!id) return true;
+  const lower = id.toLowerCase().trim();
+  if (
+    lower === 'lot_unassigned' ||
+    lower === 'unassigned' ||
+    lower === 'undefined' ||
+    lower === 'null' ||
+    lower === '[object object]' ||
+    lower.startsWith('lot_') ||
+    lower.startsWith('list_') ||
+    lower.startsWith('memo_list')
+  ) {
+    return true;
+  }
+  return false;
+};
+
+export interface SalesMemoGlobalItem {
+  id: string;
+  uniqueKey: string;
+  name: string;
+  lotNumber: number | null;
+  status: 'paid' | 'due' | 'draft';
+  statusColor: string;
+  statusText: string;
+  timestamp: number;
+  totalAmount: number;
+  paidAmount: number;
+  dueAmount: number;
+  dateStr: string;
+  timeStr: string;
+  customerType?: 'regular' | 'permanent' | '';
+  sourceKey: string;
+  month?: number;
+  year?: number;
+}
+
+export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
+  let localTimestamps: Record<string, number> = {};
+  try {
+    const tsRaw = localStorage.getItem('local_timestamps');
+    if (tsRaw) localTimestamps = JSON.parse(tsRaw);
+  } catch (e) {}
+
+  const allMemosMap = new Map<string, SalesMemoGlobalItem>();
+
+  const processMemo = (memoId: string, lotKey: number | null, memoObj: any, sourceKey: string) => {
+    if (isInvalidMemoId(memoId) || !memoObj) return;
+
+    const inner = memoObj.memoState || memoObj;
+    const rawLot = (inner.lotNumberInput !== undefined && inner.lotNumberInput !== '')
+      ? inner.lotNumberInput
+      : (inner.lotNumber !== undefined && inner.lotNumber !== '' ? inner.lotNumber : lotKey);
+    const effectiveLot = (rawLot !== null && rawLot !== undefined && rawLot !== '' && !isNaN(Number(rawLot)) && Number(rawLot) > 0)
+      ? Number(rawLot)
+      : null;
+
+    let timestamp = 0;
+    if (sourceKey && localTimestamps[sourceKey]) {
+      timestamp = Number(localTimestamps[sourceKey]);
+    }
+    if (!timestamp && localTimestamps[`sales_memo_${memoId}`]) {
+      timestamp = Number(localTimestamps[`sales_memo_${memoId}`]);
+    }
+    if (!timestamp && effectiveLot !== null && localTimestamps[`sales_memo_lot_${effectiveLot}_memo_${memoId}`]) {
+      timestamp = Number(localTimestamps[`sales_memo_lot_${effectiveLot}_memo_${memoId}`]);
+    }
+    if (!timestamp && localTimestamps[`due_memo_${memoId}`]) {
+      timestamp = Number(localTimestamps[`due_memo_${memoId}`]);
+    }
+    if (!timestamp && inner.updatedAt) {
+      const p = Date.parse(inner.updatedAt);
+      if (!isNaN(p)) timestamp = p;
+    }
+    if (!timestamp && (inner.createdAt || inner.date)) {
+      const p = Date.parse(String(inner.createdAt || inner.date));
+      if (!isNaN(p)) timestamp = p;
+    }
+    if (!timestamp && !isNaN(Number(memoId)) && Number(memoId) > 1000000000) {
+      timestamp = Number(memoId);
+    }
+    if (!timestamp) {
+      const numId = Number(memoId);
+      timestamp = !isNaN(numId) ? numId : 0;
+    }
+
+    if (allMemosMap.has(memoId)) {
+      const existing = allMemosMap.get(memoId)!;
+      if (existing.sourceKey === `sales_memo_${memoId}`) return;
+      if (sourceKey === `sales_memo_${memoId}`) {
+        // canonical takes precedence
+      } else if (existing.lotNumber === null && effectiveLot !== null) {
+        // prefer lot assigned
+      } else if (existing.lotNumber !== null && effectiveLot === null) {
+        return;
+      } else if (timestamp <= existing.timestamp) {
+        return;
+      }
+    }
+
+    const name = inner.customerName || inner.name || memoObj.customerName || memoObj.name || `Memo ${memoId}`;
+    const { totalBill, paidAmount, dueAmount } = calculateMemoTotals(memoObj);
+
+    let status: 'paid' | 'due' | 'draft' = inner.status || memoObj.status || 'draft';
+    let statusText = 'Draft';
+    let statusColor = '#aaa';
+
+    if (dueAmount > 0) {
+      status = 'due';
+      statusText = 'Due';
+      statusColor = '#ff9800';
+    } else if (totalBill > 0 && dueAmount <= 0) {
+      status = 'paid';
+      statusText = 'Paid';
+      statusColor = '#72be44';
+    } else if (inner.status === 'paid' || inner.paidDate || memoObj.paidDate) {
+      status = 'paid';
+      statusText = 'Paid';
+      statusColor = '#72be44';
+    } else if (inner.status === 'due') {
+      status = 'due';
+      statusText = 'Due';
+      statusColor = '#ff9800';
+    }
+
+    const { month: mIdx, year: mYear, dateStr, timeStr } = parseMemoMonthYear(inner, timestamp);
+
+    allMemosMap.set(memoId, {
+      id: memoId,
+      uniqueKey: `memo_${memoId}`,
+      name,
+      lotNumber: effectiveLot,
+      status,
+      statusText,
+      statusColor,
+      timestamp,
+      totalAmount: totalBill,
+      paidAmount,
+      dueAmount,
+      dateStr: dateStr || inner.createdAt || '',
+      timeStr: timeStr || inner.createdAtTime || '',
+      customerType: inner.customerType || memoObj.type || '',
+      sourceKey,
+      month: mIdx,
+      year: mYear
+    });
+  };
+
+  // 1. Scan canonical sales_memo_* keys
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    if (key.startsWith('sales_memo_') && !key.startsWith('sales_memo_lot_') && !key.startsWith('sales_memo_list_')) {
+      const id = key.replace('sales_memo_', '');
+      try {
+        const obj = JSON.parse(localStorage.getItem(key) || '{}');
+        processMemo(id, null, obj, key);
+      } catch (e) {}
+    }
+  }
+
+  // 2. Scan direct sales_memo_lot_*_memo_* keys
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('sales_memo_lot_') && key.includes('_memo_')) {
+      const parts = key.split('_memo_');
+      if (parts.length === 2) {
+        const id = parts[1];
+        try {
+          const obj = JSON.parse(localStorage.getItem(key) || '{}');
+          let lotNum: number | null = null;
+          const lotPart = parts[0].replace('sales_memo_lot_', '');
+          if (lotPart !== 'unassigned' && !isNaN(Number(lotPart))) {
+            lotNum = Number(lotPart);
+          }
+          processMemo(id, lotNum, obj, key);
+        } catch (e) {}
+      }
+    }
+  }
+
+  // 3. Scan sales_memo_list_* keys
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    if (key.startsWith('sales_memo_list_')) {
+      try {
+        const listStr = localStorage.getItem(key);
+        if (listStr) {
+          const memoIds: string[] = JSON.parse(listStr);
+          let lotKeyNum: number | null = null;
+          const rawLotStr = key.replace('sales_memo_list_lot_', '').replace('sales_memo_list_', '');
+          if (rawLotStr !== 'unassigned' && !isNaN(Number(rawLotStr))) {
+            lotKeyNum = Number(rawLotStr);
+          }
+
+          memoIds.forEach(memoId => {
+            if (isInvalidMemoId(memoId) || allMemosMap.has(memoId)) return;
+            const canonical = localStorage.getItem(`sales_memo_${memoId}`);
+            if (canonical) {
+              try { processMemo(memoId, lotKeyNum, JSON.parse(canonical), `sales_memo_${memoId}`); } catch (e) {}
+            } else {
+              const lotStr = localStorage.getItem(`sales_memo_lot_${lotKeyNum ?? 'unassigned'}_memo_${memoId}`);
+              if (lotStr) {
+                try { processMemo(memoId, lotKeyNum, JSON.parse(lotStr), `sales_memo_lot_${lotKeyNum ?? 'unassigned'}_memo_${memoId}`); } catch (e) {}
+              }
+            }
+          });
+        }
+      } catch (e) {}
+    }
+  }
+
+  // 4. Scan due_memo_* keys (sales only, not purchase)
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('due_memo_') && !key.startsWith('due_memo_purchase_')) {
+      const memoId = key.replace('due_memo_', '');
+      if (isInvalidMemoId(memoId) || allMemosMap.has(memoId)) continue;
+      try {
+        const obj = JSON.parse(localStorage.getItem(key) || '{}');
+        if (obj.type === 'regular' || obj.type === 'permanent' || obj.customerName || (obj.name && obj.type !== 'purchase')) {
+          let lotNum: number | null = null;
+          if (obj.lotNumber && !isNaN(Number(obj.lotNumber))) {
+            lotNum = Number(obj.lotNumber);
+          }
+          processMemo(memoId, lotNum, obj.memoState || obj, key);
+        }
+      } catch (e) {}
+    }
+  }
+
+  const result = Array.from(allMemosMap.values());
+  // Deterministic 4-level stable sorting: prevents jumping/shuffling
+  result.sort((a, b) => {
+    // 1. Primary: descending by timestamp (newest first)
+    if (b.timestamp !== a.timestamp) {
+      return b.timestamp - a.timestamp;
+    }
+    // 2. Secondary tie-breaker: Lot Number (Lot 2 before Lot 1)
+    const lotA = a.lotNumber ?? -1;
+    const lotB = b.lotNumber ?? -1;
+    if (lotB !== lotA) {
+      return lotB - lotA;
+    }
+    // 3. Tertiary tie-breaker: Memo ID descending
+    if (a.id !== b.id) {
+      const numA = Number(a.id);
+      const numB = Number(b.id);
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numB - numA;
+      }
+      return b.id.localeCompare(a.id, undefined, { numeric: true });
+    }
+    // 4. Quaternary tie-breaker: Name alphabetical
+    return a.name.localeCompare(b.name);
+  });
+
+  return result;
+};
+
