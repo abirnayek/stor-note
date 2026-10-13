@@ -87,7 +87,7 @@ export const translations = {
     totalBuyPriceAuto: 'মোট কেনা দাম (Auto)',
     globalProfitPercent: 'সর্বমোট লাভ %',
     profitPercent: 'লাভ %',
-    saleRateAuto: 'বিক্রয় দর (Auto)',
+    saleRateAuto: 'বিক্রয় রেট (Auto)',
     addNewRow: 'নতুন লাইন যোগ করুন',
     receiverSig: 'Receiver Signature',
     sellerSig: 'Seller Signature',

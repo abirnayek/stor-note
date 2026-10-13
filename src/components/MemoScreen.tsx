@@ -559,6 +559,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                   <th>{t('costPercentAuto')}</th>
                   <th>{t('totalBuyPriceAuto')}</th>
                   <th>{t('profitPercent')}</th>
+                  <th>{t('saleRateAuto')}</th>
                   <th style={{ minWidth: '130px', textAlign: 'center' }}>
                     <span style={{
                       display: 'inline-flex',
