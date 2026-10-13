@@ -347,173 +347,154 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
       </div>
 
       {/* Top Analytics Summary Banner */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-        gap: '0.75rem',
-        margin: '1.2rem 0 1.5rem'
-      }}>
-        {/* Card 1: Total Memos */}
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(33, 150, 243, 0.15), rgba(21, 101, 192, 0.1))',
-          border: '1px solid rgba(33, 150, 243, 0.3)',
-          borderRadius: '12px',
-          padding: '1rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.3rem'
-        }}>
-          <div style={{ fontSize: '0.75rem', color: '#90caf9', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 'bold' }}>
-            {language === 'bn' ? 'মোট মেমো তৈরি' : 'Total Memos Created'}
+      <div className="screen-sub-container">
+        <div className="monthly-summary-grid">
+          {/* Card 1: Total Memos */}
+          <div className="monthly-summary-card" style={{
+            background: 'linear-gradient(135deg, rgba(33, 150, 243, 0.15), rgba(21, 101, 192, 0.1))',
+            border: '1px solid rgba(33, 150, 243, 0.3)'
+          }}>
+            <div className="monthly-summary-title" style={{ color: '#90caf9' }}>
+              {language === 'bn' ? 'মোট মেমো তৈরি' : 'Total Memos Created'}
+            </div>
+            <div className="monthly-summary-value" style={{ color: '#fff' }}>
+              {language === 'bn' ? enToBnDigits(stats.totalMemos) : stats.totalMemos} {language === 'bn' ? 'টি' : 'memos'}
+            </div>
+            <div className="monthly-summary-sub">
+              {language === 'bn' ? 'মোট বিক্রয় মেমো' : 'Total sales memos'}
+            </div>
           </div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#fff' }}>
-            {language === 'bn' ? enToBnDigits(stats.totalMemos) : stats.totalMemos} {language === 'bn' ? 'টি' : 'memos'}
-          </div>
-          <div style={{ fontSize: '0.8rem', color: '#aaa' }}>
-            {language === 'bn' ? 'মোট বিক্রয় মেমো' : 'Total sales memos'}
-          </div>
-        </div>
 
-        {/* Card 2: Total Sales Amount */}
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(76, 175, 80, 0.15), rgba(46, 125, 50, 0.1))',
-          border: '1px solid rgba(76, 175, 80, 0.3)',
-          borderRadius: '12px',
-          padding: '1rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.3rem'
-        }}>
-          <div style={{ fontSize: '0.75rem', color: '#a5d6a7', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 'bold' }}>
-            {language === 'bn' ? 'মোট বিক্রয় মূল্য' : 'Total Sales Amount'}
+          {/* Card 2: Total Sales Amount */}
+          <div className="monthly-summary-card" style={{
+            background: 'linear-gradient(135deg, rgba(76, 175, 80, 0.15), rgba(46, 125, 50, 0.1))',
+            border: '1px solid rgba(76, 175, 80, 0.3)'
+          }}>
+            <div className="monthly-summary-title" style={{ color: '#a5d6a7' }}>
+              {language === 'bn' ? 'মোট বিক্রয় মূল্য' : 'Total Sales Amount'}
+            </div>
+            <div className="monthly-summary-value" style={{ color: '#4caf50' }}>
+              ৳ {stats.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="monthly-summary-sub">
+              {language === 'bn' ? 'এই মাসের মোট তৈরি বিল' : 'Total billed this month'}
+            </div>
           </div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#4caf50' }}>
-            ৳ {stats.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div style={{ fontSize: '0.8rem', color: '#aaa' }}>
-            {language === 'bn' ? 'এই মাসের মোট তৈরি বিল' : 'Total billed this month'}
-          </div>
-        </div>
 
-        {/* Card 3: Paid / Cash Received */}
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(0, 150, 136, 0.15), rgba(0, 105, 92, 0.1))',
-          border: '1px solid rgba(0, 150, 136, 0.3)',
-          borderRadius: '12px',
-          padding: '1rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.3rem'
-        }}>
-          <div style={{ fontSize: '0.75rem', color: '#80cbc4', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 'bold' }}>
-            {language === 'bn' ? 'হাতে নগদ পেয়েছি (পরিশোধিত)' : 'Paid / Cash Collected'}
+          {/* Card 3: Paid / Cash Received */}
+          <div className="monthly-summary-card" style={{
+            background: 'linear-gradient(135deg, rgba(0, 150, 136, 0.15), rgba(0, 105, 92, 0.1))',
+            border: '1px solid rgba(0, 150, 136, 0.3)'
+          }}>
+            <div className="monthly-summary-title" style={{ color: '#80cbc4' }}>
+              {language === 'bn' ? 'হাতে নগদ পেয়েছি (পরিশোধিত)' : 'Paid / Cash Collected'}
+            </div>
+            <div className="monthly-summary-value" style={{ color: '#26a69a' }}>
+              ৳ {stats.paidAmountTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="monthly-summary-sub">
+              {language === 'bn' ? enToBnDigits(stats.paidMemosCount) : stats.paidMemosCount} {language === 'bn' ? 'টি সম্পূর্ণ পরিশোধিত' : 'fully paid memos'}
+            </div>
           </div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#26a69a' }}>
-            ৳ {stats.paidAmountTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div style={{ fontSize: '0.8rem', color: '#aaa' }}>
-            {language === 'bn' ? enToBnDigits(stats.paidMemosCount) : stats.paidMemosCount} {language === 'bn' ? 'টি সম্পূর্ণ পরিশোধিত' : 'fully paid memos'}
-          </div>
-        </div>
 
-        {/* Card 4: Due / Remaining */}
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(255, 152, 0, 0.15), rgba(239, 108, 0, 0.1))',
-          border: '1px solid rgba(255, 152, 0, 0.3)',
-          borderRadius: '12px',
-          padding: '1rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.3rem'
-        }}>
-          <div style={{ fontSize: '0.75rem', color: '#ffcc80', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 'bold' }}>
-            {language === 'bn' ? 'এখনও বাকি আছে (বকেয়া)' : 'Due / Remaining Amount'}
-          </div>
-          <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#ffa726' }}>
-            ৳ {stats.dueAmountTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div style={{ fontSize: '0.8rem', color: '#aaa' }}>
-            {language === 'bn' ? enToBnDigits(stats.dueMemosCount) : stats.dueMemosCount} {language === 'bn' ? 'টি বকেয়া রয়েছে' : 'due memos'}
+          {/* Card 4: Due / Remaining */}
+          <div className="monthly-summary-card" style={{
+            background: 'linear-gradient(135deg, rgba(255, 152, 0, 0.15), rgba(239, 108, 0, 0.1))',
+            border: '1px solid rgba(255, 152, 0, 0.3)'
+          }}>
+            <div className="monthly-summary-title" style={{ color: '#ffcc80' }}>
+              {language === 'bn' ? 'এখনও বাকি আছে (বকেয়া)' : 'Due / Remaining Amount'}
+            </div>
+            <div className="monthly-summary-value" style={{ color: '#ffa726' }}>
+              ৳ {stats.dueAmountTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="monthly-summary-sub">
+              {language === 'bn' ? enToBnDigits(stats.dueMemosCount) : stats.dueMemosCount} {language === 'bn' ? 'টি বকেয়া রয়েছে' : 'due memos'}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Filter Tabs */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem', flexWrap: 'wrap', gap: '0.8rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button
-            onClick={() => setFilter('all')}
-            style={{
-              background: filter === 'all' ? '#72be44' : 'rgba(255,255,255,0.06)',
-              color: filter === 'all' ? '#000' : '#fff',
-              border: 'none',
-              borderRadius: '20px',
-              padding: '6px 14px',
-              fontSize: '0.85rem',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}
-          >
-            {language === 'bn' ? 'সকল' : 'All'} ({memos.length})
-          </button>
-          <button
-            onClick={() => setFilter('paid')}
-            style={{
-              background: filter === 'paid' ? '#4caf50' : 'rgba(255,255,255,0.06)',
-              color: filter === 'paid' ? '#000' : '#fff',
-              border: 'none',
-              borderRadius: '20px',
-              padding: '6px 14px',
-              fontSize: '0.85rem',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}
-          >
-            {language === 'bn' ? 'পরিশোধিত' : 'Paid'} ({stats.paidMemosCount})
-          </button>
-          <button
-            onClick={() => setFilter('due')}
-            style={{
-              background: filter === 'due' ? '#ff9800' : 'rgba(255,255,255,0.06)',
-              color: filter === 'due' ? '#000' : '#fff',
-              border: 'none',
-              borderRadius: '20px',
-              padding: '6px 14px',
-              fontSize: '0.85rem',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}
-          >
-            {language === 'bn' ? 'বকেয়া' : 'Due'} ({stats.dueMemosCount})
-          </button>
-        </div>
+      <div className="screen-sub-container">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem', flexWrap: 'wrap', gap: '0.8rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={() => setFilter('all')}
+              style={{
+                background: filter === 'all' ? '#72be44' : 'rgba(255,255,255,0.06)',
+                color: filter === 'all' ? '#000' : '#fff',
+                border: 'none',
+                borderRadius: '20px',
+                padding: '6px 14px',
+                fontSize: '0.85rem',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              {language === 'bn' ? 'সকল' : 'All'} ({memos.length})
+            </button>
+            <button
+              onClick={() => setFilter('paid')}
+              style={{
+                background: filter === 'paid' ? '#4caf50' : 'rgba(255,255,255,0.06)',
+                color: filter === 'paid' ? '#000' : '#fff',
+                border: 'none',
+                borderRadius: '20px',
+                padding: '6px 14px',
+                fontSize: '0.85rem',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              {language === 'bn' ? 'পরিশোধিত' : 'Paid'} ({stats.paidMemosCount})
+            </button>
+            <button
+              onClick={() => setFilter('due')}
+              style={{
+                background: filter === 'due' ? '#ff9800' : 'rgba(255,255,255,0.06)',
+                color: filter === 'due' ? '#000' : '#fff',
+                border: 'none',
+                borderRadius: '20px',
+                padding: '6px 14px',
+                fontSize: '0.85rem',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              {language === 'bn' ? 'বকেয়া' : 'Due'} ({stats.dueMemosCount})
+            </button>
+          </div>
 
-        <div style={{ fontSize: '0.85rem', color: '#aaa', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <Filter size={14} />
-          {language === 'bn' ? 'প্রদর্শিত:' : 'Showing:'} {filteredMemos.length}
+          <div style={{ fontSize: '0.85rem', color: '#aaa', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Filter size={14} />
+            {language === 'bn' ? 'প্রদর্শিত:' : 'Showing:'} {filteredMemos.length}
+          </div>
         </div>
       </div>
 
       {/* Memos Grid */}
       {filteredMemos.length === 0 ? (
-        <div style={{
-          textAlign: 'center',
-          padding: '3rem 1rem',
-          background: 'rgba(255,255,255,0.02)',
-          borderRadius: '12px',
-          border: '1px dashed rgba(255,255,255,0.1)'
-        }}>
-          <Calendar size={48} style={{ opacity: 0.3, marginBottom: '0.8rem', color: '#72be44' }} />
-          <h3 style={{ margin: '0 0 0.5rem', opacity: 0.8 }}>
-            {language === 'bn'
-              ? `${monthName} ${displayYear} মাসে কোনো মেমো পাওয়া যায়নি`
-              : `No memos found for ${monthName} ${year}`}
-          </h3>
-          <p style={{ color: '#888', fontSize: '0.9rem', margin: 0 }}>
-            {language === 'bn'
-              ? 'বিক্রয় মেমো তৈরি করার সময় তারিখ অনুযায়ী স্বয়ংক্ৰিয়ভাবে এই ফোল্ডারে যুক্ত হবে।'
-              : 'Sales memos created in this month will automatically appear here.'}
-          </p>
+        <div className="screen-sub-container">
+          <div style={{
+            textAlign: 'center',
+            padding: '3rem 1rem',
+            background: 'rgba(255,255,255,0.02)',
+            borderRadius: '12px',
+            border: '1px dashed rgba(255,255,255,0.1)'
+          }}>
+            <Calendar size={48} style={{ opacity: 0.3, marginBottom: '0.8rem', color: '#72be44' }} />
+            <h3 style={{ margin: '0 0 0.5rem', opacity: 0.8 }}>
+              {language === 'bn'
+                ? `${monthName} ${displayYear} মাসে কোনো মেমো পাওয়া যায়নি`
+                : `No memos found for ${monthName} ${year}`}
+            </h3>
+            <p style={{ color: '#888', fontSize: '0.9rem', margin: 0 }}>
+              {language === 'bn'
+                ? 'বিক্রয় মেমো তৈরি করার সময় তারিখ অনুযায়ী স্বয়ংক্রিয়ভাবে এই ফোল্ডারে যুক্ত হবে।'
+                : 'Sales memos created in this month will automatically appear here.'}
+            </p>
+          </div>
         </div>
       ) : (
         <div className="lot-grid">

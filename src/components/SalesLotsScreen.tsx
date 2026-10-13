@@ -498,7 +498,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         </div>
       </div>
 
-      <h3 style={{ margin: '1rem 0', opacity: 0.8, fontSize: '1.1rem' }}>ফোল্ডার / লটসমূহ</h3>
+      <h3 className="screen-sub-container" style={{ margin: '1rem 0 0.5rem', opacity: 0.8, fontSize: '1.1rem' }}>ফোল্ডার / লটসমূহ</h3>
       <div className="lot-grid" style={{ marginBottom: '2rem' }}>
         {hasEditPermission && (
           <div className="lot-card add-lot-card" onClick={handleAddLot}>
@@ -541,7 +541,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
           </div>
       
       {/* 12 Monthly Folders Ribbon/Grid */}
-      <div style={{ margin: '1.5rem 0 1.2rem', borderTop: lots.length > 0 ? '1px solid rgba(255,255,255,0.1)' : 'none', paddingTop: lots.length > 0 ? '1.5rem' : '0' }}>
+      <div className="screen-sub-container" style={{ margin: '1.5rem 0 1.2rem', borderTop: lots.length > 0 ? '1px solid rgba(255,255,255,0.1)' : 'none', paddingTop: lots.length > 0 ? '1.5rem' : '0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.9rem', flexWrap: 'wrap', gap: '0.8rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <Calendar size={22} style={{ color: '#72be44' }} />
@@ -631,7 +631,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         </div>
       </div>
 
-      <h3 style={{ margin: '1rem 0', opacity: 0.8, fontSize: '1.1rem' }}>
+      <h3 className="screen-sub-container" style={{ margin: '1rem 0 0.5rem', opacity: 0.8, fontSize: '1.1rem' }}>
         সকল মেমো (Global List)
       </h3>
       

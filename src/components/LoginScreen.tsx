@@ -97,7 +97,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   return (
     <div className="login-screen" style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      minHeight: '100vh', background: 'var(--bg-color)', color: 'var(--text-color)'
+      minHeight: '100vh', background: 'var(--bg-color)', color: 'var(--text-color)',
+      padding: '1rem', boxSizing: 'border-box'
     }}>
       <div style={{
         background: 'rgba(0,0,0,0.3)', padding: '2.5rem', borderRadius: '16px',

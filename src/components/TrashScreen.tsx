@@ -55,12 +55,12 @@ const TrashScreen: React.FC<TrashScreenProps> = ({ onNavigate }) => {
         </div>
       </div>
 
-      <div style={{ padding: '1rem 2rem', color: '#ff9800', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 152, 0, 0.1)', margin: '1rem 2rem', borderRadius: '8px' }}>
+      <div className="trash-alert" style={{ color: '#ff9800', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 152, 0, 0.1)', borderRadius: '8px' }}>
         <AlertTriangle size={20} />
         <span>Items in the trash will be permanently deleted after 30 days.</span>
       </div>
 
-      <div style={{ padding: '0 2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div className="screen-sub-container" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         {items.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '3rem', opacity: 0.5 }}>
             <Trash2 size={48} style={{ margin: '0 auto', marginBottom: '1rem' }} />
