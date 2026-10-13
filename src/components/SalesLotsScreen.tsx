@@ -20,6 +20,7 @@ interface GlobalMemo {
   statusColor: string;
   timestamp: number;
   totalAmount: number;
+  sourceKey?: string;
 }
 
 const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectLot, onSelectMemo }) => {
@@ -66,13 +67,66 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
       };
 
       const processMemo = (memoId: string, lotKey: number | null, memoObj: any, sourceKey?: string) => {
-        const rawLot = lotKey !== null ? lotKey : (memoObj.lotNumberInput ? Number(memoObj.lotNumberInput) : (memoObj.lotNumber ? Number(memoObj.lotNumber) : null));
-        const effectiveLot = (rawLot !== null && !isNaN(rawLot)) ? rawLot : null;
-        
-        // Globally unique identity per memo so different lots don't collide, and duplicate scans merge cleanly
-        const uniqueKey = effectiveLot !== null ? `lot_${effectiveLot}_memo_${memoId}` : `unassigned_memo_${memoId}`;
+        if (!memoId || !memoObj) return;
 
-        if (allMemosMap.has(uniqueKey)) return;
+        const rawLot = (memoObj.lotNumberInput !== undefined && memoObj.lotNumberInput !== '') 
+          ? memoObj.lotNumberInput 
+          : (memoObj.lotNumber !== undefined && memoObj.lotNumber !== '' ? memoObj.lotNumber : lotKey);
+        const parsedLot = (rawLot !== null && !isNaN(Number(rawLot)) && Number(rawLot) > 0) ? Number(rawLot) : null;
+        const effectiveLot = parsedLot;
+
+        // Determine stable timestamp
+        let timestamp = 0;
+        if (sourceKey && localTimestamps[sourceKey]) {
+          timestamp = Number(localTimestamps[sourceKey]);
+        }
+        if (!timestamp && localTimestamps[`sales_memo_${memoId}`]) {
+          timestamp = Number(localTimestamps[`sales_memo_${memoId}`]);
+        }
+        if (!timestamp && effectiveLot !== null && localTimestamps[`sales_memo_lot_${effectiveLot}_memo_${memoId}`]) {
+          timestamp = Number(localTimestamps[`sales_memo_lot_${effectiveLot}_memo_${memoId}`]);
+        }
+        if (!timestamp && localTimestamps[`due_memo_${memoId}`]) {
+          timestamp = Number(localTimestamps[`due_memo_${memoId}`]);
+        }
+        if (!timestamp && memoObj.updatedAt) {
+          const parsed = Date.parse(memoObj.updatedAt);
+          if (!isNaN(parsed)) timestamp = parsed;
+        }
+        if (!timestamp && (memoObj.createdAt || memoObj.date)) {
+          const rawDate = String(memoObj.createdAt || memoObj.date);
+          const parsed = Date.parse(rawDate);
+          if (!isNaN(parsed)) timestamp = parsed;
+          else {
+            const enParsed = Date.parse(bnToEn(rawDate));
+            if (!isNaN(enParsed)) timestamp = enParsed;
+          }
+        }
+        if (!timestamp && !isNaN(Number(memoId)) && Number(memoId) > 1000000000) {
+          timestamp = Number(memoId);
+        }
+        if (!timestamp) {
+          const numId = Number(memoId);
+          timestamp = !isNaN(numId) ? numId : 0;
+        }
+
+        // Deduplicate strictly by memoId:
+        if (allMemosMap.has(memoId)) {
+          const existing = allMemosMap.get(memoId)!;
+          // If existing came from canonical sales_memo_${memoId}, canonical is the authoritative master!
+          if (existing.sourceKey === `sales_memo_${memoId}`) {
+            return;
+          }
+          if (sourceKey === `sales_memo_${memoId}`) {
+            // Canonical takes precedence over secondary keys
+          } else if (existing.lotNumber === null && effectiveLot !== null) {
+            // Prefer version with lot number over unassigned
+          } else if (existing.lotNumber !== null && effectiveLot === null) {
+            return; // Keep existing with lot assigned
+          } else if (timestamp <= existing.timestamp) {
+            return; // Keep existing newer
+          }
+        }
 
         let name = memoObj.customerName || memoObj.name || memoObj.supplierName || `Memo ${memoId}`;
         let statusColor = '#aaa';
@@ -85,49 +139,6 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         } else if (memoObj.status === 'due' || memoObj.deposit !== undefined || memoObj.dueId) {
           statusColor = '#ff9800';
           statusText = 'Due';
-        }
-
-        // Determine stable timestamp (must be 100% deterministic, never dynamic Date.now())
-        let timestamp = 0;
-
-        // 1. Check local_timestamps
-        if (sourceKey && localTimestamps[sourceKey]) {
-          timestamp = Number(localTimestamps[sourceKey]);
-        }
-        if (!timestamp && effectiveLot !== null && localTimestamps[`sales_memo_lot_${effectiveLot}_memo_${memoId}`]) {
-          timestamp = Number(localTimestamps[`sales_memo_lot_${effectiveLot}_memo_${memoId}`]);
-        }
-        if (!timestamp && localTimestamps[`due_memo_${memoId}`]) {
-          timestamp = Number(localTimestamps[`due_memo_${memoId}`]);
-        }
-
-        // 2. Check memoObj.updatedAt
-        if (!timestamp && memoObj.updatedAt) {
-          const parsed = Date.parse(memoObj.updatedAt);
-          if (!isNaN(parsed)) timestamp = parsed;
-        }
-
-        // 3. Check memoObj.createdAt or memoObj.date (with Bengali conversion)
-        if (!timestamp && (memoObj.createdAt || memoObj.date)) {
-          const rawDate = String(memoObj.createdAt || memoObj.date);
-          const parsed = Date.parse(rawDate);
-          if (!isNaN(parsed)) {
-            timestamp = parsed;
-          } else {
-            const enParsed = Date.parse(bnToEn(rawDate));
-            if (!isNaN(enParsed)) timestamp = enParsed;
-          }
-        }
-
-        // 4. If memoId is a millisecond timestamp
-        if (!timestamp && !isNaN(Number(memoId)) && Number(memoId) > 1000000000) {
-          timestamp = Number(memoId);
-        }
-
-        // 5. Stable fallback: numeric ID or 0 (NEVER random Date.now())
-        if (!timestamp) {
-          const numId = Number(memoId);
-          timestamp = !isNaN(numId) ? numId : 0;
         }
 
         if (memoObj.entries && Array.isArray(memoObj.entries)) {
@@ -152,19 +163,53 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
           totalAmount = Number(memoObj.totalBill) || 0;
         }
 
-        allMemosMap.set(uniqueKey, {
-          uniqueKey,
+        allMemosMap.set(memoId, {
+          uniqueKey: memoId,
           id: memoId,
           lotNumber: effectiveLot,
           name,
           statusText,
           statusColor,
           timestamp,
-          totalAmount
+          totalAmount,
+          sourceKey
         });
       };
 
-      // 1. Scan all sales_memo_list_* keys
+      // 1. Scan canonical sales_memo_* keys
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (key.startsWith('sales_memo_') && !key.startsWith('sales_memo_lot_') && !key.startsWith('sales_memo_list_')) {
+          const memoId = key.replace('sales_memo_', '');
+          try {
+            const memoObj = JSON.parse(localStorage.getItem(key) || '{}');
+            processMemo(memoId, null, memoObj, key);
+          } catch(e) {}
+        }
+      }
+
+      // 2. Scan direct sales_memo_lot_*_memo_* keys
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('sales_memo_lot_') && key.includes('_memo_')) {
+          const parts = key.split('_memo_');
+          if (parts.length === 2) {
+            const memoId = parts[1];
+            try {
+              const memoObj = JSON.parse(localStorage.getItem(key) || '{}');
+              let lotNum: number | null = null;
+              const lotPart = parts[0].replace('sales_memo_lot_', '');
+              if (lotPart !== 'unassigned' && !isNaN(Number(lotPart))) {
+                lotNum = Number(lotPart);
+              }
+              processMemo(memoId, lotNum, memoObj, key);
+            } catch(e) {}
+          }
+        }
+      }
+
+      // 3. Scan sales_memo_list_* keys
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (!key) continue;
@@ -181,7 +226,9 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
               }
 
               memoIds.forEach(memoId => {
+                if (allMemosMap.has(memoId)) return;
                 const possibleDataKeys = [
+                  `sales_memo_${memoId}`,
                   `sales_memo_lot_${lotKeyNum ?? 'unassigned'}_memo_${memoId}`,
                   `sales_memo_lot_unassigned_memo_${memoId}`,
                   `due_memo_${memoId}`
@@ -217,27 +264,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         }
       }
 
-      // 2. Direct scan of all sales_memo_lot_*_memo_* keys
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('sales_memo_lot_') && key.includes('_memo_')) {
-          const parts = key.split('_memo_');
-          if (parts.length === 2) {
-            const memoId = parts[1];
-            try {
-              const memoObj = JSON.parse(localStorage.getItem(key) || '{}');
-              let lotNum: number | null = null;
-              const lotPart = parts[0].replace('sales_memo_lot_', '');
-              if (lotPart !== 'unassigned' && !isNaN(Number(lotPart))) {
-                lotNum = Number(lotPart);
-              }
-              processMemo(memoId, lotNum, memoObj, key);
-            } catch(e) {}
-          }
-        }
-      }
-
-      // 3. Direct scan of all due_memo_* keys
+      // 4. Direct scan of all due_memo_* keys
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith('due_memo_')) {
@@ -255,7 +282,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         }
       }
 
-      // 4. Scan dues_regular and dues_permanent arrays
+      // 5. Scan dues_regular and dues_permanent arrays
       ['dues_regular', 'dues_permanent'].forEach(dueType => {
         const duesStr = localStorage.getItem(dueType);
         if (duesStr) {
@@ -323,6 +350,23 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
     const nextId = Date.now().toString();
     list.push(nextId);
     localStorage.setItem(`sales_memo_list_unassigned`, JSON.stringify(list));
+
+    // Pre-initialize memo state
+    const initialState = {
+      customerName: '',
+      address: '',
+      mobile: '',
+      lotNumberInput: '',
+      paidAmount: '',
+      customerType: 'regular',
+      status: 'draft',
+      createdAt: today,
+      sellerSignature: localStorage.getItem('default_seller_signature') || '',
+      entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', profitPercent: '' }]
+    };
+    localStorage.setItem(`sales_memo_${nextId}`, JSON.stringify(initialState));
+    localStorage.setItem(`sales_memo_lot_unassigned_memo_${nextId}`, JSON.stringify(initialState));
+
     onSelectMemo(nextId, null);
   };
 
@@ -361,26 +405,49 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this memo?')) {
       const lotKey = memo.lotNumber !== null ? memo.lotNumber : 'unassigned';
-      const listStr = localStorage.getItem(`sales_memo_list_${lotKey}`);
-      if (listStr) {
-        let list = JSON.parse(listStr);
-        list = list.filter((id: string) => id !== memo.id);
-        localStorage.setItem(`sales_memo_list_${lotKey}`, JSON.stringify(list));
+      
+      // Clean up from all memo lists
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('sales_memo_list_')) {
+          try {
+            const listStr = localStorage.getItem(k);
+            if (listStr) {
+              let list: string[] = JSON.parse(listStr);
+              if (list.includes(memo.id)) {
+                list = list.filter((id: string) => id !== memo.id);
+                localStorage.setItem(k, JSON.stringify(list));
+              }
+            }
+          } catch(e) {}
+        }
       }
       
-      const key = `sales_memo_lot_${lotKey}_memo_${memo.id}`;
-      const memoDataStr = localStorage.getItem(key);
+      const canonicalKey = `sales_memo_${memo.id}`;
+      const memoDataStr = localStorage.getItem(canonicalKey) 
+        || localStorage.getItem(`sales_memo_lot_${lotKey}_memo_${memo.id}`)
+        || localStorage.getItem(`due_memo_${memo.id}`);
+
       if (memoDataStr) {
         moveToTrash({
-          id: key,
+          id: canonicalKey,
           type: 'sales_lot',
           title: `Sales Memo (Lot: ${lotKey}) - ${memo.name}`,
           data: JSON.parse(memoDataStr)
         });
       }
-      localStorage.removeItem(key);
+      
+      // Remove all storage keys for this memo
+      localStorage.removeItem(canonicalKey);
+      localStorage.removeItem(`sales_memo_lot_${lotKey}_memo_${memo.id}`);
+      localStorage.removeItem(`sales_memo_lot_unassigned_memo_${memo.id}`);
+      for (let l = 1; l <= 50; l++) {
+        localStorage.removeItem(`sales_memo_lot_${l}_memo_${memo.id}`);
+      }
+      localStorage.removeItem(`due_memo_${memo.id}`);
       
       setGlobalMemos(prev => prev.filter(m => m.id !== memo.id));
+      window.dispatchEvent(new Event('storage'));
     }
   };
 

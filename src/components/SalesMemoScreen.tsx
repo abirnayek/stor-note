@@ -74,6 +74,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     };
 
     const keysToTry = [
+      `sales_memo_${memoId}`,
       `sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`,
       `sales_memo_lot_unassigned_memo_${memoId}`,
     ];
@@ -149,7 +150,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     };
   };
 
-  const storageKey = `sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`;
+  const storageKey = `sales_memo_${memoId}`;
   const [memoState, setMemoState, undo, redo, canUndo, canRedo] = useHistory<MemoState>(getInitialState(), storageKey);
 
   useEffect(() => {
@@ -242,15 +243,20 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         lotNumberInput: validLot !== null ? validLot.toString() : ''
       };
 
-      // 1. Save to destination storage key
+      // 1. Save to canonical storage key and destination storage key
+      const canonicalKey = `sales_memo_${memoId}`;
+      localStorage.setItem(canonicalKey, JSON.stringify(stateToSave));
+
       const destKey = `sales_memo_lot_${validLot === null ? 'unassigned' : validLot}_memo_${memoId}`;
       localStorage.setItem(destKey, JSON.stringify(stateToSave));
 
-      // Preserve stable local timestamp for new key so sorting in Global List never jumps
+      // Preserve stable local timestamp for canonical and dest keys so sorting in Global List never jumps
       try {
         const tsRaw = localStorage.getItem('local_timestamps');
         let tsMap: Record<string, number> = tsRaw ? JSON.parse(tsRaw) : {};
-        let memoTimestamp = tsMap[`sales_memo_lot_${lotNumber ?? 'unassigned'}_memo_${memoId}`]
+        let memoTimestamp = tsMap[canonicalKey]
+          || tsMap[destKey]
+          || tsMap[`sales_memo_lot_${lotNumber ?? 'unassigned'}_memo_${memoId}`]
           || tsMap[`due_memo_${memoId}`]
           || (stateToSave.createdAt ? Date.parse(stateToSave.createdAt) : 0)
           || (!isNaN(Number(memoId)) && Number(memoId) > 1000000000 ? Number(memoId) : 0);
@@ -258,6 +264,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         if (!memoTimestamp || isNaN(memoTimestamp)) {
           memoTimestamp = Date.now();
         }
+        tsMap[canonicalKey] = memoTimestamp;
         tsMap[destKey] = memoTimestamp;
         localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
       } catch(e) {}
@@ -269,6 +276,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         sLots.forEach(l => knownLots.add(l));
       } catch(e) {}
       if (lotNumber !== null) knownLots.add(lotNumber);
+      if (validLot !== null) knownLots.add(validLot);
 
       // 2. Remove memo from all other lot storage keys so it fully moves out
       if (validLot !== null) {

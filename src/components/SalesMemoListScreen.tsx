@@ -19,8 +19,10 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
   const { t, language } = useLanguage();
 
   const getMemoData = (memoId: string) => {
-    const memoKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
-    let memoStr = localStorage.getItem(memoKey);
+    let memoStr = localStorage.getItem(`sales_memo_${memoId}`);
+    if (!memoStr) {
+      memoStr = localStorage.getItem(`sales_memo_lot_${lotNumber}_memo_${memoId}`);
+    }
     if (!memoStr) {
       memoStr = localStorage.getItem(`due_memo_${memoId}`);
     }
@@ -48,7 +50,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
     const loadMemos = () => {
       const foundMemoIds = new Set<string>();
 
-      // Check saved list for this lot
+      // 1. Check saved list for this lot
       const memoListKey = `sales_memo_list_${lotNumber}`;
       const savedListStr = localStorage.getItem(memoListKey);
       if (savedListStr) {
@@ -63,13 +65,14 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
         } catch(e) {}
       }
 
-      // Check all storage keys matching sales_memo_lot_${lotNumber}_memo_*
+      // 2. Check storage keys matching sales_memo_lot_${lotNumber}_memo_* and sales_memo_*
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (!key) continue;
 
+        let id = '';
         if (key.startsWith(`sales_memo_lot_${lotNumber}_memo_`)) {
-          const id = key.replace(`sales_memo_lot_${lotNumber}_memo_`, '');
+          id = key.replace(`sales_memo_lot_${lotNumber}_memo_`, '');
           if (id) {
             const data = getMemoData(id);
             if (data) {
@@ -104,6 +107,14 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
               localStorage.removeItem(key);
             }
           }
+        } else if (key.startsWith('sales_memo_') && !key.startsWith('sales_memo_lot_') && !key.startsWith('sales_memo_list_')) {
+          id = key.replace('sales_memo_', '');
+          if (id) {
+            const data = getMemoData(id);
+            if (data) {
+              foundMemoIds.add(id);
+            }
+          }
         }
       }
 
@@ -128,10 +139,38 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
   }, [lotNumber]);
 
   const handleAddMemo = () => {
-    const nextId = memos.length > 0 ? (Math.max(...memos.map(Number)) + 1).toString() : '1';
+    let nextId = Date.now().toString();
+    const numericIds = memos.map(Number).filter(n => !isNaN(n) && n > 0 && n < 1000000000);
+    if (numericIds.length > 0) {
+      nextId = (Math.max(...numericIds) + 1).toString();
+    } else if (memos.length === 0) {
+      nextId = '1';
+    }
     const newMemos = [...memos, nextId];
     setMemos(newMemos);
     localStorage.setItem(`sales_memo_list_${lotNumber}`, JSON.stringify(newMemos));
+
+    // Pre-initialize memo state with lotNumberInput set to this lot
+    const today = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+    const initialState = {
+      customerName: '',
+      address: '',
+      mobile: '',
+      lotNumberInput: lotNumber.toString(),
+      paidAmount: '',
+      customerType: 'regular',
+      status: 'draft',
+      createdAt: today,
+      sellerSignature: localStorage.getItem('default_seller_signature') || '',
+      entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', profitPercent: '' }]
+    };
+    localStorage.setItem(`sales_memo_${nextId}`, JSON.stringify(initialState));
+    localStorage.setItem(`sales_memo_lot_${lotNumber}_memo_${nextId}`, JSON.stringify(initialState));
+
     onSelectMemo(nextId);
   };
 
@@ -144,9 +183,16 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
     if (window.confirm(confirmMsg)) {
       const oldKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
       let memoData: any = null;
-      const oldStr = localStorage.getItem(oldKey);
-      if (oldStr) {
-        try { memoData = JSON.parse(oldStr); } catch(e) {}
+      const canonicalKey = `sales_memo_${memoId}`;
+      const canonicalStr = localStorage.getItem(canonicalKey);
+      if (canonicalStr) {
+        try { memoData = JSON.parse(canonicalStr); } catch(e) {}
+      }
+      if (!memoData) {
+        const oldStr = localStorage.getItem(oldKey);
+        if (oldStr) {
+          try { memoData = JSON.parse(oldStr); } catch(e) {}
+        }
       }
       if (!memoData) {
         const dueStr = localStorage.getItem(`due_memo_${memoId}`);
@@ -166,7 +212,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
         }
       }
 
-      // Clear lot number in memo data and save to unassigned key
+      // Clear lot number in memo data and save to canonical and unassigned keys
       if (memoData) {
         if (memoData.memoState) {
           memoData.memoState.lotNumberInput = '';
@@ -179,6 +225,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
       }
 
       const unassignedKey = `sales_memo_lot_unassigned_memo_${memoId}`;
+      localStorage.setItem(canonicalKey, JSON.stringify(memoData));
       localStorage.setItem(unassignedKey, JSON.stringify(memoData));
 
       // Preserve stable timestamp for global memos ordering
@@ -186,9 +233,11 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
         const tsRaw = localStorage.getItem('local_timestamps');
         let tsMap: Record<string, number> = tsRaw ? JSON.parse(tsRaw) : {};
         if (tsMap[oldKey]) {
+          tsMap[canonicalKey] = tsMap[oldKey];
           tsMap[unassignedKey] = tsMap[oldKey];
-        } else if (!tsMap[unassignedKey]) {
-          tsMap[unassignedKey] = Date.now();
+        } else if (!tsMap[canonicalKey]) {
+          tsMap[canonicalKey] = Date.now();
+          tsMap[unassignedKey] = tsMap[canonicalKey];
         }
         localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
       } catch(e) {}
@@ -334,8 +383,10 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
             }
           }
           
+          const memoPasswordKey = localStorage.getItem(`memo_password_${memoKey}`) ? `memo_password_${memoKey}` : `memo_password_${memoId}`;
+
           return (
-            <ProtectedMemoWrapper key={`sales_memo_${lotNumber}_${memoId}_${idx}`} passwordKey={`memo_password_${memoKey}`} onAccessGranted={() => onSelectMemo(memoId)}>
+            <ProtectedMemoWrapper key={`sales_memo_${lotNumber}_${memoId}_${idx}`} passwordKey={memoPasswordKey} onAccessGranted={() => onSelectMemo(memoId)}>
               <div className="lot-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -358,7 +409,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
                   </button>
                       </div>
                       <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
-                        <MemoLockIcon passwordKey={`memo_password_${memoKey}`} />
+                        <MemoLockIcon passwordKey={memoPasswordKey} />
                       </div>
               </div>
             </div>
