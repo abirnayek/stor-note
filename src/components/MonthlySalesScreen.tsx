@@ -162,13 +162,35 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         totalBill = Number(memo.totalBill) || 0;
       }
 
-      const paidAmount = Number(memo.paidAmount !== undefined ? memo.paidAmount : (memo.deposit || 0));
-      const dueAmount = Math.max(0, Math.round((totalBill - paidAmount) * 100) / 100);
+      const rawPaid = (memo.paidAmount !== undefined && memo.paidAmount !== '')
+        ? memo.paidAmount
+        : ((rawData.paidAmount !== undefined && rawData.paidAmount !== '')
+          ? rawData.paidAmount
+          : ((memo.deposit !== undefined && memo.deposit !== '')
+            ? memo.deposit
+            : (rawData.deposit !== undefined && rawData.deposit !== '' ? rawData.deposit : 0)));
+      let paidAmount = Number(rawPaid) || 0;
+
+      let status: 'paid' | 'due' | 'draft' = memo.status || rawData.status || 'draft';
+      const isExplicitlyPaid = memo.status === 'paid' || rawData.status === 'paid' || Boolean(memo.paidDate) || Boolean(rawData.paidDate);
+      if (isExplicitlyPaid || (totalBill > 0 && paidAmount >= totalBill)) {
+        status = 'paid';
+        if (totalBill > 0 && paidAmount < totalBill) {
+          paidAmount = totalBill;
+        }
+      } else if (status === 'due' || (totalBill > 0 && totalBill > paidAmount)) {
+        status = 'due';
+      }
+
+      const dueAmount = status === 'paid' ? 0 : Math.max(0, Math.round((totalBill - paidAmount) * 100) / 100);
 
       let cashProfit = 0;
       let dueProfit = 0;
       if (memoProfit > 0) {
-        if (totalBill > 0) {
+        if (status === 'paid') {
+          cashProfit = memoProfit;
+          dueProfit = 0;
+        } else if (totalBill > 0) {
           const ratio = Math.min(1, Math.max(0, paidAmount / totalBill));
           cashProfit = Math.round(memoProfit * ratio * 100) / 100;
           dueProfit = Math.round((memoProfit - cashProfit) * 100) / 100;
@@ -176,13 +198,6 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
           cashProfit = memoProfit;
           dueProfit = 0;
         }
-      }
-
-      let status: 'paid' | 'due' | 'draft' = memo.status || 'draft';
-      if (memo.status === 'paid' || memo.paidDate || (totalBill > 0 && dueAmount <= 0)) {
-        status = 'paid';
-      } else if (memo.status === 'due' || dueAmount > 0) {
-        status = 'due';
       }
 
       let statusColor = '#aaa';
