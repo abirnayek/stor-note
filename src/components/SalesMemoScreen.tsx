@@ -841,9 +841,37 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                                   (entry.name && it.name.trim().toLowerCase() === entry.name.trim().toLowerCase())
                           );
                           if (sItem) {
+                            const isAvailable = sItem.remainingKg > 0;
+                            const isLow = isAvailable && sItem.purchasedKg > 0 && (sItem.remainingKg / sItem.purchasedKg) < 0.25;
+                            const badgeColor = !isAvailable ? '#ff5252' : isLow ? '#ffb300' : '#72be44';
+                            const badgeBg = !isAvailable ? 'rgba(255, 82, 82, 0.12)' : isLow ? 'rgba(255, 179, 0, 0.12)' : 'rgba(114, 190, 68, 0.12)';
+                            const badgeBorder = !isAvailable ? 'rgba(255, 82, 82, 0.3)' : isLow ? 'rgba(255, 179, 0, 0.3)' : 'rgba(114, 190, 68, 0.3)';
+
                             return (
-                              <div style={{ fontSize: '0.75rem', color: sItem.remainingKg > 0 ? '#72be44' : '#ff5252', marginTop: '2px', fontWeight: 500 }}>
-                                স্টক: {sItem.remainingKg} kg {sItem.remainingKg <= 0 ? '(শেষ)' : ''}
+                              <div style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                fontSize: '0.73rem',
+                                color: badgeColor,
+                                background: badgeBg,
+                                border: `1px solid ${badgeBorder}`,
+                                padding: '2px 8px',
+                                borderRadius: '20px',
+                                marginTop: '4px',
+                                fontWeight: 600,
+                                letterSpacing: '0.01em',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                <span style={{
+                                  width: '6px',
+                                  height: '6px',
+                                  borderRadius: '50%',
+                                  backgroundColor: badgeColor,
+                                  boxShadow: `0 0 6px ${badgeColor}`,
+                                  display: 'inline-block'
+                                }} />
+                                <span>স্টক: {sItem.remainingKg} kg {sItem.remainingKg <= 0 ? '(শেষ)' : ''}</span>
                               </div>
                             );
                           }

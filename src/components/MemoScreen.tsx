@@ -2,7 +2,7 @@ import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput, DebouncedInput, parseMathOrNumber, focusNewTableRow } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { Share2, Download, Plus, Trash2, Phone, Undo, Redo, MessageCircle, Mail, ChevronLeft, Lock, X, Package } from 'lucide-react';
+import { Share2, Download, Plus, Trash2, Phone, Undo, Redo, MessageCircle, Mail, ChevronLeft, Lock, X, Package, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
@@ -559,8 +559,25 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                   <th>{t('costPercentAuto')}</th>
                   <th>{t('totalBuyPriceAuto')}</th>
                   <th>{t('profitPercent')}</th>
-                  <th>{t('saleRateAuto')}</th>
-                  <th style={{ color: '#72be44' }}>স্টক</th>
+                  <th style={{ minWidth: '130px', textAlign: 'center' }}>
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      color: '#72be44',
+                      background: 'rgba(114, 190, 68, 0.12)',
+                      padding: '4px 10px',
+                      borderRadius: '14px',
+                      border: '1px solid rgba(114, 190, 68, 0.3)',
+                      fontSize: '0.82rem',
+                      fontWeight: 'bold',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      <Package size={13} style={{ color: '#72be44' }} />
+                      <span>স্টক স্থিতি</span>
+                    </span>
+                  </th>
                   <th></th>
                 </tr>
               </thead>
@@ -646,22 +663,102 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                       <td data-label={t('saleRateAuto')} style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>
                         {salePriceAuto > 0 ? salePriceAuto.toFixed(2) : '0.00'}
                       </td>
-                      <td data-label="স্টক" style={{ textAlign: 'center' }}>
+                      <td data-label="স্টক" style={{ textAlign: 'center', minWidth: '130px', padding: '0.45rem 0.5rem' }}>
                         {(() => {
                           const stockItem = lotStock?.items.find(it => it.serialNo === index + 1 || (entry.name && it.name.trim().toLowerCase() === entry.name.trim().toLowerCase()));
-                          if (!stockItem) return '-';
+                          if (!stockItem || !entry.name) return (
+                            <span style={{ color: '#666', fontSize: '0.85rem' }}>—</span>
+                          );
+
+                          const isAvailable = stockItem.remainingKg > 0;
+                          const isLow = isAvailable && stockItem.purchasedKg > 0 && (stockItem.remainingKg / stockItem.purchasedKg) <= 0.25;
+                          const soldPercent = stockItem.purchasedKg > 0 ? Math.min(100, Math.round((stockItem.soldKg / stockItem.purchasedKg) * 100)) : 0;
+                          const remainingPercent = Math.max(0, 100 - soldPercent);
+
+                          const themeColor = !isAvailable ? '#ff5252' : isLow ? '#ff9800' : '#72be44';
+                          const themeBorder = !isAvailable ? 'rgba(255, 82, 82, 0.4)' : isLow ? 'rgba(255, 152, 0, 0.4)' : 'rgba(114, 190, 68, 0.4)';
+                          const themeBg = !isAvailable 
+                            ? 'linear-gradient(135deg, rgba(255, 82, 82, 0.12) 0%, rgba(40, 10, 10, 0.4) 100%)' 
+                            : isLow 
+                            ? 'linear-gradient(135deg, rgba(255, 152, 0, 0.12) 0%, rgba(35, 20, 10, 0.4) 100%)' 
+                            : 'linear-gradient(135deg, rgba(114, 190, 68, 0.15) 0%, rgba(10, 35, 20, 0.4) 100%)';
+
                           return (
-                            <span style={{
-                              fontSize: '0.85rem',
-                              fontWeight: 'bold',
-                              color: stockItem.remainingKg > 0 ? '#72be44' : '#ff5252',
-                              background: stockItem.remainingKg > 0 ? 'rgba(114, 190, 68, 0.12)' : 'rgba(255, 82, 82, 0.12)',
-                              padding: '3px 8px',
-                              borderRadius: '6px',
-                              border: `1px solid ${stockItem.remainingKg > 0 ? '#72be4433' : '#ff525233'}`
+                            <div style={{
+                              display: 'inline-flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: '3px',
+                              padding: '5px 8px',
+                              borderRadius: '10px',
+                              background: themeBg,
+                              border: `1px solid ${themeBorder}`,
+                              minWidth: '105px',
+                              boxSizing: 'border-box',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                              transition: 'all 0.2s ease'
                             }}>
-                              {stockItem.remainingKg} kg
-                            </span>
+                              {/* Main Stock Amount Pill */}
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '5px',
+                                fontSize: '0.86rem',
+                                fontWeight: '700',
+                                color: themeColor,
+                                whiteSpace: 'nowrap'
+                              }}>
+                                <span style={{
+                                  width: '6px',
+                                  height: '6px',
+                                  borderRadius: '50%',
+                                  backgroundColor: themeColor,
+                                  boxShadow: `0 0 6px ${themeColor}`,
+                                  flexShrink: 0
+                                }} />
+                                <span>{stockItem.remainingKg.toFixed(stockItem.remainingKg % 1 === 0 ? 0 : 1)} kg</span>
+                                {isAvailable && (
+                                  <span style={{ fontSize: '0.72rem', opacity: 0.85, fontWeight: 'normal' }}>
+                                    ({remainingPercent}%)
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Micro Progress Bar & Quick Status */}
+                              {stockItem.purchasedKg > 0 && (
+                                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
+                                  <div style={{
+                                    width: '100%',
+                                    height: '4px',
+                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                    borderRadius: '2px',
+                                    overflow: 'hidden'
+                                  }}>
+                                    <div style={{
+                                      width: `${remainingPercent}%`,
+                                      height: '100%',
+                                      backgroundColor: themeColor,
+                                      borderRadius: '2px',
+                                      transition: 'width 0.3s ease'
+                                    }} />
+                                  </div>
+                                  <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    width: '100%',
+                                    fontSize: '0.66rem',
+                                    color: '#999',
+                                    lineHeight: 1
+                                  }}>
+                                    <span>বিক্রি: {stockItem.soldKg.toFixed(stockItem.soldKg % 1 === 0 ? 0 : 1)}k</span>
+                                    <span style={{ color: themeColor, fontWeight: 600 }}>
+                                      {!isAvailable ? 'শেষ' : isLow ? 'কম' : 'স্টকে আছে'}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           );
                         })()}
                       </td>
@@ -721,40 +818,82 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
           {/* Real-time Fish Stock Line & Section */}
           <div className="lot-stock-section" style={{
             margin: '1.5rem 2rem',
-            padding: '1.2rem',
-            background: 'linear-gradient(135deg, rgba(11, 46, 26, 0.7) 0%, rgba(18, 29, 23, 0.85) 100%)',
-            borderRadius: '12px',
-            border: '1px solid rgba(114, 190, 68, 0.3)',
+            padding: '1.4rem',
+            background: 'linear-gradient(135deg, rgba(8, 38, 22, 0.85) 0%, rgba(14, 28, 22, 0.95) 100%)',
+            borderRadius: '16px',
+            border: '1px solid rgba(114, 190, 68, 0.35)',
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.3)',
             color: '#fff'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.6rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <Package size={22} style={{ color: '#72be44' }} />
-                <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#fff' }}>লট স্টক স্থিতি (Fish Stock Status)</h3>
+            {/* Header & Metric Cards */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem', flexWrap: 'wrap', gap: '0.8rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: 'rgba(114, 190, 68, 0.15)',
+                  border: '1px solid rgba(114, 190, 68, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#72be44'
+                }}>
+                  <Package size={22} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#fff', fontWeight: 'bold' }}>
+                    লট স্টক স্থিতি (Fish Stock Overview)
+                  </h3>
+                  <span style={{ fontSize: '0.78rem', color: '#888' }}>
+                    ক্রয় ও বিক্রয় মেমো থেকে রিয়েল-টাইম সমন্বিত স্টক হিসাব
+                  </span>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', flexWrap: 'wrap' }}>
-                <span style={{ color: '#aaa' }}>মোট ক্রয়: <b style={{ color: '#fff' }}>{lotStock?.totalPurchasedKg || 0} kg</b></span>
-                <span style={{ color: '#ffb74d' }}>মোট বিক্রয়: <b>{lotStock?.totalSoldKg || 0} kg</b></span>
-                <span style={{ color: '#72be44' }}>অবশিষ্ট স্টক: <b>{lotStock?.totalRemainingKg || 0} kg</b></span>
+
+              {/* Top Stock Metric Cards */}
+              <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '6px 14px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'center', minWidth: '85px' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#aaa', textTransform: 'uppercase' }}>মাছের পদ</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#fff' }}>{lotStock?.items.length || 0} টি</div>
+                </div>
+                <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '6px 14px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'center', minWidth: '95px' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#aaa', textTransform: 'uppercase' }}>মোট ক্রয়</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#fff' }}>{(lotStock?.totalPurchasedKg || 0).toFixed(1)} kg</div>
+                </div>
+                <div style={{ background: 'rgba(255, 152, 0, 0.1)', padding: '6px 14px', borderRadius: '10px', border: '1px solid rgba(255, 152, 0, 0.3)', textAlign: 'center', minWidth: '95px' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#ff9800', textTransform: 'uppercase' }}>মোট বিক্রয়</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#ffb74d' }}>{(lotStock?.totalSoldKg || 0).toFixed(1)} kg</div>
+                </div>
+                <div style={{ background: 'linear-gradient(135deg, rgba(114, 190, 68, 0.2) 0%, rgba(10, 45, 25, 0.4) 100%)', padding: '6px 16px', borderRadius: '10px', border: '1px solid rgba(114, 190, 68, 0.5)', textAlign: 'center', minWidth: '110px', boxShadow: '0 2px 10px rgba(114, 190, 68, 0.15)' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#72be44', textTransform: 'uppercase', fontWeight: 600 }}>অবশিষ্ট স্টক</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#72be44' }}>{(lotStock?.totalRemainingKg || 0).toFixed(1)} kg</div>
+                </div>
               </div>
             </div>
 
+            {/* List of fish stock items */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               {lotStock?.items && lotStock.items.length > 0 ? (
                 lotStock.items.map(item => {
                   const soldPercent = item.purchasedKg > 0 ? Math.min(100, Math.round((item.soldKg / item.purchasedKg) * 100)) : 0;
+                  const remainingPercent = Math.max(0, 100 - soldPercent);
+
                   let badgeColor = '#72be44';
                   let badgeBg = 'rgba(114, 190, 68, 0.15)';
                   let badgeText = 'স্টকে আছে';
+                  let StatusIcon = CheckCircle2;
 
                   if (item.status === 'out_of_stock') {
                     badgeColor = '#ff5252';
                     badgeBg = 'rgba(255, 82, 82, 0.15)';
                     badgeText = 'স্টক শেষ';
+                    StatusIcon = XCircle;
                   } else if (item.status === 'low_stock') {
                     badgeColor = '#ff9800';
                     badgeBg = 'rgba(255, 152, 0, 0.15)';
                     badgeText = 'কম স্টক';
+                    StatusIcon = AlertTriangle;
                   }
 
                   return (
@@ -763,38 +902,79 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                       flexWrap: 'wrap',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      background: 'rgba(255,255,255,0.03)',
-                      padding: '0.6rem 1rem',
-                      borderRadius: '8px',
-                      border: '1px solid rgba(255,255,255,0.05)',
-                      gap: '0.8rem'
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      padding: '0.75rem 1.1rem',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                      gap: '0.8rem',
+                      transition: 'all 0.2s ease'
                     }}>
-                      <div style={{ minWidth: '140px' }}>
-                        <span style={{ fontWeight: 'bold', fontSize: '0.95rem', color: '#fff' }}>
-                          {item.serialNo}. {item.name}
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', fontSize: '0.85rem' }}>
-                        <span style={{ color: '#aaa' }}>কেনা: <b style={{ color: '#fff' }}>{item.purchasedKg} kg</b></span>
-                        <span style={{ color: '#ffb74d' }}>বিক্রি: <b>{item.soldKg} kg</b></span>
-                        <span style={{ color: item.remainingKg > 0 ? '#72be44' : '#ff5252', fontWeight: 'bold' }}>
-                          স্টক বাকি: {item.remainingKg} kg
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', minWidth: '160px' }}>
-                        <div style={{ flex: 1, height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
-                          <div style={{
-                            width: `${soldPercent}%`,
-                            height: '100%',
-                            background: soldPercent >= 100 ? '#ff5252' : '#ff9800',
-                            transition: 'width 0.3s'
-                          }} />
-                        </div>
+                      {/* Fish Name & Serial */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', minWidth: '160px' }}>
                         <span style={{
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          color: '#aaa',
                           padding: '2px 8px',
-                          borderRadius: '10px',
+                          borderRadius: '6px',
+                          fontSize: '0.8rem',
+                          fontWeight: 600
+                        }}>
+                          #{item.serialNo}
+                        </span>
+                        <span style={{ fontWeight: 'bold', fontSize: '1rem', color: '#fff' }}>
+                          {item.name}
+                        </span>
+                      </div>
+
+                      {/* Stock Figures (Purchase, Sold, Remaining) */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', fontSize: '0.86rem', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ color: '#888' }}>কেনা:</span>
+                          <span style={{ color: '#fff', fontWeight: 600 }}>{item.purchasedKg.toFixed(1)} kg</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ color: '#888' }}>বিক্রি:</span>
+                          <span style={{ color: '#ffb74d', fontWeight: 600 }}>{item.soldKg.toFixed(1)} kg</span>
+                        </div>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '3px 10px',
+                          borderRadius: '12px',
+                          background: item.remainingKg > 0 ? 'rgba(114, 190, 68, 0.14)' : 'rgba(255, 82, 82, 0.14)',
+                          border: `1px solid ${item.remainingKg > 0 ? 'rgba(114, 190, 68, 0.3)' : 'rgba(255, 82, 82, 0.3)'}`
+                        }}>
+                          <span style={{ color: item.remainingKg > 0 ? '#aaa' : '#ff5252', fontSize: '0.8rem' }}>অবশিষ্ট:</span>
+                          <span style={{ color: item.remainingKg > 0 ? '#72be44' : '#ff5252', fontWeight: 'bold' }}>
+                            {item.remainingKg.toFixed(1)} kg
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar & Status Badge */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', minWidth: '180px' }}>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <div style={{ height: '6px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{
+                              width: `${remainingPercent}%`,
+                              height: '100%',
+                              background: badgeColor,
+                              transition: 'width 0.3s'
+                            }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#777' }}>
+                            <span>বাকি: {remainingPercent}%</span>
+                            <span>বিক্রি: {soldPercent}%</span>
+                          </div>
+                        </div>
+
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '3px 9px',
+                          borderRadius: '12px',
                           fontSize: '0.75rem',
                           fontWeight: 'bold',
                           color: badgeColor,
@@ -802,6 +982,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                           border: `1px solid ${badgeColor}33`,
                           whiteSpace: 'nowrap'
                         }}>
+                          <StatusIcon size={12} />
                           {badgeText}
                         </span>
                       </div>
@@ -809,8 +990,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                   );
                 })
               ) : (
-                <div style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', textAlign: 'center', padding: '1rem' }}>
-                  এই লটে এখনো কোনো মাছ যোগ করা হয়নি
+                <div style={{ fontSize: '0.85rem', color: '#888', fontStyle: 'italic', textAlign: 'center', padding: '1.5rem' }}>
+                  এই লটে এখনো কোনো মাছের বিবরণ যোগ করা হয়নি
                 </div>
               )}
             </div>
