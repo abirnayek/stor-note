@@ -17,6 +17,7 @@ interface SalesMemoScreenProps {
   memoId: string;
   onLotChange?: (lot: any) => void;
   onBack?: () => void;
+  defaultCustomerType?: 'regular' | 'permanent';
 }
 
 interface FishEntry {
@@ -49,7 +50,7 @@ interface MemoState {
   entries: FishEntry[];
 }
 
-const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber, memoId, onLotChange, onBack }) => {
+const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber, memoId, onLotChange, onBack, defaultCustomerType }) => {
   const { t, language } = useLanguage();
   const memoRef = useRef<HTMLDivElement>(null);
   
@@ -143,7 +144,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           mobile: parsed.mobile || '',
           lotNumberInput: parsed.lotNumberInput || (lotNumber ? lotNumber.toString() : ''),
           paidAmount: parsed.paidAmount !== undefined ? parsed.paidAmount : '',
-          customerType: parsed.customerType || 'regular',
+          customerType: parsed.customerType || defaultCustomerType || 'regular',
           status: parsed.status || 'draft',
           createdAt: parsed.createdAt || today,
           createdAtTime: createdTime || currentTime,
@@ -165,7 +166,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       mobile: '',
       lotNumberInput: lotNumber ? lotNumber.toString() : '',
       paidAmount: '',
-      customerType: 'regular',
+      customerType: defaultCustomerType || 'regular',
       status: 'draft',
       createdAt: today,
       createdAtTime: currentTime,
@@ -383,10 +384,10 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       onLotChange(validLot);
     }
 
-    if (validLot === null) {
-      onNavigate('sales-lots');
-    } else if (onBack) {
+    if (onBack) {
       onBack();
+    } else if (validLot === null) {
+      onNavigate('sales-lots');
     } else {
       onNavigate('sales-memo-list');
     }
@@ -454,17 +455,29 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     // Sync to due accounts if customer type is selected
     if (memoState.customerType) {
       const type = memoState.customerType;
+      const otherType = type === 'regular' ? 'permanent' : 'regular';
       
+      let existingDueObj: any = {};
+      try {
+        const dStr = localStorage.getItem(`due_memo_${memoId}`);
+        if (dStr) existingDueObj = JSON.parse(dStr);
+      } catch (e) {}
+
       const newDueData = {
+        ...existingDueObj,
         id: memoId,
         memoState: memoState,
         date: memoState.createdAt || today,
         name: memoState.customerName,
+        customerName: memoState.customerName,
         address: memoState.address,
         mobile: memoState.mobile,
         lotNumber: memoState.lotNumberInput,
         deposit: memoState.paidAmount,
+        paidAmount: memoState.paidAmount,
         type: type,
+        status: currentStatus,
+        autoMessage: existingDueObj.autoMessage,
         entries: memoState.entries.map((e, i) => ({
           id: e.id,
           serialNo: (i+1).toString(),
@@ -487,15 +500,25 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           localStorage.setItem(`dues_${type}`, JSON.stringify(existingDues));
         }
 
-        // Remove from paid if it was there
-        const existingPaidStr = localStorage.getItem(`paid_dues_${type}`);
-        let existingPaid: string[] = existingPaidStr ? JSON.parse(existingPaidStr) : [];
-        if (existingPaid.includes(memoId)) {
-          existingPaid = existingPaid.filter(id => id !== memoId);
-          localStorage.setItem(`paid_dues_${type}`, JSON.stringify(existingPaid));
+        // Remove from other type dues list
+        const otherDuesStr = localStorage.getItem(`dues_${otherType}`);
+        let otherDues: string[] = otherDuesStr ? JSON.parse(otherDuesStr) : [];
+        if (otherDues.includes(memoId)) {
+          otherDues = otherDues.filter(id => id !== memoId);
+          localStorage.setItem(`dues_${otherType}`, JSON.stringify(otherDues));
         }
+
+        // Remove from all paid lists
+        ['regular', 'permanent'].forEach(t => {
+          const paidStr = localStorage.getItem(`paid_dues_${t}`);
+          let paidList: string[] = paidStr ? JSON.parse(paidStr) : [];
+          if (paidList.includes(memoId)) {
+            paidList = paidList.filter(id => id !== memoId);
+            localStorage.setItem(`paid_dues_${t}`, JSON.stringify(paidList));
+          }
+        });
       } else if (currentStatus === 'paid') {
-        localStorage.setItem(`due_memo_${memoId}`, JSON.stringify({ ...newDueData, paidDate: Date.now() }));
+        localStorage.setItem(`due_memo_${memoId}`, JSON.stringify({ ...newDueData, paidDate: existingDueObj.paidDate || Date.now() }));
         
         const existingPaidStr = localStorage.getItem(`paid_dues_${type}`);
         let existingPaid: string[] = existingPaidStr ? JSON.parse(existingPaidStr) : [];
@@ -504,13 +527,23 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           localStorage.setItem(`paid_dues_${type}`, JSON.stringify(existingPaid));
         }
 
-        // Remove from dues if it was there
-        const existingDuesStr = localStorage.getItem(`dues_${type}`);
-        let existingDues: string[] = existingDuesStr ? JSON.parse(existingDuesStr) : [];
-        if (existingDues.includes(memoId)) {
-          existingDues = existingDues.filter(id => id !== memoId);
-          localStorage.setItem(`dues_${type}`, JSON.stringify(existingDues));
+        // Remove from other paid list
+        const otherPaidStr = localStorage.getItem(`paid_dues_${otherType}`);
+        let otherPaid: string[] = otherPaidStr ? JSON.parse(otherPaidStr) : [];
+        if (otherPaid.includes(memoId)) {
+          otherPaid = otherPaid.filter(id => id !== memoId);
+          localStorage.setItem(`paid_dues_${otherType}`, JSON.stringify(otherPaid));
         }
+
+        // Remove from all dues lists
+        ['regular', 'permanent'].forEach(t => {
+          const duesStr = localStorage.getItem(`dues_${t}`);
+          let duesList: string[] = duesStr ? JSON.parse(duesStr) : [];
+          if (duesList.includes(memoId)) {
+            duesList = duesList.filter(id => id !== memoId);
+            localStorage.setItem(`dues_${t}`, JSON.stringify(duesList));
+          }
+        });
       }
     }
 

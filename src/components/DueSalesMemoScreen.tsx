@@ -1,6 +1,7 @@
 import React from 'react';
 import { type Screen } from '../App';
 import SalesMemoScreen from './SalesMemoScreen';
+import { getNormalizedMemo } from '../utils/dueSyncUtils';
 
 interface DueMemoScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -9,18 +10,9 @@ interface DueMemoScreenProps {
   isPaid?: boolean;
 }
 
-const DueSalesMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType: _dueType, dueId, isPaid = false }) => {
-  let targetLotNumber: number | null = null;
-  const saved = localStorage.getItem(`due_memo_${dueId}`);
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      if (parsed.lotNumber) targetLotNumber = parseInt(parsed.lotNumber, 10) || null;
-      if (!targetLotNumber && parsed.memoState && parsed.memoState.lotNumberInput) {
-        targetLotNumber = parseInt(parsed.memoState.lotNumberInput, 10) || null;
-      }
-    } catch(e) {}
-  }
+const DueSalesMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType = 'regular', dueId, isPaid = false }) => {
+  const normMemo = getNormalizedMemo(dueId);
+  const targetLotNumber = normMemo.lotNumber;
 
   const handleBack = () => {
     if (isPaid) {
@@ -36,6 +28,7 @@ const DueSalesMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType:
       onBack={handleBack}
       lotNumber={targetLotNumber}
       memoId={dueId}
+      defaultCustomerType={dueType === 'permanent' ? 'permanent' : 'regular'}
     />
   );
 };

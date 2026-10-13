@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Plus, Trash2, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
-import { moveToTrash } from '../utils/trashUtils';
+import { syncAllDueAccounts, getNormalizedMemo, deleteDueMemo, type NormalizedDueMemo } from '../utils/dueSyncUtils';
 
 interface AutoMessageConfig {
   scheduledFor: number;
@@ -23,124 +23,31 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
   const [msgTimeframe, setMsgTimeframe] = useState<'24h' | '7d' | 'custom'>('7d');
   const [msgCustomDate, setMsgCustomDate] = useState<string>('');
   const [msgType, setMsgType] = useState<'whatsapp' | 'sms'>('whatsapp');
-  
+  const { t } = useLanguage();
+
+  const loadDues = useCallback(() => {
+    const synced = syncAllDueAccounts();
+    const list = dueType === 'regular'
+      ? synced.regularDues
+      : dueType === 'permanent'
+        ? synced.permanentDues
+        : synced.purchaseDues;
+    setDues(list);
+  }, [dueType]);
+
   useEffect(() => {
-    const loadDues = () => {
-      const savedDues = localStorage.getItem(`dues_${dueType}`);
-      const savedPaid = localStorage.getItem(`paid_dues_${dueType}`);
-      let duesList: string[] = savedDues ? JSON.parse(savedDues) : [];
-      let paidList: string[] = savedPaid ? JSON.parse(savedPaid) : [];
-
-      let listChanged = false;
-      const validDues: string[] = [];
-
-      duesList.forEach(dueId => {
-        const memoStr = localStorage.getItem(`due_memo_${dueId}`);
-        if (!memoStr) return;
-
-        try {
-          const memo = JSON.parse(memoStr);
-          let totalPrice = 0;
-          if (memo && Array.isArray(memo.entries)) {
-            if (dueType === 'purchase') {
-              if (memo.memoState && Number(memo.memoState.totalPriceMain) > 0) {
-                totalPrice = Number(memo.memoState.totalPriceMain);
-              } else {
-                totalPrice = memo.entries.reduce((sum: number, entry: any) => {
-                  let buyRateNum = Number(entry.buyRate) || 0;
-                  let weightInKg = 0;
-                  let totalKgNum = Number(entry.totalKg) || 0;
-                  if (totalKgNum > 0) {
-                    weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
-                  }
-                  if (weightInKg > 0 && buyRateNum > 0) return sum + (buyRateNum * weightInKg);
-                  if (typeof entry.totalPrice === 'number' && entry.totalPrice > 0) return sum + entry.totalPrice;
-                  return sum;
-                }, 0);
-              }
-            } else {
-              totalPrice = memo.entries.reduce((sum: number, entry: any) => {
-                let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
-                let buyRateNum = Number(entry.buyRate) || 0;
-                let calculatedSalePriceAuto = buyRateNum > 0 ? buyRateNum + (buyRateNum * currentProfitPercent / 100) : 0;
-                let salePriceAuto = 0;
-                if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-                  let manualRateNum = Number(entry.manualSaleRate);
-                  salePriceAuto = manualRateNum + (manualRateNum * currentProfitPercent / 100);
-                } else {
-                  salePriceAuto = calculatedSalePriceAuto;
-                }
-                let weightInKg = 0;
-                let totalKgNum = Number(entry.totalKg) || 0;
-                if (totalKgNum > 0) {
-                  weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
-                }
-                if (weightInKg > 0 && salePriceAuto > 0) {
-                  return sum + (salePriceAuto * weightInKg);
-                }
-                return sum;
-              }, 0);
-            }
-
-            const deposit = typeof memo.deposit === 'number' ? memo.deposit : (Number(memo.deposit) || 0);
-            const paid = typeof memo.paidAmount === 'number' ? memo.paidAmount : (Number(memo.paidAmount) || 0);
-            const memoStatePaid = (memo.memoState && typeof memo.memoState.paidAmount === 'number') ? memo.memoState.paidAmount : (Number(memo.memoState?.paidAmount) || 0);
-            const totalPaid = Math.max(deposit + paid, memoStatePaid);
-            const dueAmount = totalPrice - totalPaid;
-
-            if ((totalPrice > 0 && dueAmount <= 0) || memo.paidDate || memo.status === 'paid') {
-              listChanged = true;
-              if (!paidList.includes(dueId)) {
-                paidList.push(dueId);
-              }
-              memo.paidDate = memo.paidDate || Date.now();
-              memo.status = 'paid';
-              if (memo.memoState) memo.memoState.status = 'paid';
-              localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(memo));
-            } else {
-              validDues.push(dueId);
-            }
-          } else {
-            validDues.push(dueId);
-          }
-        } catch (e) {
-          validDues.push(dueId);
-        }
-      });
-
-      if (listChanged) {
-        localStorage.setItem(`dues_${dueType}`, JSON.stringify(validDues));
-        localStorage.setItem(`paid_dues_${dueType}`, JSON.stringify(paidList));
-        setDues(validDues);
-      } else {
-        setDues(duesList);
-      }
-    };
     loadDues();
     window.addEventListener('storage', loadDues);
     return () => window.removeEventListener('storage', loadDues);
-  }, [dueType]);
-  
+  }, [loadDues]);
+
   const handleDeleteDue = (dueId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this due memo?')) {
-      const memoDataStr = localStorage.getItem(`due_memo_${dueId}`);
-      const memoData = memoDataStr ? JSON.parse(memoDataStr) : {};
-      
-      moveToTrash({
-        id: dueId,
-        type: 'due_memo',
-        title: `Due Memo (${memoData.name || 'Unknown'})`,
-        data: memoData
-      });
-
-      const newDues = dues.filter(d => d !== dueId);
-      setDues(newDues);
-      localStorage.setItem(`dues_${dueType}`, JSON.stringify(newDues));
-      localStorage.removeItem(`due_memo_${dueId}`);
+      deleteDueMemo(dueId, dueType, false);
+      setDues(prev => prev.filter(d => d !== dueId));
     }
   };
-  const { t } = useLanguage();
 
   const titleKey = dueType === 'regular' ? 'regularDue' : dueType === 'permanent' ? 'permanentDue' : 'purchaseDue';
   const title = titleKey === 'purchaseDue' ? 'ক্রয় বকেয়া' : t(titleKey);
@@ -148,87 +55,17 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
   let setMsgCount = 0;
   let emptyMsgCount = 0;
   let totalCategoryDue = 0;
-  let userDues: Record<string, number> = {};
+  const memoMap: Record<string, NormalizedDueMemo> = {};
 
   dues.forEach(dueId => {
-    const memoStr = localStorage.getItem(`due_memo_${dueId}`);
-    if (memoStr) {
-      try {
-        const memo = JSON.parse(memoStr);
-        if (memo.autoMessage) {
-          setMsgCount++;
-        } else {
-          emptyMsgCount++;
-        }
-        
-        // Calculate due for this memo
-        if (memo && Array.isArray(memo.entries)) {
-          let totalPrice = 0;
-          if (dueType === 'purchase') {
-            if (memo.memoState && Number(memo.memoState.totalPriceMain) > 0) {
-              totalPrice = Number(memo.memoState.totalPriceMain);
-            } else {
-              totalPrice = memo.entries.reduce((sum: number, entry: any) => {
-                let buyRateNum = Number(entry.buyRate) || 0;
-                let weightInKg = 0;
-                let totalKgNum = Number(entry.totalKg) || 0;
-                if (totalKgNum > 0) {
-                  weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
-                }
-                if (weightInKg > 0 && buyRateNum > 0) {
-                  return sum + (buyRateNum * weightInKg);
-                }
-                if (typeof entry.totalPrice === 'number' && entry.totalPrice > 0) {
-                  return sum + entry.totalPrice;
-                }
-                return sum;
-              }, 0);
-            }
-          } else {
-            totalPrice = memo.entries.reduce((sum: number, entry: any) => {
-              let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
-              let buyRateNum = Number(entry.buyRate) || 0;
-              
-              let calculatedSalePriceAuto = 0;
-              if (buyRateNum > 0) {
-                calculatedSalePriceAuto = buyRateNum + (buyRateNum * currentProfitPercent / 100);
-              }
-              
-              let salePriceAuto = 0;
-              if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-                let manualRateNum = Number(entry.manualSaleRate);
-                salePriceAuto = manualRateNum + (manualRateNum * currentProfitPercent / 100);
-              } else {
-                salePriceAuto = calculatedSalePriceAuto;
-              }
-              
-              let weightInKg = 0;
-              let totalKgNum = Number(entry.totalKg) || 0;
-              if (totalKgNum > 0) {
-                weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
-              }
-              
-              if (weightInKg > 0 && salePriceAuto > 0) {
-                return sum + (salePriceAuto * weightInKg);
-              }
-              return sum;
-            }, 0);
-          }
-          
-          const deposit = typeof memo.deposit === 'number' ? memo.deposit : (Number(memo.deposit) || 0);
-          const paid = typeof memo.paidAmount === 'number' ? memo.paidAmount : (Number(memo.paidAmount) || 0);
-          const memoStatePaid = (memo.memoState && typeof memo.memoState.paidAmount === 'number') ? memo.memoState.paidAmount : (Number(memo.memoState?.paidAmount) || 0);
-          const totalPaid = Math.max(deposit + paid, memoStatePaid);
-          const dueAmount = totalPrice - totalPaid;
-          
-          userDues[dueId] = dueAmount > 0 ? dueAmount : 0;
-
-          if (dueAmount > 0) {
-            totalCategoryDue += dueAmount;
-          }
-        }
-      } catch (e) {}
+    const memo = getNormalizedMemo(dueId);
+    memoMap[dueId] = memo;
+    if (memo.autoMessage) {
+      setMsgCount++;
+    } else {
+      emptyMsgCount++;
     }
+    totalCategoryDue += memo.dueAmount;
   });
 
   const handleBulkSetMessage = () => {
@@ -245,26 +82,27 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
     }
 
     dues.forEach(dueId => {
-      const memoStr = localStorage.getItem(`due_memo_${dueId}`);
-      if (memoStr) {
-        try {
-          const memo = JSON.parse(memoStr);
-          if (!memo.autoMessage) {
-            memo.autoMessage = {
-              scheduledFor: timestamp,
-              type: msgType,
-              status: 'pending'
-            };
-            localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(memo));
-          }
-        } catch (e) {}
+      const memo = memoMap[dueId] || getNormalizedMemo(dueId);
+      if (!memo.autoMessage) {
+        const autoMessage: AutoMessageConfig = {
+          scheduledFor: timestamp,
+          type: msgType,
+          status: 'pending'
+        };
+        const dueStr = localStorage.getItem(`due_memo_${dueId}`);
+        if (dueStr) {
+          try {
+            const parsed = JSON.parse(dueStr);
+            parsed.autoMessage = autoMessage;
+            localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(parsed));
+          } catch (e) {}
+        }
       }
     });
 
     setShowBulkModal(false);
     alert(`Successfully scheduled auto message for ${emptyMsgCount} memos!`);
-    // trigger re-render
-    setDues([...dues]);
+    loadDues();
   };
 
   return (
@@ -313,32 +151,32 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
       <div className="list-layout-wrapper" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '2rem' }}>
         <div className="lot-grid" style={{ flex: 1, marginTop: 0 }}>
           {dues.map(dueId => {
-            const memoStr = localStorage.getItem(`due_memo_${dueId}`);
-            let name = 'Unknown';
-            let autoMsg: AutoMessageConfig | undefined = undefined;
-            if (memoStr) {
-              try {
-                const memo = JSON.parse(memoStr);
-                name = memo.name || 'Unknown';
-                autoMsg = memo.autoMessage;
-              } catch (e) {}
-            }
+            const memo = memoMap[dueId] || getNormalizedMemo(dueId);
+            const name = memo.name;
+            const autoMsg = memo.autoMessage;
             return (
               <ProtectedMemoWrapper key={dueId} passwordKey={`memo_password_due_memo_${dueId}`} onAccessGranted={() => onSelectDue(dueId)}>
                 <div className="lot-card" style={{ position: 'relative' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '80%' }}>
                     <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--text-color)', wordBreak: 'break-word', textAlign: 'left' }}>{name}</span>
-                    <span style={{ fontSize: '0.95rem', color: '#ff9800', marginTop: '0.3rem', fontWeight: '600' }}>Due: ৳ {(userDues[dueId] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <span style={{ fontSize: '0.95rem', color: '#ff9800', marginTop: '0.3rem', fontWeight: '600' }}>
+                      Due: ৳ {memo.dueAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                    {memo.mobile && (
+                      <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: '0.2rem' }}>
+                        📞 {memo.mobile}
+                      </span>
+                    )}
                   </div>
                   <div className="card-top-actions">
                     <button className="btn-icon delete-btn" onClick={(e) => handleDeleteDue(dueId, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
                       <Trash2 size={16} />
                     </button>
-                      </div>
-                      <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
-                        <MemoLockIcon passwordKey={`memo_password_${dueId}`} />
-                      </div>
+                  </div>
+                  <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
+                    <MemoLockIcon passwordKey={`memo_password_${dueId}`} />
+                  </div>
                 </div>
                 {autoMsg && (
                   <div style={{ 
@@ -421,5 +259,3 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
 };
 
 export default DueListScreen;
-
-

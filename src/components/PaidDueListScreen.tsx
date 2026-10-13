@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { type Screen } from '../App';
 import { ChevronLeft, Settings, X, Trash2 } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
+import { syncAllDueAccounts, getNormalizedMemo, deleteDueMemo, type NormalizedDueMemo } from '../utils/dueSyncUtils';
 
 interface PaidDueListScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -20,27 +21,8 @@ const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueTy
   const handleDeleteDue = (dueId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this paid memo?')) {
-      const memoDataStr = localStorage.getItem(`due_memo_${dueId}`);
-      const memoData = memoDataStr ? JSON.parse(memoDataStr) : {};
-      
-      const newDues = dues.filter(d => d !== dueId);
-      setDues(newDues);
-      localStorage.setItem(`paid_dues_${dueType}`, JSON.stringify(newDues));
-      
-      // Move to trash
-      const trashStr = localStorage.getItem('trash_items');
-      const trash = trashStr ? JSON.parse(trashStr) : [];
-      trash.push({
-        id: `trash_${Date.now()}`,
-        originalId: dueId,
-        type: 'due_memo',
-        title: `Paid Memo (${memoData.name || 'Unknown'})`,
-        data: memoData,
-        deletedAt: Date.now()
-      });
-      localStorage.setItem('trash_items', JSON.stringify(trash));
-      
-      localStorage.removeItem(`due_memo_${dueId}`);
+      deleteDueMemo(dueId, dueType, true);
+      setDues(prev => prev.filter(d => d !== dueId));
     }
   };
 
@@ -65,74 +47,57 @@ const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueTy
   };
 
   // Run cleanup and load dues
-  const runCleanup = (enabled: boolean, months: number) => {
-    const savedDues = localStorage.getItem(`paid_dues_${dueType}`);
-    let duesList: string[] = savedDues ? JSON.parse(savedDues) : [];
-    
+  const runCleanup = useCallback((enabled: boolean, months: number) => {
+    const synced = syncAllDueAccounts();
+    let duesList = dueType === 'regular'
+      ? synced.paidRegularDues
+      : dueType === 'permanent'
+        ? synced.paidPermanentDues
+        : synced.paidPurchaseDues;
+
     if (enabled) {
       const now = Date.now();
       const msInMonth = 30 * 24 * 60 * 60 * 1000;
-      
+
       const filteredDues = duesList.filter(dueId => {
-        const memoStr = localStorage.getItem(`due_memo_${dueId}`);
-        if (memoStr) {
-          try {
-            const memo = JSON.parse(memoStr);
-            if (memo.paidDate) {
-              const age = now - memo.paidDate;
-              if (age > months * msInMonth) {
-                // Delete old memo
-                localStorage.removeItem(`due_memo_${dueId}`);
-                return false;
-              }
-            }
-          } catch (e) {}
+        const memo = getNormalizedMemo(dueId);
+        if (memo.paidDate) {
+          const age = now - memo.paidDate;
+          if (age > months * msInMonth) {
+            deleteDueMemo(dueId, dueType, true);
+            return false;
+          }
         }
         return true;
       });
-      
+
       if (filteredDues.length !== duesList.length) {
         localStorage.setItem(`paid_dues_${dueType}`, JSON.stringify(filteredDues));
         duesList = filteredDues;
       }
     }
-    
+
     setDues(duesList);
-  };
+  }, [dueType]);
 
   useEffect(() => {
     runCleanup(autoDeleteEnabled, autoDeleteMonths);
-    
+
     const handleStorage = () => runCleanup(autoDeleteEnabled, autoDeleteMonths);
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, [dueType, autoDeleteEnabled, autoDeleteMonths]);
+  }, [runCleanup, autoDeleteEnabled, autoDeleteMonths]);
 
   let totalCategoryPaid = 0;
-  let userPaid: Record<string, number> = {};
+  const memoMap: Record<string, NormalizedDueMemo> = {};
 
   dues.forEach(dueId => {
-    const memoStr = localStorage.getItem(`due_memo_${dueId}`);
-    if (memoStr) {
-      try {
-        const memo = JSON.parse(memoStr);
-        let currentPaid = 0;
-        
-        if (typeof memo.paidAmount === 'number') {
-          currentPaid = memo.paidAmount;
-        } else if (memo.paidAmount) {
-          currentPaid = Number(memo.paidAmount) || 0;
-        }
-
-        if (currentPaid > 0) {
-          totalCategoryPaid += currentPaid;
-          userPaid[dueId] = currentPaid;
-        }
-      } catch (e) {}
-    }
+    const memo = getNormalizedMemo(dueId);
+    memoMap[dueId] = memo;
+    totalCategoryPaid += memo.paidAmount;
   });
 
-  const title = dueType === 'regular' ? t('regularDue') : t('permanentDue');
+  const title = dueType === 'regular' ? t('regularDue') : dueType === 'permanent' ? t('permanentDue') : 'ক্রয় বকেয়া';
 
   return (
     <div className="lots-screen">
@@ -164,35 +129,35 @@ const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueTy
       <div className="list-layout-wrapper" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '2rem' }}>
         <div className="lot-grid" style={{ flex: 1, marginTop: 0 }}>
           {dues.map(dueId => {
-            const memoStr = localStorage.getItem(`due_memo_${dueId}`);
-            let name = 'Unknown';
+            const memo = memoMap[dueId] || getNormalizedMemo(dueId);
+            const name = memo.name;
             let paidDateStr = '';
-            if (memoStr) {
-              try {
-                const memo = JSON.parse(memoStr);
-                name = memo.name || 'Unknown';
-                if (memo.paidDate) {
-                  paidDateStr = new Date(memo.paidDate).toLocaleDateString();
-                }
-              } catch (e) {}
+            if (memo.paidDate) {
+              paidDateStr = new Date(memo.paidDate).toLocaleDateString();
+            } else if (memo.dateStr) {
+              paidDateStr = memo.dateStr;
             }
+
             return (
               <ProtectedMemoWrapper key={dueId} passwordKey={`memo_password_due_memo_${dueId}`} onAccessGranted={() => onSelectDue(dueId)}>
                 <div className="lot-card" style={{ position: 'relative' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '80%' }}>
                     <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--text-color)', wordBreak: 'break-word', textAlign: 'left' }}>{name}</span>
-                    <span style={{ fontSize: '0.95rem', color: '#72be44', marginTop: '0.3rem', fontWeight: '600' }}>Paid: ৳ {(userPaid[dueId] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <span style={{ fontSize: '0.95rem', color: '#72be44', marginTop: '0.3rem', fontWeight: '600' }}>
+                      Paid: ৳ {memo.paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
                     {paidDateStr && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>Paid on: {paidDateStr}</div>}
+                    {memo.mobile && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.2rem' }}>📞 {memo.mobile}</div>}
                   </div>
                   <div className="card-top-actions">
                     <button className="btn-icon delete-btn" onClick={(e) => handleDeleteDue(dueId, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
                       <Trash2 size={16} />
                     </button>
-                      </div>
-                      <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
-                        <MemoLockIcon passwordKey={`memo_password_${dueId}`} />
-                      </div>
+                  </div>
+                  <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
+                    <MemoLockIcon passwordKey={`memo_password_${dueId}`} />
+                  </div>
                 </div>
               </div>
               </ProtectedMemoWrapper>
@@ -263,5 +228,3 @@ const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueTy
 };
 
 export default PaidDueListScreen;
-
-
