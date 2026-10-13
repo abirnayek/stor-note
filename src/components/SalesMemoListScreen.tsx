@@ -3,7 +3,6 @@ import { type Screen } from '../App';
 import { ChevronLeft, Plus, Trash2, Filter, Lock } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
-import { moveToTrash } from '../utils/trashUtils';
 
 interface SalesMemoListScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -17,7 +16,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
   const [customerTypeFilter, setCustomerTypeFilter] = useState<'all' | 'regular' | 'permanent'>('all');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const getMemoData = (memoId: string) => {
     const memoKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
@@ -29,9 +28,14 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
       try {
         const parsed = JSON.parse(memoStr);
         const data = parsed.memoState || parsed;
-        const memoLot = data.lotNumberInput ? parseInt(data.lotNumberInput, 10) : (data.lotNumber ? parseInt(data.lotNumber, 10) : null);
-        // If explicitly assigned to another lot, do not display in this lot
-        if (memoLot !== null && !isNaN(memoLot) && memoLot !== lotNumber) {
+        const rawLot = (data.lotNumberInput !== undefined && data.lotNumberInput !== '')
+          ? data.lotNumberInput
+          : (data.lotNumber !== undefined && data.lotNumber !== '' ? data.lotNumber : null);
+        const memoLot = rawLot !== null ? parseInt(String(rawLot), 10) : null;
+        
+        // This screen ONLY displays memos that specifically belong to lotNumber.
+        // If unassigned (null/NaN) or assigned to another lot, do NOT display in this lot!
+        if (memoLot === null || isNaN(memoLot) || memoLot !== lotNumber) {
           return null;
         }
         return data;
@@ -59,7 +63,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
         } catch(e) {}
       }
 
-      // Check all storage keys matching sales_memo_lot_{lotNumber}_memo_*
+      // Check all storage keys matching sales_memo_lot_${lotNumber}_memo_*
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (!key) continue;
@@ -71,7 +75,32 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
             if (data) {
               foundMemoIds.add(id);
             } else {
-              // Memo has moved to another lot; remove stale key
+              // Memo does not belong to this lot anymore.
+              // Make sure its data is preserved in unassigned before removing from this lot!
+              const rawStr = localStorage.getItem(key);
+              if (rawStr) {
+                try {
+                  const parsed = JSON.parse(rawStr);
+                  const inner = parsed.memoState || parsed;
+                  const rawLot = (inner.lotNumberInput !== undefined && inner.lotNumberInput !== '')
+                    ? inner.lotNumberInput
+                    : (inner.lotNumber !== undefined && inner.lotNumber !== '' ? inner.lotNumber : null);
+                  const mLot = rawLot !== null ? parseInt(String(rawLot), 10) : null;
+                  if (mLot === null || isNaN(mLot)) {
+                    const uKey = `sales_memo_lot_unassigned_memo_${id}`;
+                    if (!localStorage.getItem(uKey)) {
+                      localStorage.setItem(uKey, rawStr);
+                    }
+                    const uListKey = 'sales_memo_list_unassigned';
+                    const uListStr = localStorage.getItem(uListKey);
+                    let uList: string[] = uListStr ? JSON.parse(uListStr) : [];
+                    if (!uList.includes(id)) {
+                      uList.push(id);
+                      localStorage.setItem(uListKey, JSON.stringify(uList));
+                    }
+                  }
+                } catch(e) {}
+              }
               localStorage.removeItem(key);
             }
           }
@@ -108,22 +137,96 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
 
   const handleDeleteMemo = (memoId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this memo?')) {
-      const memoKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
-      const memoDataStr = localStorage.getItem(memoKey);
-      const memoData = memoDataStr ? JSON.parse(memoDataStr) : {};
-      
-      moveToTrash({
-        id: `sales_memo_lot_${lotNumber}_memo_${memoId}`,
-        type: 'sales_lot',
-        title: `Sales Lot ${lotNumber} - Memo ${memoId}`,
-        data: memoData
-      });
+    const confirmMsg = language === 'bn'
+      ? 'আপনি কি এই মেমোটি এই লট থেকে মুছে দিতে চান?\n(মেমোটির লট নম্বর মুছে যাবে এবং এটি গ্লোবাল মেমোতে সংরক্ষিত থাকবে)'
+      : 'Do you want to remove this memo from this lot?\n(The lot number will be cleared and it will remain in global memos)';
 
+    if (window.confirm(confirmMsg)) {
+      const oldKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
+      let memoData: any = null;
+      const oldStr = localStorage.getItem(oldKey);
+      if (oldStr) {
+        try { memoData = JSON.parse(oldStr); } catch(e) {}
+      }
+      if (!memoData) {
+        const dueStr = localStorage.getItem(`due_memo_${memoId}`);
+        if (dueStr) {
+          try { memoData = JSON.parse(dueStr); } catch(e) {}
+        }
+      }
+      if (!memoData) {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.endsWith(`_memo_${memoId}`)) {
+            try { 
+              memoData = JSON.parse(localStorage.getItem(k) || '');
+              break; 
+            } catch(e) {}
+          }
+        }
+      }
+
+      // Clear lot number in memo data and save to unassigned key
+      if (memoData) {
+        if (memoData.memoState) {
+          memoData.memoState.lotNumberInput = '';
+          memoData.memoState.lotNumber = '';
+        }
+        memoData.lotNumberInput = '';
+        memoData.lotNumber = '';
+      } else {
+        memoData = { lotNumberInput: '', lotNumber: '' };
+      }
+
+      const unassignedKey = `sales_memo_lot_unassigned_memo_${memoId}`;
+      localStorage.setItem(unassignedKey, JSON.stringify(memoData));
+
+      // Preserve stable timestamp for global memos ordering
+      try {
+        const tsRaw = localStorage.getItem('local_timestamps');
+        let tsMap: Record<string, number> = tsRaw ? JSON.parse(tsRaw) : {};
+        if (tsMap[oldKey]) {
+          tsMap[unassignedKey] = tsMap[oldKey];
+        } else if (!tsMap[unassignedKey]) {
+          tsMap[unassignedKey] = Date.now();
+        }
+        localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
+      } catch(e) {}
+
+      // Remove from current lot storage key
+      localStorage.removeItem(oldKey);
+
+      // Remove from current lot list
       const newMemos = memos.filter(m => m !== memoId);
       setMemos(newMemos);
       localStorage.setItem(`sales_memo_list_${lotNumber}`, JSON.stringify(newMemos));
-      localStorage.removeItem(memoKey);
+
+      // Add to unassigned list
+      const uKey = 'sales_memo_list_unassigned';
+      const uStr = localStorage.getItem(uKey);
+      let uList: string[] = uStr ? JSON.parse(uStr) : [];
+      if (!uList.includes(memoId)) {
+        uList.push(memoId);
+        localStorage.setItem(uKey, JSON.stringify(uList));
+      }
+
+      // Update due_memo_${memoId} if exists
+      const dueKey = `due_memo_${memoId}`;
+      const dueStr = localStorage.getItem(dueKey);
+      if (dueStr) {
+        try {
+          const dueData = JSON.parse(dueStr);
+          dueData.lotNumber = '';
+          if (dueData.memoState) {
+            dueData.memoState.lotNumberInput = '';
+            dueData.memoState.lotNumber = '';
+          }
+          localStorage.setItem(dueKey, JSON.stringify(dueData));
+        } catch(e) {}
+      }
+
+      // Trigger storage event so both this screen and global list refresh
+      window.dispatchEvent(new Event('storage'));
     }
   };
 
@@ -245,7 +348,12 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
                   <span className="lot-number">{name}</span>
                 </div>
                 <div className="card-top-actions">
-                  <button className="btn-icon delete-btn" onClick={(e) => handleDeleteMemo(memoId, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
+                  <button 
+                    className="btn-icon delete-btn" 
+                    onClick={(e) => handleDeleteMemo(memoId, e)} 
+                    title={language === 'bn' ? 'লট থেকে সরান (মেমোটি গ্লোবাল মেমোতে থাকবে)' : 'Remove from lot (kept in global memos)'}
+                    style={{ padding: '4px', margin: 0, color: '#ff5252' }}
+                  >
                     <Trash2 size={16} />
                   </button>
                       </div>

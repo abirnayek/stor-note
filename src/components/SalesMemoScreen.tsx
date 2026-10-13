@@ -262,18 +262,26 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
       } catch(e) {}
 
+      const knownLots = new Set<number>();
+      for (let l = 1; l <= 50; l++) knownLots.add(l);
+      try {
+        const sLots: number[] = JSON.parse(localStorage.getItem('sales_lots_list') || '[]');
+        sLots.forEach(l => knownLots.add(l));
+      } catch(e) {}
+      if (lotNumber !== null) knownLots.add(lotNumber);
+
       // 2. Remove memo from all other lot storage keys so it fully moves out
       if (validLot !== null) {
         localStorage.removeItem(`sales_memo_lot_unassigned_memo_${memoId}`);
       }
-      for (let l = 1; l <= 50; l++) {
+      knownLots.forEach(l => {
         if (l !== validLot) {
           localStorage.removeItem(`sales_memo_lot_${l}_memo_${memoId}`);
         }
-      }
+      });
 
       // 3. Update sales_memo_list_* for all lots
-      for (let l = 1; l <= 50; l++) {
+      knownLots.forEach(l => {
         const lKey = `sales_memo_list_${l}`;
         const lStr = localStorage.getItem(lKey);
         if (lStr) {
@@ -293,7 +301,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         } else if (l === validLot) {
           localStorage.setItem(lKey, JSON.stringify([memoId]));
         }
-      }
+      });
 
       // Handle unassigned list
       const uKey = 'sales_memo_list_unassigned';
@@ -334,12 +342,19 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
   const handleBack = () => {
     syncMemoToLot(memoState.lotNumberInput, memoState);
-    if (onBack) {
+    const rawNum = memoState.lotNumberInput ? parseInt(memoState.lotNumberInput, 10) : null;
+    const validLot = (rawNum !== null && !isNaN(rawNum) && rawNum > 0) ? rawNum : null;
+
+    if (onLotChange) {
+      onLotChange(validLot);
+    }
+
+    if (validLot === null) {
+      onNavigate('sales-lots');
+    } else if (onBack) {
       onBack();
     } else {
-      const rawNum = memoState.lotNumberInput ? parseInt(memoState.lotNumberInput, 10) : null;
-      const validLot = (rawNum !== null && !isNaN(rawNum) && rawNum > 0) ? rawNum : lotNumber;
-      validLot === null ? onNavigate('sales-lots') : onNavigate('sales-memo-list');
+      onNavigate('sales-memo-list');
     }
   };
 
