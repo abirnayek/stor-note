@@ -7,7 +7,7 @@ export interface NormalizedDueMemo {
   mobile: string;
   address: string;
   lotNumber: number | null;
-  customerType: 'regular' | 'permanent' | 'purchase';
+  customerType: 'regular' | 'permanent' | 'purchase' | 'reseller';
   status: 'due' | 'paid' | 'draft';
   dateStr: string;
   timeStr: string;
@@ -156,13 +156,15 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
     lotNumber = Number(rawLot);
   }
 
-  // Customer Type resolution ('regular' | 'permanent' | 'purchase')
-  let customerType: 'regular' | 'permanent' | 'purchase' = 'regular';
+  // Customer Type resolution ('regular' | 'permanent' | 'purchase' | 'reseller')
+  let customerType: 'regular' | 'permanent' | 'purchase' | 'reseller' = 'regular';
   const rawType = primary.customerType || innerMemo.customerType || primary.type || innerMemo.type || (dueData && (dueData.customerType || dueData.type));
   if (rawType === 'permanent') {
     customerType = 'permanent';
   } else if (rawType === 'purchase') {
     customerType = 'purchase';
+  } else if (rawType === 'reseller') {
+    customerType = 'reseller';
   } else {
     customerType = 'regular';
   }
@@ -254,9 +256,11 @@ export const syncAllDueAccounts = (): {
   regularDues: string[];
   permanentDues: string[];
   purchaseDues: string[];
+  resellerDues: string[];
   paidRegularDues: string[];
   paidPermanentDues: string[];
   paidPurchaseDues: string[];
+  paidResellerDues: string[];
 } => {
   const allCandidateIds = new Set<string>();
 
@@ -289,24 +293,30 @@ export const syncAllDueAccounts = (): {
   const curRegular = readList('dues_regular');
   const curPermanent = readList('dues_permanent');
   const curPurchase = readList('dues_purchase');
+  const curReseller = readList('dues_reseller');
   const curPaidRegular = readList('paid_dues_regular');
   const curPaidPermanent = readList('paid_dues_permanent');
   const curPaidPurchase = readList('paid_dues_purchase');
+  const curPaidReseller = readList('paid_dues_reseller');
 
   curRegular.forEach(id => allCandidateIds.add(id));
   curPermanent.forEach(id => allCandidateIds.add(id));
   curPurchase.forEach(id => allCandidateIds.add(id));
+  curReseller.forEach(id => allCandidateIds.add(id));
   curPaidRegular.forEach(id => allCandidateIds.add(id));
   curPaidPermanent.forEach(id => allCandidateIds.add(id));
   curPaidPurchase.forEach(id => allCandidateIds.add(id));
+  curPaidReseller.forEach(id => allCandidateIds.add(id));
 
   const regularDuesMap = new Map<string, number>();
   const permanentDuesMap = new Map<string, number>();
   const purchaseDuesMap = new Map<string, number>();
+  const resellerDuesMap = new Map<string, number>();
 
   const paidRegularDuesMap = new Map<string, number>();
   const paidPermanentDuesMap = new Map<string, number>();
   const paidPurchaseDuesMap = new Map<string, number>();
+  const paidResellerDuesMap = new Map<string, number>();
 
   allCandidateIds.forEach(id => {
     const memo = getNormalizedMemo(id);
@@ -317,8 +327,8 @@ export const syncAllDueAccounts = (): {
       return;
     }
 
-    const wasTrackedAsDue = curRegular.includes(id) || curPermanent.includes(id) || curPurchase.includes(id) ||
-      curPaidRegular.includes(id) || curPaidPermanent.includes(id) || curPaidPurchase.includes(id) ||
+    const wasTrackedAsDue = curRegular.includes(id) || curPermanent.includes(id) || curPurchase.includes(id) || curReseller.includes(id) ||
+      curPaidRegular.includes(id) || curPaidPermanent.includes(id) || curPaidPurchase.includes(id) || curPaidReseller.includes(id) ||
       Boolean(memo.paidDate) || memo.status === 'due' || memo.status === 'paid' || memo.dueAmount > 0;
 
     if (memo.customerType === 'purchase') {
@@ -332,6 +342,12 @@ export const syncAllDueAccounts = (): {
         permanentDuesMap.set(id, memo.timestamp);
       } else if (wasTrackedAsDue && (memo.paidDate || memo.status === 'paid' || memo.totalBill > 0)) {
         paidPermanentDuesMap.set(id, memo.timestamp);
+      }
+    } else if (memo.customerType === 'reseller') {
+      if (memo.dueAmount > 0) {
+        resellerDuesMap.set(id, memo.timestamp);
+      } else if (wasTrackedAsDue && (memo.paidDate || memo.status === 'paid' || memo.totalBill > 0)) {
+        paidResellerDuesMap.set(id, memo.timestamp);
       }
     } else {
       // Default to regular
@@ -412,29 +428,35 @@ export const syncAllDueAccounts = (): {
   const regularDues = sortByTs(regularDuesMap);
   const permanentDues = sortByTs(permanentDuesMap);
   const purchaseDues = sortByTs(purchaseDuesMap);
+  const resellerDues = sortByTs(resellerDuesMap);
 
   const paidRegularDues = sortByTs(paidRegularDuesMap);
   const paidPermanentDues = sortByTs(paidPermanentDuesMap);
   const paidPurchaseDues = sortByTs(paidPurchaseDuesMap);
+  const paidResellerDues = sortByTs(paidResellerDuesMap);
 
   // Write updated arrays to localStorage
   try {
     localStorage.setItem('dues_regular', JSON.stringify(regularDues));
     localStorage.setItem('dues_permanent', JSON.stringify(permanentDues));
     localStorage.setItem('dues_purchase', JSON.stringify(purchaseDues));
+    localStorage.setItem('dues_reseller', JSON.stringify(resellerDues));
 
     localStorage.setItem('paid_dues_regular', JSON.stringify(paidRegularDues));
     localStorage.setItem('paid_dues_permanent', JSON.stringify(paidPermanentDues));
     localStorage.setItem('paid_dues_purchase', JSON.stringify(paidPurchaseDues));
+    localStorage.setItem('paid_dues_reseller', JSON.stringify(paidResellerDues));
   } catch (e) {}
 
   return {
     regularDues,
     permanentDues,
     purchaseDues,
+    resellerDues,
     paidRegularDues,
     paidPermanentDues,
-    paidPurchaseDues
+    paidPurchaseDues,
+    paidResellerDues
   };
 };
 
@@ -442,7 +464,7 @@ export const syncAllDueAccounts = (): {
  * Changes customer type of a due memo between 'regular' and 'permanent'
  * and immediately updates all corresponding localStorage keys and lists.
  */
-export const changeDueCustomerType = (dueId: string, newType: 'regular' | 'permanent') => {
+export const changeDueCustomerType = (dueId: string, newType: 'regular' | 'permanent' | 'purchase' | 'reseller') => {
   // 1. Update due_memo_${dueId}
   const dueKey = `due_memo_${dueId}`;
   const dueStr = localStorage.getItem(dueKey);
@@ -494,7 +516,7 @@ export const changeDueCustomerType = (dueId: string, newType: 'regular' | 'perma
 /**
  * Removes a due memo from all due lists, sales keys (if applicable), and archives to trash.
  */
-export const deleteDueMemo = (dueId: string, _dueType?: 'regular' | 'permanent' | 'purchase', isPaid: boolean = false) => {
+export const deleteDueMemo = (dueId: string, _dueType?: 'regular' | 'permanent' | 'purchase' | 'reseller', isPaid: boolean = false) => {
   const memoData = getNormalizedMemo(dueId);
 
   moveToTrash({
@@ -518,9 +540,11 @@ export const deleteDueMemo = (dueId: string, _dueType?: 'regular' | 'permanent' 
   cleanList('dues_regular');
   cleanList('dues_permanent');
   cleanList('dues_purchase');
+  cleanList('dues_reseller');
   cleanList('paid_dues_regular');
   cleanList('paid_dues_permanent');
   cleanList('paid_dues_purchase');
+  cleanList('paid_dues_reseller');
 
   localStorage.removeItem(`due_memo_${dueId}`);
 
@@ -559,7 +583,7 @@ export interface SalesMemoGlobalItem {
   dueAmount: number;
   dateStr: string;
   timeStr: string;
-  customerType?: 'regular' | 'permanent' | '';
+  customerType?: 'regular' | 'permanent' | 'reseller' | '';
   sourceKey: string;
   month?: number;
   year?: number;
@@ -787,5 +811,13 @@ export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
   });
 
   return result;
+};
+
+/**
+ * Returns all sales memos that belong to the 'reseller' category.
+ */
+export const getResellerMemos = (): SalesMemoGlobalItem[] => {
+  const all = getAllGlobalSalesMemos();
+  return all.filter(m => m.customerType === 'reseller');
 };
 

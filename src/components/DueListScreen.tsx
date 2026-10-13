@@ -13,15 +13,16 @@ interface AutoMessageConfig {
 
 interface DueListScreenProps {
   onNavigate: (screen: Screen) => void;
-  dueType: 'regular' | 'permanent' | 'purchase';
+  dueType: 'regular' | 'permanent' | 'purchase' | 'reseller';
   onSelectDue: (dueId: string) => void;
-  onSelectType?: (type: 'regular' | 'permanent') => void;
+  onSelectType?: (type: 'regular' | 'permanent' | 'reseller') => void;
 }
 
 const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSelectDue, onSelectType }) => {
   const [dues, setDues] = useState<string[]>([]);
   const [regularCount, setRegularCount] = useState(0);
   const [permanentCount, setPermanentCount] = useState(0);
+  const [resellerCount, setResellerCount] = useState(0);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [msgTimeframe, setMsgTimeframe] = useState<'24h' | '7d' | 'custom'>('7d');
   const [msgCustomDate, setMsgCustomDate] = useState<string>('');
@@ -32,11 +33,14 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
     const synced = syncAllDueAccounts();
     setRegularCount(synced.regularDues.length);
     setPermanentCount(synced.permanentDues.length);
+    setResellerCount(synced.resellerDues.length);
     const list = dueType === 'regular'
       ? synced.regularDues
       : dueType === 'permanent'
         ? synced.permanentDues
-        : synced.purchaseDues;
+        : dueType === 'reseller'
+          ? synced.resellerDues
+          : synced.purchaseDues;
     setDues(list);
   }, [dueType]);
 
@@ -54,7 +58,7 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
     }
   };
 
-  const handleToggleCategory = (dueId: string, currentType: 'regular' | 'permanent' | 'purchase', e: React.MouseEvent) => {
+  const handleToggleCategory = (dueId: string, currentType: 'regular' | 'permanent' | 'purchase' | 'reseller', e: React.MouseEvent) => {
     e.stopPropagation();
     const targetType = currentType === 'permanent' ? 'regular' : 'permanent';
     const confirmMsg = language === 'bn'
@@ -169,13 +173,28 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
           >
             {language === 'bn' ? 'আড়তদারের বকেয়া (পার্মানেন্ট)' : 'Aratdar Dues'} ({permanentCount})
           </button>
+          <button
+            onClick={() => onSelectType ? onSelectType('reseller') : onNavigate('due-types')}
+            style={{
+              background: dueType === 'reseller' ? '#00e676' : 'rgba(255,255,255,0.06)',
+              color: dueType === 'reseller' ? '#003300' : '#bbb',
+              border: dueType === 'reseller' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.15)',
+              borderRadius: '20px',
+              padding: '6px 14px',
+              fontSize: '0.85rem',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            {language === 'bn' ? 'রিসেলার বকেয়া' : 'Reseller Dues'} ({resellerCount})
+          </button>
         </div>
       )}
 
       <div className="due-summary-bar" style={{ marginTop: '1.2rem' }}>
         <div className="due-stats">
           <div className="stat-item main-stat">
-            <span className="stat-label">Total {dueType === 'regular' ? 'Regular' : dueType === 'permanent' ? 'Aratdar' : 'Purchase'} Due:</span>
+            <span className="stat-label">Total {dueType === 'regular' ? 'Regular' : dueType === 'permanent' ? 'Aratdar' : dueType === 'reseller' ? 'Reseller' : 'Purchase'} Due:</span>
             <div className="stat-value highlight">৳ {totalCategoryDue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </div>
           <div className="stat-divider"></div>

@@ -7,15 +7,16 @@ import { syncAllDueAccounts, getNormalizedMemo, deleteDueMemo, changeDueCustomer
 
 interface PaidDueListScreenProps {
   onNavigate: (screen: Screen) => void;
-  dueType: 'regular' | 'permanent' | 'purchase';
+  dueType: 'regular' | 'permanent' | 'purchase' | 'reseller';
   onSelectDue: (dueId: string) => void;
-  onSelectType?: (type: 'regular' | 'permanent') => void;
+  onSelectType?: (type: 'regular' | 'permanent' | 'reseller') => void;
 }
 
 const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueType, onSelectDue, onSelectType }) => {
   const [dues, setDues] = useState<string[]>([]);
   const [paidRegularCount, setPaidRegularCount] = useState(0);
   const [paidPermanentCount, setPaidPermanentCount] = useState(0);
+  const [paidResellerCount, setPaidResellerCount] = useState(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [autoDeleteEnabled, setAutoDeleteEnabled] = useState(true);
   const [autoDeleteMonths, setAutoDeleteMonths] = useState(6);
@@ -29,7 +30,7 @@ const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueTy
     }
   };
 
-  const handleToggleCategory = (dueId: string, currentType: 'regular' | 'permanent' | 'purchase', e: React.MouseEvent) => {
+  const handleToggleCategory = (dueId: string, currentType: 'regular' | 'permanent' | 'purchase' | 'reseller', e: React.MouseEvent) => {
     e.stopPropagation();
     const targetType = currentType === 'permanent' ? 'regular' : 'permanent';
     const confirmMsg = language === 'bn'
@@ -67,12 +68,15 @@ const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueTy
     const synced = syncAllDueAccounts();
     setPaidRegularCount(synced.paidRegularDues.length);
     setPaidPermanentCount(synced.paidPermanentDues.length);
+    setPaidResellerCount(synced.paidResellerDues.length);
 
     let duesList = dueType === 'regular'
       ? synced.paidRegularDues
       : dueType === 'permanent'
         ? synced.paidPermanentDues
-        : synced.paidPurchaseDues;
+        : dueType === 'reseller'
+          ? synced.paidResellerDues
+          : synced.paidPurchaseDues;
 
     if (enabled) {
       const now = Date.now();
@@ -169,13 +173,28 @@ const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueTy
           >
             {language === 'bn' ? 'আড়তদার পরিশোধিত' : 'Aratdar Paid'} ({paidPermanentCount})
           </button>
+          <button
+            onClick={() => onSelectType ? onSelectType('reseller') : onNavigate('due-types')}
+            style={{
+              background: dueType === 'reseller' ? '#00e676' : 'rgba(255,255,255,0.06)',
+              color: dueType === 'reseller' ? '#003300' : '#bbb',
+              border: dueType === 'reseller' ? '1px solid #00e676' : '1px solid rgba(255,255,255,0.15)',
+              borderRadius: '20px',
+              padding: '6px 14px',
+              fontSize: '0.85rem',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            {language === 'bn' ? 'রিসেলার পরিশোধিত' : 'Reseller Paid'} ({paidResellerCount})
+          </button>
         </div>
       )}
 
       <div className="due-summary-bar" style={{ marginTop: '1.2rem' }}>
         <div className="due-stats">
           <div className="stat-item main-stat">
-            <span className="stat-label">Total {dueType === 'regular' ? 'Regular' : dueType === 'permanent' ? 'Aratdar' : 'Purchase'} Paid:</span>
+            <span className="stat-label">Total {dueType === 'regular' ? 'Regular' : dueType === 'permanent' ? 'Aratdar' : dueType === 'reseller' ? 'Reseller' : 'Purchase'} Paid:</span>
             <div className="stat-value highlight" style={{ color: '#72be44' }}>৳ {totalCategoryPaid.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </div>
         </div>

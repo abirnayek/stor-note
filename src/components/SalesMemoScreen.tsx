@@ -17,7 +17,7 @@ interface SalesMemoScreenProps {
   memoId: string;
   onLotChange?: (lot: any) => void;
   onBack?: () => void;
-  defaultCustomerType?: 'regular' | 'permanent';
+  defaultCustomerType?: 'regular' | 'permanent' | 'reseller';
 }
 
 export const HIGHLIGHT_PALETTE: { id: string; name: string; bg: string; border: string; dot: string }[] = [
@@ -53,7 +53,7 @@ interface MemoState {
   mobile: string;
   lotNumberInput: string;
   paidAmount: number | '';
-  customerType?: 'regular' | 'permanent' | '';
+  customerType?: 'regular' | 'permanent' | 'reseller' | '';
   status?: 'due' | 'paid' | 'draft';
   createdAt?: string;
   createdAtTime?: string;
@@ -557,7 +557,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     // Sync to due accounts if customer type is selected
     if (memoState.customerType) {
       const type = memoState.customerType;
-      const otherType = type === 'regular' ? 'permanent' : 'regular';
+      const allTypes = ['regular', 'permanent', 'reseller'];
+      const otherTypes = allTypes.filter(t => t !== type);
       
       let existingDueObj: any = {};
       try {
@@ -604,16 +605,18 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           localStorage.setItem(`dues_${type}`, JSON.stringify(existingDues));
         }
 
-        // Remove from other type dues list
-        const otherDuesStr = localStorage.getItem(`dues_${otherType}`);
-        let otherDues: string[] = otherDuesStr ? JSON.parse(otherDuesStr) : [];
-        if (otherDues.includes(memoId)) {
-          otherDues = otherDues.filter(id => id !== memoId);
-          localStorage.setItem(`dues_${otherType}`, JSON.stringify(otherDues));
-        }
+        // Remove from other type dues lists
+        otherTypes.forEach(ot => {
+          const otherDuesStr = localStorage.getItem(`dues_${ot}`);
+          let otherDues: string[] = otherDuesStr ? JSON.parse(otherDuesStr) : [];
+          if (otherDues.includes(memoId)) {
+            otherDues = otherDues.filter(id => id !== memoId);
+            localStorage.setItem(`dues_${ot}`, JSON.stringify(otherDues));
+          }
+        });
 
         // Remove from all paid lists
-        ['regular', 'permanent'].forEach(t => {
+        allTypes.forEach(t => {
           const paidStr = localStorage.getItem(`paid_dues_${t}`);
           let paidList: string[] = paidStr ? JSON.parse(paidStr) : [];
           if (paidList.includes(memoId)) {
@@ -631,16 +634,18 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           localStorage.setItem(`paid_dues_${type}`, JSON.stringify(existingPaid));
         }
 
-        // Remove from other paid list
-        const otherPaidStr = localStorage.getItem(`paid_dues_${otherType}`);
-        let otherPaid: string[] = otherPaidStr ? JSON.parse(otherPaidStr) : [];
-        if (otherPaid.includes(memoId)) {
-          otherPaid = otherPaid.filter(id => id !== memoId);
-          localStorage.setItem(`paid_dues_${otherType}`, JSON.stringify(otherPaid));
-        }
+        // Remove from other paid lists
+        otherTypes.forEach(ot => {
+          const otherPaidStr = localStorage.getItem(`paid_dues_${ot}`);
+          let otherPaid: string[] = otherPaidStr ? JSON.parse(otherPaidStr) : [];
+          if (otherPaid.includes(memoId)) {
+            otherPaid = otherPaid.filter(id => id !== memoId);
+            localStorage.setItem(`paid_dues_${ot}`, JSON.stringify(otherPaid));
+          }
+        });
 
         // Remove from all dues lists
-        ['regular', 'permanent'].forEach(t => {
+        allTypes.forEach(t => {
           const duesStr = localStorage.getItem(`dues_${t}`);
           let duesList: string[] = duesStr ? JSON.parse(duesStr) : [];
           if (duesList.includes(memoId)) {
@@ -1013,6 +1018,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 >
                   <option value="regular" style={{ color: '#000', background: '#fff' }}>{t('regularSeller')}</option>
                   <option value="permanent" style={{ color: '#000', background: '#fff' }}>{t('aratdarSeller')}</option>
+                  <option value="reseller" style={{ color: '#000', background: '#fff' }}>{t('reseller') || 'রিসেলার'}</option>
                 </select>
               </div>
             </div>

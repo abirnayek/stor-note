@@ -6,7 +6,7 @@ import { syncAllDueAccounts, getNormalizedMemo } from '../utils/dueSyncUtils';
 
 interface DueTypesScreenProps {
   onNavigate: (screen: Screen) => void;
-  onSelectType: (type: 'regular' | 'permanent') => void;
+  onSelectType: (type: 'regular' | 'permanent' | 'reseller') => void;
 }
 
 const DueTypesScreen: React.FC<DueTypesScreenProps> = ({ onNavigate, onSelectType }) => {
@@ -16,6 +16,8 @@ const DueTypesScreen: React.FC<DueTypesScreenProps> = ({ onNavigate, onSelectTyp
   const [regularDueTotal, setRegularDueTotal] = useState(0);
   const [permanentCount, setPermanentCount] = useState(0);
   const [permanentDueTotal, setPermanentDueTotal] = useState(0);
+  const [resellerCount, setResellerCount] = useState(0);
+  const [resellerDueTotal, setResellerDueTotal] = useState(0);
 
   useEffect(() => {
     const calculateTotal = () => {
@@ -31,11 +33,18 @@ const DueTypesScreen: React.FC<DueTypesScreenProps> = ({ onNavigate, onSelectTyp
         permTotal += getNormalizedMemo(id).dueAmount;
       });
 
+      let resTotal = 0;
+      synced.resellerDues.forEach(id => {
+        resTotal += getNormalizedMemo(id).dueAmount;
+      });
+
       setRegularCount(synced.regularDues.length);
       setRegularDueTotal(regTotal);
       setPermanentCount(synced.permanentDues.length);
       setPermanentDueTotal(permTotal);
-      setTotalDueAmount(regTotal + permTotal);
+      setResellerCount(synced.resellerDues.length);
+      setResellerDueTotal(resTotal);
+      setTotalDueAmount(regTotal + permTotal + resTotal);
     };
 
     calculateTotal();
@@ -78,6 +87,15 @@ const DueTypesScreen: React.FC<DueTypesScreenProps> = ({ onNavigate, onSelectTyp
           <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
             <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }}>{permanentCount} টি মেমো</span>
             <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#ff9800' }}>৳ {permanentDueTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+
+        <div className="dashboard-card action-card" onClick={() => onSelectType('reseller')}>
+          <Users size={48} className="card-icon" style={{ color: '#00e676' }} />
+          <h3>{t('resellerDue')}</h3>
+          <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+            <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }}>{resellerCount} টি মেমো</span>
+            <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#ff9800' }}>৳ {resellerDueTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
       </div>

@@ -5,7 +5,7 @@ import { getNormalizedMemo } from '../utils/dueSyncUtils';
 
 interface DueMemoScreenProps {
   onNavigate: (screen: Screen) => void;
-  dueType?: 'regular' | 'permanent' | 'purchase';
+  dueType?: 'regular' | 'permanent' | 'purchase' | 'reseller';
   dueId: string;
   isPaid?: boolean;
 }
@@ -22,9 +22,9 @@ const DueSalesMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType 
     }
   };
 
-  const effectiveType = normMemo.customerType === 'permanent' || normMemo.customerType === 'regular'
+  const effectiveType = (normMemo.customerType === 'permanent' || normMemo.customerType === 'regular' || normMemo.customerType === 'reseller')
     ? normMemo.customerType
-    : (dueType === 'permanent' ? 'permanent' : 'regular');
+    : (dueType === 'permanent' ? 'permanent' : (dueType === 'reseller' ? 'reseller' : 'regular'));
 
   return (
     <SalesMemoScreen

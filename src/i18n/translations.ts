@@ -35,6 +35,7 @@ export const translations = {
     // Dashboard
     salesAccount: 'বিক্রয় হিসাব',
     dueAccount: 'বকেয়া হিসাব',
+    resellerAccount: 'রিসেলার',
     blank: 'ফাঁকা',
     purchaseAccount: 'ক্রয় হিসাব',
     stockAccount: 'স্টক',
@@ -43,6 +44,7 @@ export const translations = {
     dueTypesTitle: 'বকেয়ার ধরণ',
     regularDue: 'সাধারণ বকেয়া (রেগুলার)',
     permanentDue: 'আড়তদারের বকেয়া (পার্মানেন্ট)',
+    resellerDue: 'রিসেলার বকেয়া',
     dueListTitle: 'বকেয়া তালিকা',
     duesCount: 'টি ডিউ',
     noDues: '0 ডিউ',
@@ -155,6 +157,7 @@ export const translations = {
     activeLot: 'সক্রিয়',
     regularSeller: 'সাধারণ ক্রেতা',
     aratdarSeller: 'আড়তদারের কাছে বিক্রয়',
+    reseller: 'রিসেলার',
     salesMemoTitle: 'বিক্রয় হিসাব',
   },
   en: {
@@ -191,6 +194,7 @@ export const translations = {
     // Dashboard
     salesAccount: 'Sales Account',
     dueAccount: 'Due Account',
+    resellerAccount: 'Reseller',
     blank: 'Blank',
     purchaseAccount: 'Purchase Account',
     stockAccount: 'Stock',
@@ -199,6 +203,7 @@ export const translations = {
     dueTypesTitle: 'Due Types',
     regularDue: 'Regular Due (General)',
     permanentDue: 'Aratdar Due (Permanent)',
+    resellerDue: 'Reseller Due',
     dueListTitle: 'Due List',
     duesCount: 'Dues',
     noDues: '0 Dues',
@@ -311,6 +316,7 @@ export const translations = {
     activeLot: 'Active',
     regularSeller: 'Regular Seller',
     aratdarSeller: 'Aratdar',
+    reseller: 'Reseller',
     salesMemoTitle: 'Sales Account',
   }
 };

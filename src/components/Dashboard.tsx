@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingCart, Clock, ShoppingBag, TrendingUp, Package } from 'lucide-react';
+import { ShoppingCart, Clock, ShoppingBag, TrendingUp, Package, Users } from 'lucide-react';
 import { type Screen } from '../App';
 import { useLanguage } from '../i18n/LanguageContext';
 
@@ -21,6 +21,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         <div className="dashboard-card" onClick={() => onNavigate('due-category')}>
           <Clock size={48} className="card-icon" />
           <h3>{t('dueAccount')}</h3>
+        </div>
+
+        <div className="dashboard-card" onClick={() => onNavigate('reseller')}>
+          <Users size={48} className="card-icon" />
+          <h3>{t('resellerAccount')}</h3>
         </div>
         
         <div className="dashboard-card" onClick={() => onNavigate('investor-password')}>

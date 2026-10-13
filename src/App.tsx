@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, User, Settings, X, Moon, Sun, Globe, ShoppingCart, Clock, ShoppingBag, Home, Trash2, Send, XCircle, TrendingUp, RefreshCw, Wifi, WifiOff, Package } from 'lucide-react';
+import { Search, User, Settings, X, Moon, Sun, Globe, ShoppingCart, Clock, ShoppingBag, Home, Trash2, Send, XCircle, TrendingUp, RefreshCw, Wifi, WifiOff, Package, Users } from 'lucide-react';
 import './index.css';
 import Dashboard from './components/Dashboard';
 import PasswordScreen from './components/PasswordScreen';
@@ -20,6 +20,7 @@ import InvestorListScreen from './components/InvestorListScreen';
 import InvestorMemosListScreen from './components/InvestorMemosListScreen';
 import InvestorMemoScreen from './components/InvestorMemoScreen';
 import StockScreen from './components/StockScreen';
+import ResellerScreen from './components/ResellerScreen';
 import { useLanguage } from './i18n/LanguageContext';
 import { supabase } from './utils/supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -28,7 +29,7 @@ import { LotPasswordManager } from './components/LotPasswordManager';
 
 import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow } from './utils/syncEngine';
 
-export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock' | 'sales-month-memos';
+export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock' | 'sales-month-memos' | 'reseller';
 
 export interface NavSnapshot {
   screen: Screen;
@@ -38,7 +39,7 @@ export interface NavSnapshot {
   salesMemoReturnScreen?: Screen;
   selectedMonth?: number | null;
   selectedYear?: number | null;
-  dueType?: 'regular' | 'permanent' | 'purchase';
+  dueType?: 'regular' | 'permanent' | 'purchase' | 'reseller';
   dueId?: string | null;
   isPaidDue?: boolean;
   investorId?: string | null;
@@ -48,12 +49,17 @@ export interface NavSnapshot {
 
 const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
   switch (current.screen) {
+    case 'reseller':
+      return { screen: 'dashboard', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'memo':
       return { screen: 'lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'lots':
     case 'password':
       return { screen: 'dashboard', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'sales-memo':
+      if (current.salesMemoReturnScreen === 'reseller') {
+        return { screen: 'reseller', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'reseller', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
       if (current.salesMemoReturnScreen === 'sales-memo-list' && current.salesLot !== null) {
         return { screen: 'sales-memo-list', lot: null, salesLot: current.salesLot, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
@@ -311,7 +317,7 @@ function App() {
   const [salesMemoReturnScreen, setSalesMemoReturnScreen] = useState<Screen>('sales-lots');
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
-  const [currentDueType, setCurrentDueType] = useState<'regular' | 'permanent' | 'purchase'>('regular');
+  const [currentDueType, setCurrentDueType] = useState<'regular' | 'permanent' | 'purchase' | 'reseller'>('regular');
   const [currentDueId, setCurrentDueId] = useState<string | null>(null);
   const [isPaidDue, setIsPaidDue] = useState<boolean>(false);
   const [currentInvestorId, setCurrentInvestorId] = useState<string | null>(null);
@@ -748,7 +754,7 @@ function App() {
               }
 
               // Search Due Memos
-              ['regular', 'permanent'].forEach(type => {
+              ['regular', 'permanent', 'reseller'].forEach(type => {
                 const duesStr = localStorage.getItem(`dues_${type}`);
                 if (duesStr) {
                   try {
@@ -759,7 +765,8 @@ function App() {
                           const memo = JSON.parse(memoStr);
                           const name = (memo.name || '').toLowerCase();
                           if (name.includes(q)) {
-                            results.push({ label: `${t('dueAccount')} (${type === 'regular' ? t('regularSeller') : t('aratdarSeller')}): ${memo.name}`, screen: 'due-memo', id: dueId });
+                            const typeLabel = type === 'reseller' ? (t('reseller') || 'রিসেলার') : (type === 'regular' ? t('regularSeller') : t('aratdarSeller'));
+                            results.push({ label: `${t('dueAccount')} (${typeLabel}): ${memo.name}`, screen: 'due-memo', id: dueId });
                           }
                         } catch (e) {}
                       }
@@ -907,6 +914,13 @@ function App() {
                 title={t('dueAccount')}
               >
                 <Clock size={24} />
+              </button>
+              <button 
+                className={`sidebar-nav-item ${currentScreen === 'reseller' ? 'active' : ''}`}
+                onClick={() => handleNavigate('reseller')}
+                title={t('reseller') || 'রিসেলার'}
+              >
+                <Users size={24} />
               </button>
               <button 
                 className={`sidebar-nav-item ${currentScreen === 'stock' ? 'active' : ''}`}
@@ -1107,6 +1121,18 @@ function App() {
               lotNumber={currentSalesLot} 
               memoId={currentSalesMemoId}
               onLotChange={(lot) => setCurrentSalesLot(lot)}
+            />
+          )}
+          {currentScreen === 'reseller' && (
+            <ResellerScreen
+              onNavigate={handleNavigate}
+              onSelectMemo={(memoId, lotNumber) => {
+                navigateTo('sales-memo', {
+                  salesLot: lotNumber,
+                  salesMemoId: memoId,
+                  salesMemoReturnScreen: 'reseller'
+                });
+              }}
             />
           )}
           {currentScreen === 'trash' && (

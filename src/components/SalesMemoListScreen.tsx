@@ -14,7 +14,7 @@ interface SalesMemoListScreenProps {
 const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, lotNumber, onSelectMemo }) => {
   const [memos, setMemos] = useState<SalesMemoGlobalItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'paid' | 'due'>('all');
-  const [customerTypeFilter, setCustomerTypeFilter] = useState<'all' | 'regular' | 'permanent'>('all');
+  const [customerTypeFilter, setCustomerTypeFilter] = useState<'all' | 'regular' | 'permanent' | 'reseller'>('all');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const { t, language } = useLanguage();
@@ -183,6 +183,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
     let typeMatch = true;
     if (customerTypeFilter === 'regular') typeMatch = (memo.customerType === 'regular');
     else if (customerTypeFilter === 'permanent') typeMatch = (memo.customerType === 'permanent');
+    else if (customerTypeFilter === 'reseller') typeMatch = (memo.customerType === 'reseller');
 
     return statusMatch && typeMatch;
   });
@@ -213,7 +214,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
           
           <select 
             value={customerTypeFilter} 
-            onChange={(e) => setCustomerTypeFilter(e.target.value as 'all' | 'regular' | 'permanent')}
+            onChange={(e) => setCustomerTypeFilter(e.target.value as 'all' | 'regular' | 'permanent' | 'reseller')}
             style={{ 
               background: 'transparent', 
               color: '#fff', 
@@ -228,6 +229,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
             <option value="all" style={{ color: '#000' }}>All Types</option>
             <option value="regular" style={{ color: '#000' }}>{t('regularSeller')}</option>
             <option value="permanent" style={{ color: '#000' }}>{t('aratdarSeller')}</option>
+            <option value="reseller" style={{ color: '#000' }}>{t('reseller') || 'রিসেলার'}</option>
           </select>
 
           <select 
