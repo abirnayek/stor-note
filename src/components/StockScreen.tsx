@@ -98,74 +98,74 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
             <ChevronLeft size={24} />
           </button>
           <div>
-            <h2 style={{ margin: 0, fontSize: '1.6rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <Package size={28} style={{ color: '#72be44' }} />
+            <h2 style={{ margin: 0, fontSize: '1.45rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Package size={24} style={{ color: '#72be44' }} />
               {language === 'bn' ? 'মাছের স্টক হিসাব' : 'Fish Stock Inventory'}
             </h2>
-            <span style={{ fontSize: '0.85rem', color: '#aaa' }}>
+            <span style={{ fontSize: '0.8rem', color: '#aaa' }}>
               {language === 'bn' ? 'ক্রয় হিসাব থেকে সংযুক্ত ও বিক্রয়ের সাথে রিয়েল-টাইম সমন্বিত' : 'Linked from purchase lots & updated in real time with memo sales'}
             </span>
           </div>
         </div>
 
         {/* View Mode Toggle & Global Stock Metric Cards */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.8rem', marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem', marginLeft: 'auto' }}>
           {/* Card View / Table View Switcher */}
           <div style={{ display: 'flex', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '10px', padding: '3px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
             <button
               onClick={() => setViewMode('cards')}
               style={{
-                padding: '6px 14px',
-                borderRadius: '8px',
+                padding: '5px 12px',
+                borderRadius: '7px',
                 border: 'none',
                 background: viewMode === 'cards' ? '#72be44' : 'transparent',
                 color: viewMode === 'cards' ? '#000' : '#ccc',
                 fontWeight: viewMode === 'cards' ? 'bold' : 'normal',
                 cursor: 'pointer',
-                fontSize: '0.85rem',
+                fontSize: '0.82rem',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
+                gap: '5px',
                 transition: 'all 0.2s'
               }}
             >
-              <LayoutGrid size={15} />
+              <LayoutGrid size={14} />
               <span>{language === 'bn' ? 'লট কার্ড' : 'Lot Cards'}</span>
             </button>
             <button
               onClick={() => setViewMode('detail')}
               style={{
-                padding: '6px 14px',
-                borderRadius: '8px',
+                padding: '5px 12px',
+                borderRadius: '7px',
                 border: 'none',
                 background: viewMode === 'detail' ? '#72be44' : 'transparent',
                 color: viewMode === 'detail' ? '#000' : '#ccc',
                 fontWeight: viewMode === 'detail' ? 'bold' : 'normal',
                 cursor: 'pointer',
-                fontSize: '0.85rem',
+                fontSize: '0.82rem',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
+                gap: '5px',
                 transition: 'all 0.2s'
               }}
             >
-              <Table size={15} />
+              <Table size={14} />
               <span>{language === 'bn' ? 'স্টক টেবিল' : 'Stock Table'}</span>
             </button>
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
-            <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '6px 14px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'center', minWidth: '100px' }}>
-              <div style={{ fontSize: '0.72rem', color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>মোট ক্রয়</div>
-              <div style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#fff' }}>{totalPurchased.toFixed(2)} <span style={{ fontSize: '0.75rem', fontWeight: 'normal' }}>কেজি</span></div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '5px 12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.1)', textAlign: 'center', minWidth: '95px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>মোট ক্রয়</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#fff' }}>{totalPurchased.toFixed(2)} <span style={{ fontSize: '0.72rem', fontWeight: 'normal' }}>কেজি</span></div>
             </div>
-            <div style={{ background: 'rgba(255, 152, 0, 0.1)', padding: '6px 14px', borderRadius: '10px', border: '1px solid rgba(255, 152, 0, 0.3)', textAlign: 'center', minWidth: '100px' }}>
-              <div style={{ fontSize: '0.72rem', color: '#ff9800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>মোট বিক্রি</div>
-              <div style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#ffb74d' }}>{totalSold.toFixed(2)} <span style={{ fontSize: '0.75rem', fontWeight: 'normal' }}>কেজি</span></div>
+            <div style={{ background: 'rgba(255, 152, 0, 0.1)', padding: '5px 12px', borderRadius: '8px', border: '1px solid rgba(255, 152, 0, 0.3)', textAlign: 'center', minWidth: '95px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#ff9800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>মোট বিক্রি</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#ffb74d' }}>{totalSold.toFixed(2)} <span style={{ fontSize: '0.72rem', fontWeight: 'normal' }}>কেজি</span></div>
             </div>
-            <div style={{ background: 'rgba(114, 190, 68, 0.15)', padding: '6px 14px', borderRadius: '10px', border: '1px solid rgba(114, 190, 68, 0.4)', textAlign: 'center', minWidth: '110px' }}>
-              <div style={{ fontSize: '0.72rem', color: '#72be44', textTransform: 'uppercase', letterSpacing: '0.5px' }}>বর্তমান মোট স্টক</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#72be44' }}>{totalRemaining.toFixed(2)} <span style={{ fontSize: '0.75rem', fontWeight: 'normal' }}>কেজি</span></div>
+            <div style={{ background: 'rgba(114, 190, 68, 0.15)', padding: '5px 12px', borderRadius: '8px', border: '1px solid rgba(114, 190, 68, 0.4)', textAlign: 'center', minWidth: '105px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#72be44', textTransform: 'uppercase', letterSpacing: '0.5px' }}>বর্তমান মোট স্টক</div>
+              <div style={{ fontSize: '1.12rem', fontWeight: 'bold', color: '#72be44' }}>{totalRemaining.toFixed(2)} <span style={{ fontSize: '0.72rem', fontWeight: 'normal' }}>কেজি</span></div>
             </div>
           </div>
         </div>
@@ -176,86 +176,75 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
       {/* ========================================================================= */}
       {viewMode === 'cards' && (
         <div className="stock-cards-view">
-          <div className="lot-grid" style={{ marginTop: '0.5rem' }}>
+          <div className="stock-cards-grid">
             {/* CARD 1: সব লট (মোট স্টক) */}
             <div 
-              className="lot-card stock-summary-card" 
+              className="stock-lot-card stock-summary-card" 
               onClick={() => handleCardClick('all')}
-              style={{
-                background: 'linear-gradient(145deg, rgba(16, 52, 32, 0.85) 0%, rgba(10, 32, 20, 0.95) 100%)',
-                border: '1.5px solid rgba(114, 190, 68, 0.45)',
-                boxShadow: '0 6px 20px rgba(0, 0, 0, 0.25)',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                gap: '1rem',
-                minHeight: '230px'
-              }}
             >
               <div>
-                <div className="lot-card-header" style={{ marginBottom: '0.8rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <div style={{ background: 'rgba(114, 190, 68, 0.2)', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Layers size={30} style={{ color: '#72be44' }} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.65rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0 }}>
+                    <div style={{ background: 'rgba(114, 190, 68, 0.2)', padding: '7px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Layers size={22} style={{ color: '#72be44' }} />
                     </div>
-                    <div>
-                      <h3 style={{ margin: 0, fontSize: '1.3rem', color: '#fff', fontWeight: 'bold' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#fff', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {language === 'bn' ? 'সব লট (মোট স্টক)' : 'All Lots (Total Stock)'}
                       </h3>
-                      <span style={{ fontSize: '0.78rem', color: '#aaa' }}>
+                      <div style={{ fontSize: '0.72rem', color: '#aaa', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {language === 'bn' ? `মোট ${lotsStock.length} টি লট • ${uniqueFishNames.size} টি মাছের প্রজাতি` : `${lotsStock.length} Lots • ${uniqueFishNames.size} Species`}
-                      </span>
+                      </div>
                     </div>
                   </div>
-                  <span className="lot-status" style={{ background: 'rgba(114, 190, 68, 0.25)', color: '#72be44', fontWeight: 'bold', fontSize: '0.8rem' }}>
+                  <span style={{ background: 'rgba(114, 190, 68, 0.25)', color: '#72be44', fontWeight: 'bold', fontSize: '0.7rem', padding: '3px 8px', borderRadius: '6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
                     {language === 'bn' ? 'মোট স্টক' : 'Total Stock'}
                   </span>
                 </div>
 
                 {/* Stock metrics summary grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', background: 'rgba(0,0,0,0.25)', padding: '0.75rem', borderRadius: '10px', marginBottom: '0.8rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.35rem', background: 'rgba(0,0,0,0.25)', padding: '0.55rem 0.65rem', borderRadius: '8px', marginBottom: '0.65rem' }}>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '0.72rem', color: '#aaa' }}>মোট ক্রয়</div>
-                    <div style={{ fontSize: '0.98rem', fontWeight: 'bold', color: '#fff', marginTop: '2px' }}>
-                      {totalPurchased.toFixed(2)} <span style={{ fontSize: '0.7rem' }}>কেজি</span>
+                    <div style={{ fontSize: '0.68rem', color: '#aaa' }}>মোট ক্রয়</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 'bold', color: '#fff', marginTop: '2px' }}>
+                      {totalPurchased.toFixed(2)} <span style={{ fontSize: '0.65rem', fontWeight: 'normal' }}>কেজি</span>
                     </div>
                   </div>
                   <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.1)', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{ fontSize: '0.72rem', color: '#ffb74d' }}>মোট বিক্রি</div>
-                    <div style={{ fontSize: '0.98rem', fontWeight: 'bold', color: '#ffb74d', marginTop: '2px' }}>
-                      {totalSold.toFixed(2)} <span style={{ fontSize: '0.7rem' }}>কেজি</span>
+                    <div style={{ fontSize: '0.68rem', color: '#ffb74d' }}>মোট বিক্রি</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 'bold', color: '#ffb74d', marginTop: '2px' }}>
+                      {totalSold.toFixed(2)} <span style={{ fontSize: '0.65rem', fontWeight: 'normal' }}>কেজি</span>
                     </div>
                   </div>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '0.72rem', color: '#72be44' }}>অবশিষ্ট স্টক</div>
-                    <div style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#72be44', marginTop: '2px' }}>
-                      {totalRemaining.toFixed(2)} <span style={{ fontSize: '0.7rem' }}>কেজি</span>
+                    <div style={{ fontSize: '0.68rem', color: '#72be44' }}>অবশিষ্ট স্টক</div>
+                    <div style={{ fontSize: '0.96rem', fontWeight: 'bold', color: '#72be44', marginTop: '2px' }}>
+                      {totalRemaining.toFixed(2)} <span style={{ fontSize: '0.65rem', fontWeight: 'normal' }}>কেজি</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Sales progress bar */}
-                <div style={{ marginTop: '0.2rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#aaa', marginBottom: '4px' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#aaa', marginBottom: '4px' }}>
                     <span>বিক্রয়: {totalSoldPercent}%</span>
                     <span>অবশিষ্ট: {totalRemainingPercent}%</span>
                   </div>
-                  <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div style={{ width: '100%', height: '5px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
                     <div style={{
                       width: `${totalSoldPercent}%`,
                       height: '100%',
                       background: 'linear-gradient(90deg, #ff9800, #72be44)',
-                      borderRadius: '4px',
+                      borderRadius: '3px',
                       transition: 'width 0.4s'
                     }} />
                   </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.08)', color: '#72be44', fontSize: '0.85rem', fontWeight: 'bold' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', color: '#72be44', fontSize: '0.78rem', fontWeight: 'bold' }}>
                 <span>{language === 'bn' ? 'সকল মাছের স্টক বিবরণ দেখুন' : 'View Full Stock Details'}</span>
-                <ArrowRight size={16} />
+                <ArrowRight size={14} />
               </div>
             </div>
 
@@ -282,69 +271,61 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
               return (
                 <div 
                   key={lot.lotNumber}
-                  className="lot-card" 
+                  className="stock-lot-card" 
                   onClick={() => handleCardClick(lot.lotNumber)}
-                  style={{
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    gap: '1rem',
-                    minHeight: '230px'
-                  }}
                 >
                   <div>
-                    <div className="lot-card-header" style={{ marginBottom: '0.6rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '9px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <Package size={26} style={{ color: hasRemaining ? '#72be44' : '#888' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0 }}>
+                        <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '7px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Package size={20} style={{ color: hasRemaining ? '#72be44' : '#888' }} />
                         </div>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#fff', fontWeight: 'bold' }}>
+                        <div style={{ minWidth: 0 }}>
+                          <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#fff', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
                             {language === 'bn' ? `লট ${lot.lotNumber < 10 ? `০${lot.lotNumber}` : lot.lotNumber}` : `Lot ${lot.lotNumber}`}
                           </h3>
                           {lot.supplierName ? (
-                            <div style={{ fontSize: '0.82rem', color: '#ffb74d', marginTop: '2px', fontWeight: 500 }}>
+                            <div style={{ fontSize: '0.78rem', color: '#ffb74d', marginTop: '1px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               আড়ত: {lot.supplierName}
                             </div>
                           ) : (
-                            <div style={{ fontSize: '0.78rem', color: '#888' }}>
+                            <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '1px', whiteSpace: 'nowrap' }}>
                               {lot.items.length} টি মাছের প্রজাতি
                             </div>
                           )}
                         </div>
                       </div>
-                      <span className="lot-status" style={{ background: badgeBg, color: badgeColor, fontWeight: 'bold', fontSize: '0.75rem' }}>
+                      <span style={{ background: badgeBg, color: badgeColor, fontWeight: 'bold', fontSize: '0.7rem', padding: '3px 8px', borderRadius: '6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
                         {badgeText}
                       </span>
                     </div>
 
                     {/* Date info if available */}
                     {lot.date && (
-                      <div style={{ fontSize: '0.75rem', color: '#aaa', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '0.6rem' }}>
-                        <Calendar size={12} opacity={0.7} />
+                      <div style={{ fontSize: '0.72rem', color: '#999', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '0.5rem' }}>
+                        <Calendar size={11} opacity={0.7} />
                         <span>{lot.date}</span>
                         {lot.supplierName && <span style={{ marginLeft: 'auto', color: '#888' }}>{lot.items.length} টি প্রজাতি</span>}
                       </div>
                     )}
 
                     {/* Stock Metrics Mini-Grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem', background: 'rgba(0,0,0,0.2)', padding: '0.65rem', borderRadius: '8px', marginBottom: '0.8rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.35rem', background: 'rgba(0,0,0,0.2)', padding: '0.55rem 0.65rem', borderRadius: '8px', marginBottom: '0.65rem' }}>
                       <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.7rem', color: '#aaa' }}>ক্রয়</div>
-                        <div style={{ fontSize: '0.92rem', fontWeight: 'bold', color: '#fff', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.68rem', color: '#aaa' }}>ক্রয়</div>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 'bold', color: '#fff', marginTop: '2px' }}>
                           {lot.totalPurchasedKg.toFixed(2)}
                         </div>
                       </div>
                       <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                        <div style={{ fontSize: '0.7rem', color: '#ffb74d' }}>বিক্রি</div>
-                        <div style={{ fontSize: '0.92rem', fontWeight: 'bold', color: '#ffb74d', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.68rem', color: '#ffb74d' }}>বিক্রি</div>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 'bold', color: '#ffb74d', marginTop: '2px' }}>
                           {lot.totalSoldKg.toFixed(2)}
                         </div>
                       </div>
                       <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.7rem', color: badgeColor }}>অবশিষ্ট</div>
-                        <div style={{ fontSize: '1.02rem', fontWeight: 'bold', color: badgeColor, marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.68rem', color: badgeColor }}>অবশিষ্ট</div>
+                        <div style={{ fontSize: '0.96rem', fontWeight: 'bold', color: badgeColor, marginTop: '2px' }}>
                           {lot.totalRemainingKg.toFixed(2)}
                         </div>
                       </div>
@@ -352,11 +333,11 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
 
                     {/* Progress bar */}
                     <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#aaa', marginBottom: '3px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#aaa', marginBottom: '3px' }}>
                         <span>বিক্রি: {lotSoldPercent}%</span>
                         <span>বাকি: {lotRemainingPercent}%</span>
                       </div>
-                      <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ width: '100%', height: '5px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
                         <div style={{
                           width: `${lotSoldPercent}%`,
                           height: '100%',
@@ -368,9 +349,9 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.06)', color: '#72be44', fontSize: '0.82rem', fontWeight: 'bold' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.06)', color: '#72be44', fontSize: '0.78rem', fontWeight: 'bold' }}>
                     <span>{language === 'bn' ? 'লটের স্টক বিবরণ' : 'View Lot Stock'}</span>
-                    <ArrowRight size={15} />
+                    <ArrowRight size={14} />
                   </div>
                 </div>
               );
