@@ -491,20 +491,6 @@ function App() {
     const currentTop = navStackRef.current[navStackRef.current.length - 1];
     if (nextScreen === currentTop?.screen && !params && !replace) return;
 
-    // Check if nextScreen already exists in navStack behind current (backwards in-app navigation)
-    const existingIndex = navStackRef.current.findLastIndex(
-      (item, idx) => idx < navStackRef.current.length - 1 && item.screen === nextScreen
-    );
-
-    if (existingIndex !== -1 && !replace) {
-      const distance = navStackRef.current.length - 1 - existingIndex;
-      navStackRef.current = navStackRef.current.slice(0, existingIndex + 1);
-      const targetSnapshot = navStackRef.current[existingIndex];
-      applySnapshot(targetSnapshot);
-      window.history.go(-distance);
-      return;
-    }
-
     const nextSnapshot: NavSnapshot = {
       screen: nextScreen,
       lot: params?.lot !== undefined ? params.lot : (nextScreen === 'memo' ? currentLot : null),
@@ -527,6 +513,9 @@ function App() {
         navStackRef.current = [nextSnapshot];
       }
       window.history.replaceState(nextSnapshot, '');
+    } else if (nextScreen === 'dashboard') {
+      navStackRef.current = [nextSnapshot];
+      window.history.pushState(nextSnapshot, '');
     } else {
       navStackRef.current.push(nextSnapshot);
       window.history.pushState(nextSnapshot, '');
@@ -557,7 +546,7 @@ function App() {
       applySnapshot(window.history.state);
     }
 
-    const handlePopState = () => {
+    const handlePopState = (event: PopStateEvent) => {
       // 1. If any modal is open, close it
       if (isSettingsOpenRef.current) {
         setIsSettingsOpen(false);
@@ -580,7 +569,15 @@ function App() {
         return;
       }
 
-      // 2. Regular navigation back
+      // 2. Regular navigation back using history state if present
+      if (event.state && event.state.screen) {
+        if (navStackRef.current.length > 1) {
+          navStackRef.current.pop();
+        }
+        applySnapshot(event.state);
+        return;
+      }
+
       if (navStackRef.current.length > 1) {
         navStackRef.current.pop();
         const targetSnapshot = navStackRef.current[navStackRef.current.length - 1];
