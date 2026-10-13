@@ -14,7 +14,11 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
   const [investors, setInvestors] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [investorTotals, setInvestorTotals] = useState<Record<string, number>>({});
+  const [investorGrossTotals, setInvestorGrossTotals] = useState<Record<string, number>>({});
+  const [investorWithdrawnTotals, setInvestorWithdrawnTotals] = useState<Record<string, number>>({});
   const [grandTotal, setGrandTotal] = useState<number>(0);
+  const [grandGrossTotal, setGrandGrossTotal] = useState<number>(0);
+  const [grandWithdrawnTotal, setGrandWithdrawnTotal] = useState<number>(0);
   const [latestDate, setLatestDate] = useState<string>('');
   const { t, language } = useLanguage();
 
@@ -30,7 +34,11 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
     
     const profs: Record<string, any> = {};
     const totals: Record<string, number> = {};
-    let overall = 0;
+    const grossTotals: Record<string, number> = {};
+    const withdrawnTotals: Record<string, number> = {};
+    let overallNet = 0;
+    let overallGross = 0;
+    let overallWithdrawn = 0;
     let foundLatestDate = '';
 
     investorIds.forEach((id: string) => {
@@ -39,8 +47,9 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
         try { profs[id] = JSON.parse(profStr); } catch (e) {}
       }
 
-      // Calculate total investment for this investor
-      let investorSum = 0;
+      // Calculate total investment and withdrawals for this investor
+      let investorInvestSum = 0;
+      let investorWithdrawnSum = 0;
       const memoIdsStr = localStorage.getItem(`investor_memos_${id}`);
       let memoIds: string[] = [];
       if (memoIdsStr) {
@@ -72,8 +81,20 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
               .reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
           }
 
+          let withdr = 0;
+          if (m.totalWithdrawn !== undefined && m.totalWithdrawn !== null && !isNaN(Number(m.totalWithdrawn))) {
+            withdr = Number(m.totalWithdrawn);
+          } else if (Array.isArray(m.entries)) {
+            withdr = m.entries
+              .filter((e: any) => e.type === 'withdraw')
+              .reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+          }
+
           if (inv > 0) {
-            investorSum += inv;
+            investorInvestSum += inv;
+          }
+          if (withdr > 0) {
+            investorWithdrawnSum += withdr;
           }
 
           const mDate = m.updatedAt || m.date;
@@ -83,13 +104,23 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
         } catch (e) {}
       });
 
-      totals[id] = investorSum;
-      overall += investorSum;
+      const netInvest = investorInvestSum - investorWithdrawnSum;
+      totals[id] = netInvest;
+      grossTotals[id] = investorInvestSum;
+      withdrawnTotals[id] = investorWithdrawnSum;
+
+      overallNet += netInvest;
+      overallGross += investorInvestSum;
+      overallWithdrawn += investorWithdrawnSum;
     });
 
     setProfiles(profs);
     setInvestorTotals(totals);
-    setGrandTotal(overall);
+    setInvestorGrossTotals(grossTotals);
+    setInvestorWithdrawnTotals(withdrawnTotals);
+    setGrandTotal(overallNet);
+    setGrandGrossTotal(overallGross);
+    setGrandWithdrawnTotal(overallWithdrawn);
 
     const todayFormatted = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
       day: 'numeric',
@@ -199,6 +230,13 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
               <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#72be44', letterSpacing: '0.5px', lineHeight: 1.2, marginTop: '2px' }}>
                 ৳ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
+              {grandWithdrawnTotal > 0 && (
+                <div style={{ fontSize: '0.68rem', color: '#a0aec0', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>{language === 'bn' ? 'আসল বিনিয়োগ:' : 'Gross:'} ৳ {grandGrossTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span style={{ color: '#ffb74d' }}>•</span>
+                  <span style={{ color: '#ffb74d' }}>{language === 'bn' ? 'উত্তোলন:' : 'Withdrawn:'} ৳ {grandWithdrawnTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -226,6 +264,8 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
           const profile = profiles[id] || { name: t('newInvestorFolder') };
           const passwordKey = `investor_folder_password_${id}`;
           const invTotal = investorTotals[id] || 0;
+          const invWithdrawn = investorWithdrawnTotals[id] || 0;
+          const invGross = investorGrossTotals[id] || 0;
           
           return (
             <ProtectedMemoWrapper key={id} passwordKey={passwordKey} onAccessGranted={() => onSelectInvestor(id)}>
@@ -252,17 +292,36 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
                   paddingTop: '0.6rem',
                   borderTop: '1px dashed rgba(255, 255, 255, 0.12)',
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
+                  flexDirection: 'column',
+                  gap: '3px',
                   fontSize: '0.88rem'
                 }}>
-                  <span style={{ color: '#aaa', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <Wallet size={14} style={{ color: '#72be44' }} />
-                    {language === 'bn' ? 'মোট বিনিয়োগ:' : 'Total Invest:'}
-                  </span>
-                  <span style={{ color: '#72be44', fontWeight: 'bold' }}>
-                    ৳ {invTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span style={{ color: '#aaa', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Wallet size={14} style={{ color: '#72be44' }} />
+                      {t('currentInvest')}
+                    </span>
+                    <span style={{ color: '#72be44', fontWeight: 'bold' }}>
+                      ৳ {invTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  {invWithdrawn > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontSize: '0.74rem',
+                      color: '#a0aec0',
+                      paddingLeft: '19px'
+                    }}>
+                      <span>{language === 'bn' ? 'আসল:' : 'Gross:'} ৳ {invGross.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      <span style={{ color: '#ffb74d' }}>{t('withdrawnLabel')} -৳ {invWithdrawn.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>

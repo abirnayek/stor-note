@@ -94,7 +94,9 @@ export const translations = {
 
     // Extra added keys
     investorAccount: 'বিনিয়োগকারী হিসাব',
-    totalAllInvestorsInvest: 'সর্বমোট বিনিয়োগ',
+    totalAllInvestorsInvest: 'সর্বমোট বিনিয়োগ (উত্তোলন বাদে)',
+    currentInvest: 'বর্তমান বিনিয়োগ:',
+    withdrawnLabel: 'উত্তোলন:',
     asOfDate: 'তারিখ',
     noInvestor: 'কোনো বিনিয়োগকারী নেই',
     investorsCount: 'জন বিনিয়োগকারী',
@@ -248,7 +250,9 @@ export const translations = {
 
     // Extra added keys
     investorAccount: 'Investor Account',
-    totalAllInvestorsInvest: 'Total Investment',
+    totalAllInvestorsInvest: 'Total Investment (Excl. Withdrawals)',
+    currentInvest: 'Current Invest:',
+    withdrawnLabel: 'Withdrawals:',
     asOfDate: 'Date',
     noInvestor: 'No Investors',
     investorsCount: 'Investors',

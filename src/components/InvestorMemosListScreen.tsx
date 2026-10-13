@@ -98,7 +98,27 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
     onSelectMemo(newId);
   };
 
-  const totalInvestmentAmount = activeMemos.reduce((sum, memo) => sum + (Number(memo.totalInvest) || 0), 0);
+  const totalGrossInvestment = activeMemos.reduce((sum, memo) => {
+    let inv = 0;
+    if (memo.totalInvest !== undefined && memo.totalInvest !== null && !isNaN(Number(memo.totalInvest))) {
+      inv = Number(memo.totalInvest);
+    } else if (Array.isArray(memo.entries)) {
+      inv = memo.entries.filter((e: any) => e.type === 'invest').reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+    }
+    return sum + inv;
+  }, 0);
+
+  const totalWithdrawnAmount = activeMemos.reduce((sum, memo) => {
+    let w = 0;
+    if (memo.totalWithdrawn !== undefined && memo.totalWithdrawn !== null && !isNaN(Number(memo.totalWithdrawn))) {
+      w = Number(memo.totalWithdrawn);
+    } else if (Array.isArray(memo.entries)) {
+      w = memo.entries.filter((e: any) => e.type === 'withdraw').reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+    }
+    return sum + w;
+  }, 0);
+
+  const netInvestmentAmount = totalGrossInvestment - totalWithdrawnAmount;
 
   return (
     <div className="due-list-screen">
@@ -110,10 +130,27 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
           <h2>{profile.name || 'Investor'}{t('investorMemos')}</h2>
         </div>
         
-        {totalInvestmentAmount > 0 && (
-          <div style={{ border: '1px solid #72be44', padding: '0.4rem 1rem', borderRadius: '4px', color: '#72be44', fontWeight: 'bold', background: 'rgba(114, 190, 68, 0.1)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.9rem' }}>মোট বিনিয়োগ (Total Investment):</span> 
-            <span>৳ {totalInvestmentAmount.toFixed(2)}</span>
+        {netInvestmentAmount > 0 && (
+          <div style={{
+            border: '1px solid #72be44',
+            padding: '0.4rem 1rem',
+            borderRadius: '8px',
+            color: '#72be44',
+            fontWeight: 'bold',
+            background: 'rgba(114, 190, 68, 0.1)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.88rem' }}>{t('currentInvest')}</span> 
+              <span>৳ {netInvestmentAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            {totalWithdrawnAmount > 0 && (
+              <div style={{ fontSize: '0.72rem', color: '#ffb74d', fontWeight: 'normal' }}>
+                <span>{t('withdrawnLabel')} ৳ {totalWithdrawnAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -145,6 +182,12 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
                     <span style={{ color: '#aaa' }}>{t('totalInvestAmount')}</span>
                     <span style={{ color: '#72be44', fontWeight: 'bold' }}>৳{memo.totalInvest || 0}</span>
                   </div>
+                  {Number(memo.totalWithdrawn) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                      <span style={{ color: '#aaa' }}>{t('withdrawnLabel')}</span>
+                      <span style={{ color: '#ff9800', fontWeight: 'bold' }}>-৳{memo.totalWithdrawn}</span>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                     <span style={{ color: '#aaa' }}>{t('balanceAmount')}</span>
                     <span style={{ color: (memo.balance || 0) >= 0 ? '#64b5f6' : '#ff5252', fontWeight: 'bold' }}>
