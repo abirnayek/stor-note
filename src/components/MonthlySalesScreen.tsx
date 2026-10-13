@@ -315,6 +315,8 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
       }
     });
 
+    const netProfit = Math.round((totalProfit - totalLoss) * 100) / 100;
+
     return {
       totalMemos,
       totalAmount,
@@ -326,7 +328,8 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
       cashProfit,
       dueProfit,
       totalLoss,
-      lossMemosCount
+      lossMemosCount,
+      netProfit
     };
   }, [memos]);
 
@@ -519,9 +522,9 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
               </div>
             </div>
 
-            {/* Sub-breakdown: Cash Profit & Due Profit */}
+            {/* Sub-breakdown: Cash Profit, Due Profit & Net Profit */}
             <div className="profit-sub-breakdown">
-              <div>
+              <div title={language === 'bn' ? `হাতে নগদ লাভ: ৳ ${stats.cashProfit}` : `Cash Profit: ৳ ${stats.cashProfit}`}>
                 <div className="profit-sub-label" style={{ color: '#a7f3d0' }}>
                   {language === 'bn' ? 'হাতে নগদ লাভ' : 'Cash Profit'}
                 </div>
@@ -529,12 +532,20 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
                   ৳ {stats.cashProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
-              <div style={{ borderLeft: '1px solid rgba(255,255,255,0.12)', paddingLeft: '5px' }}>
+              <div style={{ borderLeft: '1px solid rgba(255,255,255,0.12)', paddingLeft: '4px' }} title={language === 'bn' ? `বাকিতে লাভ: ৳ ${stats.dueProfit}` : `Due Profit: ৳ ${stats.dueProfit}`}>
                 <div className="profit-sub-label" style={{ color: '#fed7aa' }}>
                   {language === 'bn' ? 'বাকিতে লাভ' : 'Due Profit'}
                 </div>
                 <div className="profit-sub-value" style={{ color: '#fb923c' }}>
                   ৳ {stats.dueProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div style={{ borderLeft: '1px solid rgba(255,255,255,0.12)', paddingLeft: '4px' }} title={language === 'bn' ? `নিট লাভ (লাভ - লস): ৳ ${stats.netProfit}` : `Net Profit (Profit - Loss): ৳ ${stats.netProfit}`}>
+                <div className="profit-sub-label" style={{ color: '#93c5fd' }}>
+                  {language === 'bn' ? 'নিট লাভ' : 'Net Profit'}
+                </div>
+                <div className="profit-sub-value" style={{ color: stats.netProfit >= 0 ? '#60a5fa' : '#ef5350' }}>
+                  {stats.netProfit < 0 ? '- ' : ''}৳ {Math.abs(stats.netProfit).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
             </div>

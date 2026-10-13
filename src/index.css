@@ -634,8 +634,8 @@ body {
 
 .profit-sub-breakdown {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.35rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem;
   margin-top: 0.35rem;
   background: rgba(0, 0, 0, 0.28);
   padding: 5px 6px;
@@ -644,16 +644,22 @@ body {
 }
 
 .profit-sub-label {
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   font-weight: 500;
   line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .profit-sub-value {
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   font-weight: bold;
   line-height: 1.2;
   margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .trash-alert {
