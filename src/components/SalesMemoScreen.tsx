@@ -2,7 +2,7 @@ import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput, DebouncedInput, parseMathOrNumber, focusNewTableRow } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Undo, Redo, MessageCircle, Mail, Share2, Download, Plus, Trash2, Phone, Palette, MinusCircle } from 'lucide-react';
+import { ChevronLeft, Undo, Redo, MessageCircle, Mail, Share2, Download, Plus, Trash2, Phone, Palette, MinusCircle, Calculator, Zap, Scale, Package, CheckCircle2, AlertCircle, FileText } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
@@ -65,6 +65,7 @@ interface MemoState {
   sellerSignature?: string;
   entries: FishEntry[];
   deductions?: MemoDeduction[];
+  note?: string;
 }
 
 const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber, memoId, onLotChange, onBack, defaultCustomerType }) => {
@@ -216,7 +217,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         receiverSignature: src.receiverSignature || dueData?.receiverSignature || '',
         sellerSignature: src.sellerSignature || dueData?.sellerSignature || localStorage.getItem('default_seller_signature') || '',
         entries: entriesToSet,
-        deductions: rawDeductions
+        deductions: rawDeductions,
+        note: src.note || dueData?.note || ''
       };
     }
 
@@ -234,7 +236,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       customDate: '',
       sellerSignature: localStorage.getItem('default_seller_signature') || '',
       entries: [{ id: Date.now().toString(), serialNo: '1', name: '', totalKg: '', weightUnit: 'kg', profitPercent: '', manualSaleRate: '' }],
-      deductions: []
+      deductions: [],
+      note: ''
     };
   };
 
@@ -808,6 +811,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions) * 100) / 100);
   const dueAmount = Math.max(0, Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100);
 
+  const totalKgSum = memoState.entries.reduce((sum, entry) => {
+    const kg = Number(entry.totalKg) || 0;
+    return sum + (entry.weightUnit === 'g' ? kg / 1000 : kg);
+  }, 0);
+  const totalItemsCount = memoState.entries.filter(e => (e.name && e.name.trim() !== '') || (Number(e.totalKg) > 0)).length;
+
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar" data-html2canvas-ignore>
@@ -1284,146 +1293,331 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
             </table>
           </div>
 
-          <div style={{ padding: '1rem 2rem', display: 'flex', flexWrap: 'wrap', gap: '1.5rem', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          {/* Bottom Grid: Left (Actions, Deductions, Insights/Notes) | Right (Totals Box) */}
+          <div className="memo-footer-grid">
             
-            {/* Left Side: Add Row + Deductions / Expenses */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', flex: 1, minWidth: '280px' }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', alignItems: 'center' }} data-html2canvas-ignore>
-                <button className="add-row-dark-btn" onClick={handleAddRow} style={{ margin: 0 }}>
-                  <Plus size={16} /> {t('addNewRow')}
-                </button>
-                
-                <button 
-                  type="button"
-                  onClick={() => handleAddDeduction()} 
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: 'rgba(239, 68, 68, 0.15)',
-                    border: '1px solid rgba(239, 68, 68, 0.4)',
-                    color: '#fca5a5',
-                    padding: '6px 14px',
-                    borderRadius: '6px',
-                    fontSize: '0.85rem',
-                    cursor: 'pointer',
-                    fontWeight: 500,
-                    transition: 'all 0.2s'
-                  }}
-                  title={language === 'bn' ? 'কোনো খরচ বা বরফ কেনা ইত্যাদি মাইনাস করুন' : 'Add deduction or expense'}
-                >
-                  <MinusCircle size={15} style={{ color: '#ef4444' }} />
-                  <span>{language === 'bn' ? '+ মাইনাস / খরচ যোগ করুন' : '+ Add Deduction / Minus'}</span>
-                </button>
-              </div>
-
-              {/* Quick suggestion chips */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }} data-html2canvas-ignore>
-                <span style={{ fontSize: '0.72rem', color: '#888' }}>{language === 'bn' ? 'দ্রুত যোগ করুন:' : 'Quick add:'}</span>
-                {[
-                  { title: 'বরফ কেনা', icon: '🧊' },
-                  { title: 'গাড়ী ভাড়া', icon: '🚚' },
-                  { title: 'কমিশন', icon: '💼' },
-                  { title: 'লেবার খরচ', icon: '👷' }
-                ].map(item => (
+            {/* Left Column: Actions + Deductions + Insights */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', minWidth: 0 }}>
+              
+              {/* Action Toolbar Card */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(18, 48, 32, 0.6) 0%, rgba(10, 28, 18, 0.8) 100%)',
+                border: '1px solid rgba(114, 190, 68, 0.22)',
+                borderRadius: '12px',
+                padding: '0.85rem 1.1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+                boxShadow: '0 4px 18px rgba(0, 0, 0, 0.18)'
+              }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', alignItems: 'center' }} data-html2canvas-ignore>
                   <button
-                    key={item.title}
                     type="button"
-                    onClick={() => handleAddDeduction(item.title)}
+                    className="add-row-dark-btn"
+                    onClick={handleAddRow}
                     style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.12)',
-                      borderRadius: '12px',
-                      padding: '2px 8px',
-                      fontSize: '0.72rem',
-                      color: '#ccc',
-                      cursor: 'pointer'
+                      margin: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: 'linear-gradient(135deg, rgba(114, 190, 68, 0.22), rgba(76, 175, 80, 0.12))',
+                      border: '1px solid rgba(114, 190, 68, 0.45)',
+                      color: '#a3e635',
+                      padding: '7px 14px',
+                      borderRadius: '8px',
+                      fontSize: '0.84rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
                     }}
                   >
-                    {item.icon} {item.title}
+                    <Plus size={16} /> {t('addNewRow')}
                   </button>
-                ))}
-              </div>
-
-              {/* Deductions Edit Box */}
-              {deductionsList.length > 0 && (
-                <div style={{
-                  background: 'rgba(239, 68, 68, 0.06)',
-                  border: '1px solid rgba(239, 68, 68, 0.25)',
-                  borderRadius: '8px',
-                  padding: '0.75rem 1rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.5rem',
-                  marginTop: '0.2rem'
-                }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#fca5a5', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <MinusCircle size={14} style={{ color: '#ef4444' }} />
-                    <span>{language === 'bn' ? 'মাইনাস / কর্তনের বিবরণ (যেমন: বরফ কেনা)' : 'Deductions & Expenses'}</span>
-                  </div>
                   
-                  {deductionsList.map(d => (
-                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>[-]</span>
-                      <input
-                        type="text"
-                        placeholder={language === 'bn' ? 'বিবরণ (যেমন: বরফ কেনা)' : 'Description (e.g., Ice purchase)'}
-                        value={d.title}
-                        onChange={e => updateDeduction(d.id, 'title', e.target.value)}
-                        style={{
-                          flex: 1,
-                          background: 'rgba(0,0,0,0.3)',
-                          border: '1px solid rgba(255,255,255,0.15)',
-                          borderRadius: '4px',
-                          padding: '4px 8px',
-                          color: '#fff',
-                          fontSize: '0.82rem'
-                        }}
-                      />
-                      <input
-                        type="number"
-                        placeholder="0.00"
-                        value={d.amount}
-                        onChange={e => updateDeduction(d.id, 'amount', e.target.value === '' ? '' : Number(e.target.value))}
-                        style={{
-                          width: '90px',
-                          textAlign: 'right',
-                          background: 'rgba(0,0,0,0.3)',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
-                          borderRadius: '4px',
-                          padding: '4px 8px',
-                          color: '#fca5a5',
-                          fontWeight: 'bold',
-                          fontSize: '0.85rem'
-                        }}
-                      />
-                      <span style={{ fontSize: '0.78rem', color: '#888' }}>৳</span>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteDeduction(d.id)}
-                        data-html2canvas-ignore
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#ef4444',
-                          cursor: 'pointer',
-                          padding: '2px'
-                        }}
-                        title={language === 'bn' ? 'মুছে ফেলুন' : 'Delete'}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                  <button 
+                    type="button"
+                    onClick={() => handleAddDeduction()} 
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.18), rgba(185, 28, 28, 0.1))',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      color: '#fca5a5',
+                      padding: '7px 14px',
+                      borderRadius: '8px',
+                      fontSize: '0.84rem',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      transition: 'all 0.2s'
+                    }}
+                    title={language === 'bn' ? 'কোনো খরচ বা বরফ কেনা ইত্যাদি মাইনাস করুন' : 'Add deduction or expense'}
+                  >
+                    <MinusCircle size={15} style={{ color: '#ef4444' }} />
+                    <span>{language === 'bn' ? '+ মাইনাস / খরচ যোগ করুন' : '+ Add Deduction / Minus'}</span>
+                  </button>
+                </div>
+
+                {/* Quick suggestion chips */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  flexWrap: 'wrap',
+                  background: 'rgba(0, 0, 0, 0.22)',
+                  padding: '5px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.05)'
+                }} data-html2canvas-ignore>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Zap size={13} style={{ color: '#ffb74d' }} />
+                    <span style={{ fontSize: '0.74rem', color: '#aaa', fontWeight: 600 }}>
+                      {language === 'bn' ? 'দ্রুত যোগ করুন:' : 'Quick add:'}
+                    </span>
+                  </div>
+                  {[
+                    { title: 'বরফ কেনা', icon: '🧊' },
+                    { title: 'গাড়ী ভাড়া', icon: '🚚' },
+                    { title: 'কমিশন', icon: '💼' },
+                    { title: 'লেবার খরচ', icon: '👷' }
+                  ].map(item => (
+                    <button
+                      key={item.title}
+                      type="button"
+                      onClick={() => handleAddDeduction(item.title)}
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '12px',
+                        padding: '2px 9px',
+                        fontSize: '0.74rem',
+                        color: '#ddd',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontWeight: 500,
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <span>{item.icon}</span>
+                      <span>{item.title}</span>
+                    </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Deductions Edit Card */}
+              {deductionsList.length > 0 && (
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(38, 18, 24, 0.65) 0%, rgba(20, 10, 14, 0.8) 100%)',
+                  border: '1px solid rgba(239, 68, 68, 0.32)',
+                  borderRadius: '12px',
+                  padding: '0.9rem 1.1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.65rem',
+                  boxShadow: '0 4px 18px rgba(239, 68, 68, 0.08)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(239, 68, 68, 0.2)', paddingBottom: '0.45rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <MinusCircle size={15} style={{ color: '#ef4444' }} />
+                      <span style={{ fontSize: '0.86rem', fontWeight: 'bold', color: '#fca5a5' }}>
+                        {language === 'bn' ? 'মাইনাস / কর্তনের বিবরণ (যেমন: বরফ কেনা)' : 'Deductions & Expenses'}
+                      </span>
+                      <span style={{ background: 'rgba(239, 68, 68, 0.22)', color: '#fca5a5', padding: '1px 6px', borderRadius: '8px', fontSize: '0.72rem', fontWeight: 600 }}>
+                        {deductionsList.length} টি
+                      </span>
+                    </div>
+
+                    {totalDeductions > 0 && (
+                      <span style={{ background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#fca5a5', padding: '2px 8px', borderRadius: '10px', fontSize: '0.78rem', fontWeight: 'bold' }}>
+                        মোট: - ৳ {totalDeductions.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {deductionsList.map(d => (
+                      <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(0, 0, 0, 0.25)', padding: '5px 8px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                        <span style={{ background: 'rgba(239, 68, 68, 0.18)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', fontSize: '0.8rem', userSelect: 'none' }}>
+                          [-]
+                        </span>
+                        <input
+                          type="text"
+                          placeholder={language === 'bn' ? 'বিবরণ (যেমন: বরফ কেনা)' : 'Description (e.g., Ice purchase)'}
+                          value={d.title}
+                          onChange={e => updateDeduction(d.id, 'title', e.target.value)}
+                          style={{
+                            flex: 1,
+                            background: 'rgba(0, 0, 0, 0.3)',
+                            border: '1px solid rgba(255, 255, 255, 0.12)',
+                            borderRadius: '5px',
+                            padding: '5px 9px',
+                            color: '#fff',
+                            fontSize: '0.84rem'
+                          }}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(0, 0, 0, 0.3)', border: '1px solid rgba(239, 68, 68, 0.32)', borderRadius: '5px', padding: '2px 6px' }}>
+                          <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.82rem' }}>৳</span>
+                          <input
+                            type="number"
+                            placeholder="0.00"
+                            value={d.amount}
+                            onChange={e => updateDeduction(d.id, 'amount', e.target.value === '' ? '' : Number(e.target.value))}
+                            style={{
+                              width: '85px',
+                              textAlign: 'right',
+                              background: 'transparent',
+                              border: 'none',
+                              outline: 'none',
+                              color: '#fca5a5',
+                              fontWeight: 'bold',
+                              fontSize: '0.88rem',
+                              padding: '3px 0'
+                            }}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDeduction(d.id)}
+                          data-html2canvas-ignore
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.22)',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            padding: '5px',
+                            borderRadius: '5px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.2s'
+                          }}
+                          title={language === 'bn' ? 'মুছে ফেলুন' : 'Delete'}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '0.1rem' }} data-html2canvas-ignore>
+                    <button
+                      type="button"
+                      onClick={() => handleAddDeduction()}
+                      style={{
+                        background: 'transparent',
+                        border: '1px dashed rgba(239, 68, 68, 0.32)',
+                        borderRadius: '6px',
+                        color: '#fca5a5',
+                        padding: '4px 10px',
+                        fontSize: '0.75rem',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Plus size={13} />
+                      <span>{language === 'bn' ? '+ আরও খরচ যোগ করুন' : '+ Add more deduction'}</span>
+                    </button>
+                  </div>
+                </div>
               )}
+
+              {/* Insights & Remarks Card (fills void pointed to by 2nd arrow) */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.65rem',
+                background: 'linear-gradient(135deg, rgba(16, 42, 28, 0.45) 0%, rgba(10, 24, 16, 0.65) 100%)',
+                border: '1px solid rgba(114, 190, 68, 0.18)',
+                borderRadius: '12px',
+                padding: '0.85rem 1.1rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.6rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Package size={14} style={{ color: '#72be44' }} />
+                      <span style={{ fontSize: '0.78rem', color: '#aaa' }}>{language === 'bn' ? 'মোট পদ:' : 'Items:'}</span>
+                      <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.85rem' }}>
+                        {totalItemsCount} {language === 'bn' ? 'টি' : 'items'}
+                      </span>
+                    </div>
+                    <div style={{ width: '1px', height: '14px', background: 'rgba(255, 255, 255, 0.1)' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Scale size={14} style={{ color: '#72be44' }} />
+                      <span style={{ fontSize: '0.78rem', color: '#aaa' }}>{language === 'bn' ? 'মোট ওজন:' : 'Weight:'}</span>
+                      <span style={{ fontWeight: 'bold', color: '#72be44', fontSize: '0.85rem' }}>
+                        {totalKgSum.toFixed(2)} {language === 'bn' ? 'কেজি' : 'kg'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    {dueAmount > 0 ? (
+                      <span style={{ background: 'rgba(255, 152, 0, 0.15)', color: '#ffb74d', border: '1px solid rgba(255, 152, 0, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <AlertCircle size={12} /> {language === 'bn' ? 'বকেয়া মেমো' : 'Due Memo'}
+                      </span>
+                    ) : grandTotal > 0 ? (
+                      <span style={{ background: 'rgba(114, 190, 68, 0.15)', color: '#72be44', border: '1px solid rgba(114, 190, 68, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <CheckCircle2 size={12} /> {language === 'bn' ? 'পরিশোধিত' : 'Paid in Full'}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0, 0, 0, 0.22)', padding: '5px 10px', borderRadius: '7px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <FileText size={14} style={{ color: '#888', flexShrink: 0 }} />
+                  <input
+                    type="text"
+                    placeholder={language === 'bn' ? 'নোট বা মন্তব্য (ঐচ্ছিক — যেমন: গাড়ী নং, চালান নং)' : 'Remarks / Note (Optional — e.g. Vehicle no, Truck no)'}
+                    value={memoState.note || ''}
+                    onChange={e => updateMemoState('note', e.target.value)}
+                    style={{
+                      flex: 1,
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#ccc',
+                      fontSize: '0.8rem'
+                    }}
+                  />
+                </div>
+              </div>
+
             </div>
 
-            {/* Right Side: Totals Box */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', minWidth: '240px', background: 'rgba(0,0,0,0.25)', padding: '1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
+            {/* Right Column: Premium Totals Box */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.7rem',
+              background: 'linear-gradient(145deg, rgba(16, 44, 28, 0.75) 0%, rgba(8, 26, 16, 0.9) 100%)',
+              padding: '1.15rem 1.3rem',
+              borderRadius: '14px',
+              border: '1px solid rgba(114, 190, 68, 0.35)',
+              boxShadow: '0 8px 28px rgba(0, 0, 0, 0.3)'
+            }}>
+              {/* Card Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '0.55rem' }}>
+                <div style={{ background: 'rgba(114, 190, 68, 0.2)', padding: '4px 6px', borderRadius: '6px', display: 'flex', alignItems: 'center' }}>
+                  <Calculator size={16} style={{ color: '#72be44' }} />
+                </div>
+                <span style={{ fontWeight: 'bold', fontSize: '0.95rem', color: '#fff' }}>
+                  {language === 'bn' ? 'বিল ও হিসাব সারাংশ' : 'Bill Summary'}
+                </span>
+              </div>
+
+              {/* Fish Total */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="memo-label-dark">{language === 'bn' ? 'মাছের মোট মূল্য:' : 'Fish Total:'}</span>
-                <span style={{ fontWeight: 'bold', color: '#fff' }}>৳ {fishTotal.toFixed(2)}</span>
+                <span className="memo-label-dark" style={{ fontSize: '0.88rem' }}>
+                  {language === 'bn' ? 'মাছের মোট মূল্য:' : 'Fish Total:'}
+                </span>
+                <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.98rem' }}>
+                  ৳ {fishTotal.toFixed(2)}
+                </span>
               </div>
 
               {/* Render each deduction item */}
@@ -1431,39 +1625,91 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 const amt = Number(d.amount) || 0;
                 if (!d.title && amt === 0) return null;
                 return (
-                  <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fca5a5', fontSize: '0.85rem' }}>
-                    <span>[-] {d.title || (language === 'bn' ? 'মাইনাস খরচ' : 'Deduction')}:</span>
+                  <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fca5a5', fontSize: '0.84rem', paddingLeft: '8px', borderLeft: '2px solid rgba(239, 68, 68, 0.45)' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '170px' }}>
+                      [-] {d.title || (language === 'bn' ? 'মাইনাস খরচ' : 'Deduction')}:
+                    </span>
                     <span style={{ fontWeight: 600 }}>- ৳ {amt.toFixed(2)}</span>
                   </div>
                 );
               })}
 
               {deductionsList.length > 0 && totalDeductions > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(239,68,68,0.3)', paddingTop: '4px', color: '#f87171', fontSize: '0.82rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(239, 68, 68, 0.3)', paddingTop: '4px', color: '#f87171', fontSize: '0.84rem', fontWeight: 'bold' }}>
                   <span>{language === 'bn' ? 'মোট মাইনাস:' : 'Total Deductions:'}</span>
-                  <span style={{ fontWeight: 'bold' }}>- ৳ {totalDeductions.toFixed(2)}</span>
+                  <span>- ৳ {totalDeductions.toFixed(2)}</span>
                 </div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '0.5rem' }}>
-                <span className="memo-label-dark" style={{ fontWeight: 'bold', color: '#fff' }}>{language === 'bn' ? 'চূড়ান্ত বিল (মোট):' : 'Net Total:'}</span>
-                <span style={{ fontWeight: 'bold', color: 'var(--primary-color)', fontSize: '1.1rem' }}>৳ {grandTotal.toFixed(2)}</span>
+              {/* Grand Total Row */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: 'linear-gradient(135deg, rgba(114, 190, 68, 0.16), rgba(76, 175, 80, 0.08))',
+                border: '1px solid rgba(114, 190, 68, 0.4)',
+                borderRadius: '8px',
+                padding: '0.6rem 0.85rem',
+                marginTop: '0.15rem'
+              }}>
+                <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.92rem' }}>
+                  {language === 'bn' ? 'চূড়ান্ত বিল (মোট):' : 'Net Total:'}
+                </span>
+                <span style={{ fontWeight: 'bold', color: 'var(--primary-color)', fontSize: '1.2rem' }}>
+                  ৳ {grandTotal.toFixed(2)}
+                </span>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="memo-label-dark">{t('jamaPaid')}</span>
+              {/* Jama / Paid Amount */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.15rem' }}>
+                <span className="memo-label-dark" style={{ fontSize: '0.88rem' }}>
+                  {t('jamaPaid')}
+                </span>
                 <MathInput 
                   className="supplier-input" 
-                  style={{ width: '110px', textAlign: 'right', padding: '0.3rem 0.5rem' }}
+                  style={{
+                    width: '115px',
+                    textAlign: 'right',
+                    padding: '0.35rem 0.6rem',
+                    background: 'rgba(0, 0, 0, 0.35)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '6px',
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    fontSize: '0.92rem'
+                  }}
                   value={memoState.paidAmount}
                   onChange={e => updateMemoState('paidAmount', parseMathOrNumber(e.target.value))}
                   placeholder="0.00"
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.5rem' }}>
-                <span className="memo-label-dark">Due (Baki):</span>
-                <span style={{ fontWeight: 'bold', color: '#ff9800', fontSize: '1.05rem' }}>৳ {dueAmount.toFixed(2)}</span>
+              {/* Due (Baki) */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+                paddingTop: '0.6rem',
+                marginTop: '0.15rem'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '0.92rem', fontWeight: 'bold', color: dueAmount > 0 ? '#ff9800' : '#72be44' }}>
+                    Due (Baki):
+                  </span>
+                  {dueAmount === 0 && grandTotal > 0 && (
+                    <span style={{ fontSize: '0.7rem', color: '#72be44', fontWeight: 600 }}>
+                      {language === 'bn' ? '✔ পরিশোধিত' : 'Paid in full'}
+                    </span>
+                  )}
+                </div>
+                <span style={{
+                  fontWeight: 'bold',
+                  color: dueAmount > 0 ? '#ff9800' : '#72be44',
+                  fontSize: '1.18rem'
+                }}>
+                  ৳ {dueAmount.toFixed(2)}
+                </span>
               </div>
             </div>
 

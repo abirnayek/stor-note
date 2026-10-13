@@ -2129,3 +2129,21 @@ body.view-only-mode .weight-unit-toggle {
   }
 }
 
+/* Memo Bottom / Footer 2-Column Responsive Grid */
+.memo-footer-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 360px);
+  gap: 1.5rem;
+  align-items: start;
+  padding: 1.25rem 2rem 1.75rem;
+}
+
+@media (max-width: 960px) {
+  .memo-footer-grid {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    padding: 1rem 1.25rem 1.5rem;
+  }
+}
+
+
