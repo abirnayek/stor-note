@@ -75,6 +75,15 @@ export const calculateMemoTotals = (memoData: any): { totalBill: number; paidAmo
     }
   }
 
+  // Subtract any custom memo deductions (e.g., ice cost, transport, etc.)
+  const rawDeductions = (memo.deductions && Array.isArray(memo.deductions))
+    ? memo.deductions
+    : ((memoData.deductions && Array.isArray(memoData.deductions)) ? memoData.deductions : []);
+  const totalDeductions = rawDeductions.reduce((sum: number, d: any) => sum + (Number(d.amount) || 0), 0);
+  if (totalDeductions > 0) {
+    totalBill = Math.max(0, totalBill - totalDeductions);
+  }
+
   const deposit = Number(memo.deposit !== undefined ? memo.deposit : (memoData.deposit !== undefined ? memoData.deposit : 0)) || 0;
   const paid = Number(memo.paidAmount !== undefined ? memo.paidAmount : (memoData.paidAmount !== undefined ? memoData.paidAmount : 0)) || 0;
   const paidAmount = Math.max(deposit, paid);
@@ -220,12 +229,18 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
       mobile,
       address,
       entries: combinedEntries,
+      deductions: (innerMemo.deductions && Array.isArray(innerMemo.deductions))
+        ? innerMemo.deductions
+        : ((primary.deductions && Array.isArray(primary.deductions)) ? primary.deductions : (dueData?.deductions || [])),
       memoState: {
         ...innerMemo,
         customerName: name,
         mobile,
         address,
-        entries: combinedEntries
+        entries: combinedEntries,
+        deductions: (innerMemo.deductions && Array.isArray(innerMemo.deductions))
+          ? innerMemo.deductions
+          : ((primary.deductions && Array.isArray(primary.deductions)) ? primary.deductions : (dueData?.deductions || []))
       }
     }
   };
@@ -341,6 +356,12 @@ export const syncAllDueAccounts = (): {
           ? memo.raw.memoState.entries
           : (existingDueObj.entries || existingDueObj.memoState?.entries || []));
 
+      const deductionsToSave = (memo.raw?.deductions && Array.isArray(memo.raw.deductions))
+        ? memo.raw.deductions
+        : ((memo.raw?.memoState?.deductions && Array.isArray(memo.raw.memoState.deductions))
+          ? memo.raw.memoState.deductions
+          : (existingDueObj.deductions || existingDueObj.memoState?.deductions || []));
+
       const syncedDueData = {
         ...existingDueObj,
         id: memo.id,
@@ -360,6 +381,7 @@ export const syncAllDueAccounts = (): {
         paidDate: memo.dueAmount <= 0 ? (memo.paidDate || existingDueObj.paidDate || Date.now()) : undefined,
         autoMessage: memo.autoMessage,
         entries: entriesToSave,
+        deductions: deductionsToSave,
         memoState: {
           ...(memo.raw?.memoState || memo.raw || existingDueObj.memoState || {}),
           customerName: memo.name,
@@ -369,7 +391,8 @@ export const syncAllDueAccounts = (): {
           paidAmount: memo.paidAmount,
           customerType: memo.customerType,
           status: memo.dueAmount > 0 ? 'due' : 'paid',
-          entries: entriesToSave
+          entries: entriesToSave,
+          deductions: deductionsToSave
         }
       };
 

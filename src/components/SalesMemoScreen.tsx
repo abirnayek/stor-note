@@ -2,7 +2,7 @@ import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput, DebouncedInput, parseMathOrNumber, focusNewTableRow } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Undo, Redo, MessageCircle, Mail, Share2, Download, Plus, Trash2, Phone } from 'lucide-react';
+import { ChevronLeft, Undo, Redo, MessageCircle, Mail, Share2, Download, Plus, Trash2, Phone, Palette, MinusCircle } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
@@ -20,6 +20,21 @@ interface SalesMemoScreenProps {
   defaultCustomerType?: 'regular' | 'permanent';
 }
 
+export const HIGHLIGHT_PALETTE: { id: string; name: string; bg: string; border: string; dot: string }[] = [
+  { id: 'yellow', name: 'হলুদ', bg: 'rgba(234, 179, 8, 0.18)', border: '#eab308', dot: '#facc15' },
+  { id: 'green', name: 'সবুজ', bg: 'rgba(34, 197, 94, 0.18)', border: '#22c55e', dot: '#4ade80' },
+  { id: 'orange', name: 'কমলা', bg: 'rgba(249, 115, 22, 0.18)', border: '#f97316', dot: '#fb923c' },
+  { id: 'red', name: 'লাল', bg: 'rgba(239, 68, 68, 0.18)', border: '#ef4444', dot: '#f87171' },
+  { id: 'blue', name: 'নীল', bg: 'rgba(59, 130, 246, 0.18)', border: '#3b82f6', dot: '#60a5fa' },
+  { id: 'purple', name: 'বেগুনি', bg: 'rgba(168, 85, 247, 0.18)', border: '#a855f7', dot: '#c084fc' },
+];
+
+export interface MemoDeduction {
+  id: string;
+  title: string;
+  amount: number | '';
+}
+
 interface FishEntry {
   id: string;
   serialNo?: string;
@@ -29,6 +44,7 @@ interface FishEntry {
   buyRate?: number; // Fetched from lot (acts as investment rate based on cost)
   profitPercent?: number | '';
   manualSaleRate?: number | '';
+  highlightColor?: string;
 }
 
 interface MemoState {
@@ -48,6 +64,7 @@ interface MemoState {
   receiverSignature?: string;
   sellerSignature?: string;
   entries: FishEntry[];
+  deductions?: MemoDeduction[];
 }
 
 const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber, memoId, onLotChange, onBack, defaultCustomerType }) => {
@@ -168,10 +185,19 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
               weightUnit: e.weightUnit || 'kg',
               buyRate: e.buyRate !== undefined ? e.buyRate : '',
               profitPercent: e.profitPercent !== undefined ? e.profitPercent : '',
-              manualSaleRate: saleRateVal
+              manualSaleRate: saleRateVal,
+              highlightColor: e.highlightColor
             };
           })
         : [{ id: Date.now().toString(), serialNo: '1', name: '', totalKg: '', weightUnit: 'kg', profitPercent: '', manualSaleRate: '' }];
+
+      const rawDeductions: MemoDeduction[] = (src.deductions && Array.isArray(src.deductions))
+        ? src.deductions
+        : ((dueData?.deductions && Array.isArray(dueData.deductions))
+          ? dueData.deductions
+          : ((dueData?.memoState?.deductions && Array.isArray(dueData.memoState.deductions))
+            ? dueData.memoState.deductions
+            : []));
 
       return {
         customerName: finalCustomerName,
@@ -189,7 +215,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         customDate: src.customDate || '',
         receiverSignature: src.receiverSignature || dueData?.receiverSignature || '',
         sellerSignature: src.sellerSignature || dueData?.sellerSignature || localStorage.getItem('default_seller_signature') || '',
-        entries: entriesToSet
+        entries: entriesToSet,
+        deductions: rawDeductions
       };
     }
 
@@ -206,7 +233,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       isOriginalDate: true,
       customDate: '',
       sellerSignature: localStorage.getItem('default_seller_signature') || '',
-      entries: [{ id: Date.now().toString(), serialNo: '1', name: '', totalKg: '', weightUnit: 'kg', profitPercent: '', manualSaleRate: '' }]
+      entries: [{ id: Date.now().toString(), serialNo: '1', name: '', totalKg: '', weightUnit: 'kg', profitPercent: '', manualSaleRate: '' }],
+      deductions: []
     };
   };
 
@@ -250,6 +278,45 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       setCurrentLotStock(null);
     }
   }, [memoState.lotNumberInput, lotNumber]);
+
+  const [activeColorPickerId, setActiveColorPickerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.highlight-color-picker-popover') && !target.closest('.btn-color-picker-trigger')) {
+        setActiveColorPickerId(null);
+      }
+    };
+    if (activeColorPickerId) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [activeColorPickerId]);
+
+  const handleAddDeduction = (defaultTitle: string = '') => {
+    setMemoState(prev => ({
+      ...prev,
+      deductions: [
+        ...(prev.deductions || []),
+        { id: `ded_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, title: defaultTitle, amount: '' }
+      ]
+    }));
+  };
+
+  const updateDeduction = (id: string, field: keyof MemoDeduction, value: any) => {
+    setMemoState(prev => ({
+      ...prev,
+      deductions: (prev.deductions || []).map(d => d.id === id ? { ...d, [field]: value } : d)
+    }));
+  };
+
+  const handleDeleteDeduction = (id: string) => {
+    setMemoState(prev => ({
+      ...prev,
+      deductions: (prev.deductions || []).filter(d => d.id !== id)
+    }));
+  };
 
   const isMounted = useRef(false);
 
@@ -444,7 +511,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     }
 
     // Calculate due amount for auto-sync
-    let grandTotal = 0;
+    let fishTotal = 0;
     memoState.entries.forEach(entry => {
       let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
       let buyRateNum = Number(entry.buyRate) || 0;
@@ -462,11 +529,13 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
       }
       if (weightInKg > 0 && saleRate > 0) {
-        grandTotal += weightInKg * saleRate;
+        fishTotal += weightInKg * saleRate;
       }
     });
 
-    const dueAmount = Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100;
+    const totalDeductions = (memoState.deductions || []).reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+    const grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions) * 100) / 100);
+    const dueAmount = Math.max(0, Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100);
     let currentStatus = memoState.status || 'draft';
 
     if (memoState.customerType) {
@@ -511,6 +580,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         type: type,
         status: currentStatus,
         autoMessage: existingDueObj.autoMessage,
+        deductions: memoState.deductions || [],
         entries: memoState.entries.map((e, i) => ({
           id: e.id,
           serialNo: (i+1).toString(),
@@ -519,7 +589,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           weightUnit: e.weightUnit,
           buyRate: e.buyRate || '',
           profitPercent: e.profitPercent,
-          manualSaleRate: e.manualSaleRate
+          manualSaleRate: e.manualSaleRate,
+          highlightColor: e.highlightColor
         }))
       };
 
@@ -698,7 +769,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
 
 
-  let grandTotal = 0;
+  let fishTotal = 0;
   memoState.entries.forEach(entry => {
     let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
     let buyRateNum = Number(entry.buyRate) || 0;
@@ -709,12 +780,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     }
     
     let saleRate = 0;
-      if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-        let manualRateNum = Number(entry.manualSaleRate);
-        saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
-      } else {
-        saleRate = calculatedSaleRate;
-      }
+    if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+      let manualRateNum = Number(entry.manualSaleRate);
+      saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+    } else {
+      saleRate = calculatedSaleRate;
+    }
     
     let weightInKg = 0;
     let totalKgNum = Number(entry.totalKg) || 0;
@@ -723,11 +794,14 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     }
 
     if (weightInKg > 0 && saleRate > 0) {
-      grandTotal += weightInKg * saleRate;
+      fishTotal += weightInKg * saleRate;
     }
   });
 
-  const dueAmount = grandTotal - Number(memoState.paidAmount || 0);
+  const deductionsList = memoState.deductions || [];
+  const totalDeductions = deductionsList.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+  const grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions) * 100) / 100);
+  const dueAmount = Math.max(0, Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100);
 
   return (
     <div className="memo-screen">
@@ -954,7 +1028,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   <th>{t('saleRate')}</th>
                   <th data-html2canvas-ignore>{t('profitPercent')}</th>
                   <th>{t('totalPrice')}</th>
-                  <th data-html2canvas-ignore></th>
+                  <th data-html2canvas-ignore style={{ width: '80px', textAlign: 'center' }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -968,12 +1042,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   }
                   
                   let saleRate = 0;
-      if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-        let manualRateNum = Number(entry.manualSaleRate);
-        saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
-      } else {
-        saleRate = calculatedSaleRate;
-      }
+                  if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+                    let manualRateNum = Number(entry.manualSaleRate);
+                    saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+                  } else {
+                    saleRate = calculatedSaleRate;
+                  }
                   
                   let weightInKg = 0;
                   let totalKgNum = Number(entry.totalKg) || 0;
@@ -987,9 +1061,17 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   }
 
                   const isLastRow = index === memoState.entries.length - 1;
+                  const activePalette = HIGHLIGHT_PALETTE.find(c => c.id === entry.highlightColor);
 
                   return (
-                    <tr key={entry.id}>
+                    <tr 
+                      key={entry.id}
+                      style={{
+                        backgroundColor: activePalette ? activePalette.bg : undefined,
+                        boxShadow: activePalette ? `inset 4px 0 0 ${activePalette.border}` : undefined,
+                        transition: 'background-color 0.2s'
+                      }}
+                    >
                       <td data-label="Sl No.">
                         <DebouncedInput 
                           placeholder="Sl"
@@ -1095,10 +1177,99 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                       <td data-label="Total Price" style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>
                         {totalPrice > 0 ? totalPrice.toFixed(2) : '0.00'}
                       </td>
-                      <td data-label="" data-html2canvas-ignore>
-                        <button className="btn-icon delete-btn" onClick={() => handleDeleteRow(entry.id)}>
-                          <Trash2 size={20} />
-                        </button>
+                      <td data-label="" data-html2canvas-ignore style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', position: 'relative' }}>
+                          <button 
+                            type="button"
+                            className="btn-icon btn-color-picker-trigger" 
+                            onClick={() => setActiveColorPickerId(prev => prev === entry.id ? null : entry.id)}
+                            title={language === 'bn' ? 'লাইন কালার / হাইলাইট করুন' : 'Highlight line'}
+                            style={{
+                              padding: '5px',
+                              background: entry.highlightColor ? 'rgba(255,255,255,0.15)' : 'transparent',
+                              borderRadius: '6px',
+                              border: entry.highlightColor ? `1px solid ${activePalette?.border || '#72be44'}` : '1px solid transparent',
+                              color: entry.highlightColor ? (activePalette?.dot || '#72be44') : '#888',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Palette size={18} />
+                          </button>
+
+                          {/* Color Popover */}
+                          {activeColorPickerId === entry.id && (
+                            <div 
+                              className="highlight-color-picker-popover"
+                              style={{
+                                position: 'absolute',
+                                right: '100%',
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                marginRight: '8px',
+                                background: '#123020',
+                                border: '1px solid rgba(114, 190, 68, 0.4)',
+                                borderRadius: '10px',
+                                padding: '6px 8px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
+                                zIndex: 100
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateEntry(entry.id, 'highlightColor', undefined);
+                                  setActiveColorPickerId(null);
+                                }}
+                                title={language === 'bn' ? 'রং মুছুন (স্বাভাবিক)' : 'Clear color'}
+                                style={{
+                                  width: '20px',
+                                  height: '20px',
+                                  borderRadius: '50%',
+                                  border: '1px solid #777',
+                                  background: 'transparent',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: '#aaa',
+                                  fontSize: '11px',
+                                  fontWeight: 'bold',
+                                  padding: 0
+                                }}
+                              >
+                                ✕
+                              </button>
+                              {HIGHLIGHT_PALETTE.map(c => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => {
+                                    updateEntry(entry.id, 'highlightColor', c.id);
+                                    setActiveColorPickerId(null);
+                                  }}
+                                  title={c.name}
+                                  style={{
+                                    width: '20px',
+                                    height: '20px',
+                                    borderRadius: '50%',
+                                    backgroundColor: c.dot,
+                                    border: entry.highlightColor === c.id ? '2px solid #fff' : '1px solid rgba(0,0,0,0.4)',
+                                    boxShadow: entry.highlightColor === c.id ? '0 0 6px #fff' : 'none',
+                                    cursor: 'pointer',
+                                    padding: 0
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          )}
+
+                          <button className="btn-icon delete-btn" onClick={() => handleDeleteRow(entry.id)} title="Delete row">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1107,37 +1278,186 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
             </table>
           </div>
 
-          <div style={{ padding: '1rem 2rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ padding: '1rem 2rem', display: 'flex', flexWrap: 'wrap', gap: '1.5rem', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             
-            {/* Left Side: Add Row */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <button className="add-row-dark-btn" onClick={handleAddRow} data-html2canvas-ignore style={{ margin: 0, alignSelf: 'flex-start' }}>
-                <Plus size={16} /> {t('addNewRow')}
-              </button>
+            {/* Left Side: Add Row + Deductions / Expenses */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', flex: 1, minWidth: '280px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', alignItems: 'center' }} data-html2canvas-ignore>
+                <button className="add-row-dark-btn" onClick={handleAddRow} style={{ margin: 0 }}>
+                  <Plus size={16} /> {t('addNewRow')}
+                </button>
+                
+                <button 
+                  type="button"
+                  onClick={() => handleAddDeduction()} 
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    color: '#fca5a5',
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                    transition: 'all 0.2s'
+                  }}
+                  title={language === 'bn' ? 'কোনো খরচ বা বরফ কেনা ইত্যাদি মাইনাস করুন' : 'Add deduction or expense'}
+                >
+                  <MinusCircle size={15} style={{ color: '#ef4444' }} />
+                  <span>{language === 'bn' ? '+ মাইনাস / খরচ যোগ করুন' : '+ Add Deduction / Minus'}</span>
+                </button>
+              </div>
+
+              {/* Quick suggestion chips */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }} data-html2canvas-ignore>
+                <span style={{ fontSize: '0.72rem', color: '#888' }}>{language === 'bn' ? 'দ্রুত যোগ করুন:' : 'Quick add:'}</span>
+                {[
+                  { title: 'বরফ কেনা', icon: '🧊' },
+                  { title: 'গাড়ী ভাড়া', icon: '🚚' },
+                  { title: 'কমিশন', icon: '💼' },
+                  { title: 'লেবার খরচ', icon: '👷' }
+                ].map(item => (
+                  <button
+                    key={item.title}
+                    type="button"
+                    onClick={() => handleAddDeduction(item.title)}
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      borderRadius: '12px',
+                      padding: '2px 8px',
+                      fontSize: '0.72rem',
+                      color: '#ccc',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {item.icon} {item.title}
+                  </button>
+                ))}
+              </div>
+
+              {/* Deductions Edit Box */}
+              {deductionsList.length > 0 && (
+                <div style={{
+                  background: 'rgba(239, 68, 68, 0.06)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: '8px',
+                  padding: '0.75rem 1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.5rem',
+                  marginTop: '0.2rem'
+                }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#fca5a5', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <MinusCircle size={14} style={{ color: '#ef4444' }} />
+                    <span>{language === 'bn' ? 'মাইনাস / কর্তনের বিবরণ (যেমন: বরফ কেনা)' : 'Deductions & Expenses'}</span>
+                  </div>
+                  
+                  {deductionsList.map(d => (
+                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>[-]</span>
+                      <input
+                        type="text"
+                        placeholder={language === 'bn' ? 'বিবরণ (যেমন: বরফ কেনা)' : 'Description (e.g., Ice purchase)'}
+                        value={d.title}
+                        onChange={e => updateDeduction(d.id, 'title', e.target.value)}
+                        style={{
+                          flex: 1,
+                          background: 'rgba(0,0,0,0.3)',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          borderRadius: '4px',
+                          padding: '4px 8px',
+                          color: '#fff',
+                          fontSize: '0.82rem'
+                        }}
+                      />
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        value={d.amount}
+                        onChange={e => updateDeduction(d.id, 'amount', e.target.value === '' ? '' : Number(e.target.value))}
+                        style={{
+                          width: '90px',
+                          textAlign: 'right',
+                          background: 'rgba(0,0,0,0.3)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          borderRadius: '4px',
+                          padding: '4px 8px',
+                          color: '#fca5a5',
+                          fontWeight: 'bold',
+                          fontSize: '0.85rem'
+                        }}
+                      />
+                      <span style={{ fontSize: '0.78rem', color: '#888' }}>৳</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDeduction(d.id)}
+                        data-html2canvas-ignore
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          padding: '2px'
+                        }}
+                        title={language === 'bn' ? 'মুছে ফেলুন' : 'Delete'}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Action buttons removed from here to be placed at the bottom */}
-
-            {/* Right Side: Totals */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', minWidth: '220px', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px' }}>
+            {/* Right Side: Totals Box */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', minWidth: '240px', background: 'rgba(0,0,0,0.25)', padding: '1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="memo-label-dark">Total Price:</span>
-                <span style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{grandTotal.toFixed(2)}</span>
+                <span className="memo-label-dark">{language === 'bn' ? 'মাছের মোট মূল্য:' : 'Fish Total:'}</span>
+                <span style={{ fontWeight: 'bold', color: '#fff' }}>৳ {fishTotal.toFixed(2)}</span>
               </div>
+
+              {/* Render each deduction item */}
+              {deductionsList.map(d => {
+                const amt = Number(d.amount) || 0;
+                if (!d.title && amt === 0) return null;
+                return (
+                  <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fca5a5', fontSize: '0.85rem' }}>
+                    <span>[-] {d.title || (language === 'bn' ? 'মাইনাস খরচ' : 'Deduction')}:</span>
+                    <span style={{ fontWeight: 600 }}>- ৳ {amt.toFixed(2)}</span>
+                  </div>
+                );
+              })}
+
+              {deductionsList.length > 0 && totalDeductions > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(239,68,68,0.3)', paddingTop: '4px', color: '#f87171', fontSize: '0.82rem' }}>
+                  <span>{language === 'bn' ? 'মোট মাইনাস:' : 'Total Deductions:'}</span>
+                  <span style={{ fontWeight: 'bold' }}>- ৳ {totalDeductions.toFixed(2)}</span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '0.5rem' }}>
+                <span className="memo-label-dark" style={{ fontWeight: 'bold', color: '#fff' }}>{language === 'bn' ? 'চূড়ান্ত বিল (মোট):' : 'Net Total:'}</span>
+                <span style={{ fontWeight: 'bold', color: 'var(--primary-color)', fontSize: '1.1rem' }}>৳ {grandTotal.toFixed(2)}</span>
+              </div>
+
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="memo-label-dark">{t('jamaPaid')}</span>
                 <MathInput 
-                   
                   className="supplier-input" 
-                  style={{ width: '100%', textAlign: 'center', padding: '0.3rem' }}
+                  style={{ width: '110px', textAlign: 'right', padding: '0.3rem 0.5rem' }}
                   value={memoState.paidAmount}
                   onChange={e => updateMemoState('paidAmount', parseMathOrNumber(e.target.value))}
                   placeholder="0.00"
                 />
               </div>
+
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.5rem' }}>
                 <span className="memo-label-dark">Due (Baki):</span>
-                <span style={{ fontWeight: 'bold', color: '#ff9800' }}>{dueAmount.toFixed(2)}</span>
+                <span style={{ fontWeight: 'bold', color: '#ff9800', fontSize: '1.05rem' }}>৳ {dueAmount.toFixed(2)}</span>
               </div>
             </div>
 

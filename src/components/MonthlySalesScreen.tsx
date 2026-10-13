@@ -162,6 +162,15 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         totalBill = Number(memo.totalBill) || 0;
       }
 
+      const rawDeductions = (memo.deductions && Array.isArray(memo.deductions))
+        ? memo.deductions
+        : ((rawData.deductions && Array.isArray(rawData.deductions)) ? rawData.deductions : []);
+      const totalDeductions = rawDeductions.reduce((sum: number, d: any) => sum + (Number(d.amount) || 0), 0);
+      if (totalDeductions > 0) {
+        totalBill = Math.max(0, totalBill - totalDeductions);
+        memoProfit = Math.max(0, memoProfit - totalDeductions);
+      }
+
       const rawPaid = (memo.paidAmount !== undefined && memo.paidAmount !== '')
         ? memo.paidAmount
         : ((rawData.paidAmount !== undefined && rawData.paidAmount !== '')

@@ -257,8 +257,12 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
             weightUnit: e.weightUnit,
             buyRate: e.buyRate,
             profitPercent: e.profitPercent,
-            manualSaleRate: e.manualSaleRate
+            manualSaleRate: e.manualSaleRate,
+            highlightColor: e.highlightColor
           }));
+        }
+        if ((memoState as any).deductions) {
+          parsedSales.deductions = (memoState as any).deductions;
         }
         localStorage.setItem(`sales_memo_${dueId}`, JSON.stringify(parsedSales));
       } catch(err) {}
