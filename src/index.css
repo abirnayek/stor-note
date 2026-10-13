@@ -86,47 +86,15 @@ body {
   flex-direction: column;
   position: relative;
   background-color: #022b1d;
+  background-image: 
+    radial-gradient(circle at 15% 15%, rgba(114, 190, 68, 0.22) 0%, transparent 50%),
+    radial-gradient(circle at 85% 85%, rgba(0, 255, 150, 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(2, 43, 29, 0.7) 0%, transparent 75%);
   z-index: 1;
   overflow: hidden;
   box-sizing: border-box;
-}
-
-/* Premium Animated Mesh / Aurora Effect */
-.app-container::before,
-.app-container::after,
-.main-layout::before {
-  content: "";
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(100px);
-  z-index: -1;
-  pointer-events: none;
-  animation: floatOrb 20s infinite ease-in-out alternate;
-}
-
-.app-container::before {
-  top: -20%;
-  left: -10%;
-  width: 60vw;
-  height: 60vh;
-  background-color: rgba(114, 190, 68, 0.25);
-  animation-delay: 0s;
-}
-
-.app-container::after {
-  bottom: -20%;
-  right: -10%;
-  width: 70vw;
-  height: 70vh;
-  background-color: rgba(0, 255, 150, 0.15);
-  animation-delay: -5s;
-}
-
-@keyframes floatOrb {
-  0% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(10vw, -10vh) scale(1.2); }
-  66% { transform: translate(-10vw, 15vh) scale(0.8); }
-  100% { transform: translate(5vw, 5vh) scale(1.1); }
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
 /* Header */
@@ -366,12 +334,11 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.65);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 100;
-  backdrop-filter: blur(4px);
 }
 
 .modal-content {
@@ -464,8 +431,7 @@ body {
 }
 
 .dashboard-card {
-  background-color: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
+  background-color: rgba(18, 48, 32, 0.75);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 2.2rem 1rem;
@@ -476,10 +442,14 @@ body {
   gap: 1.2rem;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
   flex: 1 1 180px;
   max-width: 210px;
   min-width: 160px;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 .dashboard-card:hover:not(.empty-card) {
@@ -608,13 +578,13 @@ body {
   position: sticky;
   top: 0;
   z-index: 1000;
-  background-color: var(--bg-color);
+  background-color: #002b1c;
   padding: 1rem 2rem;
   margin-bottom: 0;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.35);
   border-bottom: 1px solid var(--border-color);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
 .btn-icon {
@@ -646,21 +616,24 @@ body {
 }
 
 .lot-card {
-  background-color: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
+  background-color: rgba(18, 48, 32, 0.75);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 1.5rem;
   text-align: left;
   cursor: pointer;
   transition: all 0.3s;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
   position: relative;
   min-height: 145px;
   height: 100%;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 .lot-card:hover {
@@ -824,8 +797,7 @@ body {
 }
 
 .memo-paper-dark {
-  background-color: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(20px);
+  background-color: #072619;
   color: var(--text-color);
   min-width: 850px;
   width: 100%;

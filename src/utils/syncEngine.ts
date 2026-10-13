@@ -276,6 +276,7 @@ export const restoreFromCloud = async () => {
       const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
       const localTimestamps = tsStr ? JSON.parse(tsStr) : {};
       let timestampsModified = false;
+      let hasDataChanged = false;
 
       const cloudKeys = new Set(data.map(r => r.key));
       const pendingKeys = new Set(getPendingKeys());
@@ -294,6 +295,7 @@ export const restoreFromCloud = async () => {
              originalSetItem.call(localStorage, row.key, row.value);
              localTimestamps[row.key] = cloudTs;
              timestampsModified = true;
+             hasDataChanged = true;
           }
         } else if (localTs > cloudTs && navigator.onLine) {
           const localValue = originalGetItem.call(localStorage, row.key);
@@ -321,6 +323,7 @@ export const restoreFromCloud = async () => {
           } else if (localValue === null) {
             delete localTimestamps[key];
             timestampsModified = true;
+            hasDataChanged = true;
           }
         }
       });
@@ -328,7 +331,9 @@ export const restoreFromCloud = async () => {
       if (timestampsModified) {
         originalSetItem.call(localStorage, 'local_timestamps', JSON.stringify(localTimestamps));
       }
-      window.dispatchEvent(new Event('storage'));
+      if (hasDataChanged) {
+        window.dispatchEvent(new Event('storage'));
+      }
       return true;
     }
     return false;

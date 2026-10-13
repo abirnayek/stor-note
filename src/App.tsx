@@ -209,19 +209,24 @@ function App() {
               }
               
               // Setup realtime listener for this specific device to auto-logout if kicked
-              supabase.channel(`device_${deviceId}`)
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions', filter: `device_id=eq.${deviceId}` }, async (payload) => {
-                  if (payload.eventType === 'DELETE' || (payload.eventType === 'UPDATE' && payload.new.status === 'revoked')) {
-                    localStorage.removeItem('cached_is_authenticated');
-                    localStorage.removeItem('cached_user_session');
-                    await supabase.auth.signOut();
-                    localStorage.clear();
-                    window.location.reload();
-                  } else if (payload.eventType === 'UPDATE' && payload.new.permission) {
-                    localStorage.setItem('device_permission', payload.new.permission);
-                    window.dispatchEvent(new Event('settingsChange'));
-                  }
-                }).subscribe();
+              const channelName = `device_${deviceId}`;
+              const existingChannels = supabase.getChannels();
+              const alreadySubscribed = existingChannels.some((ch: any) => ch.topic === `realtime:${channelName}` || ch.topic === channelName);
+              if (!alreadySubscribed) {
+                supabase.channel(channelName)
+                  .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions', filter: `device_id=eq.${deviceId}` }, async (payload) => {
+                    if (payload.eventType === 'DELETE' || (payload.eventType === 'UPDATE' && payload.new.status === 'revoked')) {
+                      localStorage.removeItem('cached_is_authenticated');
+                      localStorage.removeItem('cached_user_session');
+                      await supabase.auth.signOut();
+                      localStorage.clear();
+                      window.location.reload();
+                    } else if (payload.eventType === 'UPDATE' && payload.new.permission) {
+                      localStorage.setItem('device_permission', payload.new.permission);
+                      window.dispatchEvent(new Event('settingsChange'));
+                    }
+                  }).subscribe();
+              }
             }
             // --- End Device Check ---
           } catch (e) {
@@ -1261,9 +1266,7 @@ function App() {
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          pointerEvents: 'none',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)'
+          pointerEvents: 'none'
         }}>
           {isOnline ? <Wifi size={16} /> : <WifiOff size={16} />}
           <span>{syncToast}</span>
