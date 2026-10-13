@@ -636,6 +636,18 @@ body {
   min-height: 125px;
 }
 
+.monthly-summary-card.clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  user-select: none;
+}
+
+.monthly-summary-card.clickable:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+}
+
+
 .monthly-summary-title {
   font-size: 0.72rem;
   text-transform: uppercase;

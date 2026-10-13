@@ -42,7 +42,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
   const { language } = useLanguage();
   const [memos, setMemos] = useState<MonthlyMemo[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filter, setFilter] = useState<'all' | 'paid' | 'due'>('all');
+  const [filter, setFilter] = useState<'all' | 'paid' | 'due' | 'loss'>('all');
 
   const monthObj = MONTHS.find(m => m.index === monthIndex) || MONTHS[0];
   const monthName = language === 'bn' ? monthObj.nameBn : monthObj.nameEn;
@@ -388,6 +388,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
   const filteredMemos = memos.filter(m => {
     if (filter === 'paid' && m.status !== 'paid') return false;
     if (filter === 'due' && m.status !== 'due') return false;
+    if (filter === 'loss' && !(m.totalLoss > 0)) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = m.name.toLowerCase().includes(q);
@@ -441,10 +442,17 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
       <div className="screen-sub-container">
         <div className="monthly-summary-grid">
           {/* Card 1: Total Memos */}
-          <div className="monthly-summary-card" style={{
-            background: 'linear-gradient(135deg, rgba(33, 150, 243, 0.15), rgba(21, 101, 192, 0.1))',
-            border: '1px solid rgba(33, 150, 243, 0.3)'
-          }}>
+          <div
+            className={`monthly-summary-card clickable ${filter === 'all' ? 'active-filter' : ''}`}
+            onClick={() => setFilter('all')}
+            title={language === 'bn' ? 'সকল মেমো দেখতে ক্লিক করুন' : 'Click to show all memos'}
+            style={{
+              background: 'linear-gradient(135deg, rgba(33, 150, 243, 0.15), rgba(21, 101, 192, 0.1))',
+              border: filter === 'all' ? '2px solid rgba(33, 150, 243, 0.85)' : '1px solid rgba(33, 150, 243, 0.3)',
+              boxShadow: filter === 'all' ? '0 0 12px rgba(33, 150, 243, 0.25)' : 'none',
+              cursor: 'pointer'
+            }}
+          >
             <div className="monthly-summary-title" style={{ color: '#90caf9' }}>
               {language === 'bn' ? 'মোট মেমো তৈরি' : 'Total Memos Created'}
             </div>
@@ -452,7 +460,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
               {language === 'bn' ? enToBnDigits(stats.totalMemos) : stats.totalMemos} {language === 'bn' ? 'টি' : 'memos'}
             </div>
             <div className="monthly-summary-sub">
-              {language === 'bn' ? 'মোট বিক্রয় মেমো' : 'Total sales memos'}
+              {language === 'bn' ? 'মোট বিক্রয় মেমো (ক্লিক করুন)' : 'Total sales memos (Click)'}
             </div>
           </div>
 
@@ -473,10 +481,17 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
           </div>
 
           {/* Card 3: Paid / Cash Received */}
-          <div className="monthly-summary-card" style={{
-            background: 'linear-gradient(135deg, rgba(0, 150, 136, 0.15), rgba(0, 105, 92, 0.1))',
-            border: '1px solid rgba(0, 150, 136, 0.3)'
-          }}>
+          <div
+            className="monthly-summary-card clickable"
+            onClick={() => setFilter(prev => prev === 'paid' ? 'all' : 'paid')}
+            title={language === 'bn' ? 'পরিশোধিত মেমোগুলো দেখতে ক্লিক করুন' : 'Click to filter paid memos'}
+            style={{
+              background: 'linear-gradient(135deg, rgba(0, 150, 136, 0.15), rgba(0, 105, 92, 0.1))',
+              border: filter === 'paid' ? '2px solid #26a69a' : '1px solid rgba(0, 150, 136, 0.3)',
+              boxShadow: filter === 'paid' ? '0 0 14px rgba(38, 166, 154, 0.45)' : 'none',
+              cursor: 'pointer'
+            }}
+          >
             <div className="monthly-summary-title" style={{ color: '#80cbc4' }}>
               {language === 'bn' ? 'হাতে নগদ পেয়েছি (পরিশোধিত)' : 'Paid / Cash Collected'}
             </div>
@@ -484,15 +499,22 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
               ৳ {stats.paidAmountTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="monthly-summary-sub">
-              {language === 'bn' ? enToBnDigits(stats.paidMemosCount) : stats.paidMemosCount} {language === 'bn' ? 'টি সম্পূর্ণ পরিশোধিত' : 'fully paid memos'}
+              {language === 'bn' ? enToBnDigits(stats.paidMemosCount) : stats.paidMemosCount} {language === 'bn' ? 'টি সম্পূর্ণ পরিশোধিত (ক্লিক করুন)' : 'fully paid memos (Click)'}
             </div>
           </div>
 
           {/* Card 4: Due / Remaining */}
-          <div className="monthly-summary-card" style={{
-            background: 'linear-gradient(135deg, rgba(255, 152, 0, 0.15), rgba(239, 108, 0, 0.1))',
-            border: '1px solid rgba(255, 152, 0, 0.3)'
-          }}>
+          <div
+            className="monthly-summary-card clickable"
+            onClick={() => setFilter(prev => prev === 'due' ? 'all' : 'due')}
+            title={language === 'bn' ? 'বকেয়া মেমোগুলো দেখতে ক্লিক করুন' : 'Click to filter due memos'}
+            style={{
+              background: 'linear-gradient(135deg, rgba(255, 152, 0, 0.15), rgba(239, 108, 0, 0.1))',
+              border: filter === 'due' ? '2px solid #ffa726' : '1px solid rgba(255, 152, 0, 0.3)',
+              boxShadow: filter === 'due' ? '0 0 14px rgba(255, 167, 38, 0.45)' : 'none',
+              cursor: 'pointer'
+            }}
+          >
             <div className="monthly-summary-title" style={{ color: '#ffcc80' }}>
               {language === 'bn' ? 'এখনও বাকি আছে (বকেয়া)' : 'Due / Remaining Amount'}
             </div>
@@ -500,7 +522,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
               ৳ {stats.dueAmountTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="monthly-summary-sub">
-              {language === 'bn' ? enToBnDigits(stats.dueMemosCount) : stats.dueMemosCount} {language === 'bn' ? 'টি বকেয়া রয়েছে' : 'due memos'}
+              {language === 'bn' ? enToBnDigits(stats.dueMemosCount) : stats.dueMemosCount} {language === 'bn' ? 'টি বকেয়া রয়েছে (ক্লিক করুন)' : 'due memos (Click)'}
             </div>
           </div>
 
@@ -551,14 +573,38 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
             </div>
           </div>
 
-          {/* Card 6: Monthly Loss Portion (বর্তমান মাসে লসের অংশ) */}
-          <div className="monthly-summary-card" style={{
-            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.16), rgba(185, 28, 28, 0.1))',
-            border: '1px solid rgba(239, 68, 68, 0.35)'
-          }}>
-            <div className="monthly-summary-title" style={{ color: '#fca5a5', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <TrendingDown size={13} style={{ color: '#ef4444' }} />
-              {language === 'bn' ? 'বর্তমান মাসে লসের অংশ' : 'Monthly Loss Portion'}
+          {/* Card 6: Monthly Loss Portion (বর্তমান মাসে লসের অংশ) - Clickable Filter */}
+          <div
+            className="monthly-summary-card clickable"
+            onClick={() => setFilter(prev => prev === 'loss' ? 'all' : 'loss')}
+            title={language === 'bn' ? 'লসের মেমোগুলো দেখতে ক্লিক করুন' : 'Click to filter loss memos'}
+            style={{
+              background: filter === 'loss'
+                ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(185, 28, 28, 0.22))'
+                : 'linear-gradient(135deg, rgba(239, 68, 68, 0.16), rgba(185, 28, 28, 0.1))',
+              border: filter === 'loss' ? '2px solid #ef4444' : '1px solid rgba(239, 68, 68, 0.35)',
+              boxShadow: filter === 'loss' ? '0 0 16px rgba(239, 68, 68, 0.5)' : 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <div className="monthly-summary-title" style={{ color: '#fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <TrendingDown size={13} style={{ color: '#ef4444' }} />
+                {language === 'bn' ? 'বর্তমান মাসে লসের অংশ' : 'Monthly Loss Portion'}
+              </span>
+              {filter === 'loss' && (
+                <span style={{
+                  fontSize: '0.62rem',
+                  background: '#ef4444',
+                  color: '#fff',
+                  padding: '1px 6px',
+                  borderRadius: '10px',
+                  fontWeight: 'bold',
+                  letterSpacing: '0.2px'
+                }}>
+                  {language === 'bn' ? 'সক্রিয় ✓' : 'Active ✓'}
+                </span>
+              )}
             </div>
             <div>
               <div style={{ fontSize: '0.68rem', color: '#fca5a5', textTransform: 'uppercase', letterSpacing: '0.3px', fontWeight: 'bold' }}>
@@ -570,7 +616,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
             </div>
             <div className="monthly-summary-sub" style={{ color: stats.totalLoss > 0 ? '#fca5a5' : '#888' }}>
               {stats.totalLoss > 0
-                ? (language === 'bn' ? `${enToBnDigits(stats.lossMemosCount)} টি মেমোতে লস` : `${stats.lossMemosCount} memos with loss`)
+                ? (language === 'bn' ? `${enToBnDigits(stats.lossMemosCount)} টি মেমোতে লস (ক্লিক করুন)` : `${stats.lossMemosCount} memos with loss (Click)`)
                 : (language === 'bn' ? 'এই মাসে কোনো লস নেই' : 'No loss this month')}
             </div>
           </div>
@@ -580,7 +626,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
       {/* Filter Tabs */}
       <div className="screen-sub-container">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem', flexWrap: 'wrap', gap: '0.8rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <button
               onClick={() => setFilter('all')}
               style={{
@@ -626,6 +672,25 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
             >
               {language === 'bn' ? 'বকেয়া' : 'Due'} ({stats.dueMemosCount})
             </button>
+            <button
+              onClick={() => setFilter(prev => prev === 'loss' ? 'all' : 'loss')}
+              style={{
+                background: filter === 'loss' ? '#ef4444' : 'rgba(239,68,68,0.12)',
+                color: filter === 'loss' ? '#fff' : '#fca5a5',
+                border: filter === 'loss' ? '1px solid #ef4444' : '1px solid rgba(239,68,68,0.3)',
+                borderRadius: '20px',
+                padding: '6px 14px',
+                fontSize: '0.85rem',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <TrendingDown size={14} />
+              {language === 'bn' ? 'লসের মেমো' : 'Loss Memos'} ({language === 'bn' ? enToBnDigits(stats.lossMemosCount) : stats.lossMemosCount})
+            </button>
           </div>
 
           <div style={{ fontSize: '0.85rem', color: '#aaa', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -633,6 +698,49 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
             {language === 'bn' ? 'প্রদর্শিত:' : 'Showing:'} {filteredMemos.length}
           </div>
         </div>
+
+        {/* Loss Filter Alert Banner */}
+        {filter === 'loss' && (
+          <div style={{
+            background: 'linear-gradient(90deg, rgba(239,68,68,0.18), rgba(239,68,68,0.08))',
+            border: '1px solid rgba(239,68,68,0.4)',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            marginBottom: '1.2rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.5rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fca5a5', fontSize: '0.85rem' }}>
+              <TrendingDown size={18} style={{ color: '#ef4444', flexShrink: 0 }} />
+              <span>
+                {language === 'bn'
+                  ? `শুধুমাত্র লস হওয়া মেমোগুলো ফিল্টার করা হয়েছে (মোট ${enToBnDigits(stats.lossMemosCount)} টি মেমো, সর্বমোট লস: ৳ ${stats.totalLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+                  : `Filtered by loss memos only (${stats.lossMemosCount} memos, Total Loss: ৳ ${stats.totalLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`}
+              </span>
+            </div>
+            <button
+              onClick={() => setFilter('all')}
+              style={{
+                background: 'rgba(239, 68, 68, 0.25)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                borderRadius: '6px',
+                color: '#fff',
+                padding: '4px 10px',
+                fontSize: '0.78rem',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              {language === 'bn' ? 'সব মেমো দেখুন ✕' : 'Clear Filter ✕'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Memos Grid */}
@@ -645,17 +753,49 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
             borderRadius: '12px',
             border: '1px dashed rgba(255,255,255,0.1)'
           }}>
-            <Calendar size={48} style={{ opacity: 0.3, marginBottom: '0.8rem', color: '#72be44' }} />
-            <h3 style={{ margin: '0 0 0.5rem', opacity: 0.8 }}>
-              {language === 'bn'
-                ? `${monthName} ${displayYear} মাসে কোনো মেমো পাওয়া যায়নি`
-                : `No memos found for ${monthName} ${year}`}
-            </h3>
-            <p style={{ color: '#888', fontSize: '0.9rem', margin: 0 }}>
-              {language === 'bn'
-                ? 'বিক্রয় মেমো তৈরি করার সময় তারিখ অনুযায়ী স্বয়ংক্রিয়ভাবে এই ফোল্ডারে যুক্ত হবে।'
-                : 'Sales memos created in this month will automatically appear here.'}
-            </p>
+            {filter === 'loss' ? (
+              <>
+                <TrendingDown size={48} style={{ opacity: 0.4, marginBottom: '0.8rem', color: '#ef4444' }} />
+                <h3 style={{ margin: '0 0 0.5rem', opacity: 0.9, color: '#fca5a5' }}>
+                  {language === 'bn'
+                    ? `${monthName} ${displayYear} মাসে কোনো লসের মেমো পাওয়া যায়নি`
+                    : `No memos with loss found for ${monthName} ${year}`}
+                </h3>
+                <p style={{ color: '#888', fontSize: '0.9rem', margin: '0 0 1.2rem' }}>
+                  {language === 'bn'
+                    ? 'এই মাসে সকল মেমো লাভজনক অথবা কোনো লস হিসাব করা হয়নি।'
+                    : 'All memos in this month are profitable or have no recorded losses.'}
+                </p>
+                <button
+                  onClick={() => setFilter('all')}
+                  style={{
+                    background: '#72be44',
+                    color: '#000',
+                    border: 'none',
+                    borderRadius: '20px',
+                    padding: '8px 18px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {language === 'bn' ? 'সকল মেমো দেখুন' : 'Show All Memos'}
+                </button>
+              </>
+            ) : (
+              <>
+                <Calendar size={48} style={{ opacity: 0.3, marginBottom: '0.8rem', color: '#72be44' }} />
+                <h3 style={{ margin: '0 0 0.5rem', opacity: 0.8 }}>
+                  {language === 'bn'
+                    ? `${monthName} ${displayYear} মাসে কোনো মেমো পাওয়া যায়নি`
+                    : `No memos found for ${monthName} ${year}`}
+                </h3>
+                <p style={{ color: '#888', fontSize: '0.9rem', margin: 0 }}>
+                  {language === 'bn'
+                    ? 'বিক্রয় মেমো তৈরি করার সময় তারিখ অনুযায়ী স্বয়ংক্রিয়ভাবে এই ফোল্ডারে যুক্ত হবে।'
+                    : 'Sales memos created in this month will automatically appear here.'}
+                </p>
+              </>
+            )}
           </div>
         </div>
       ) : (
@@ -666,7 +806,15 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
               passwordKey={`memo_password_${memo.id}`}
               onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}
             >
-              <div className="lot-card" style={{ cursor: 'pointer' }}>
+              <div
+                className="lot-card"
+                style={{
+                  cursor: 'pointer',
+                  border: filter === 'loss' ? '1px solid rgba(239, 68, 68, 0.45)' : undefined,
+                  background: filter === 'loss' ? 'rgba(239, 68, 68, 0.04)' : undefined,
+                  boxShadow: filter === 'loss' ? '0 4px 12px rgba(239, 68, 68, 0.1)' : undefined
+                }}
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -716,7 +864,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
 
                     {/* Paid & Due & Profit breakdown */}
                     {memo.totalBill > 0 && (
-                      <div style={{ fontSize: '0.75rem', color: '#bbb', display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginTop: '2px' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#bbb', display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginTop: '2px', alignItems: 'center' }}>
                         <span>নগদ: ৳{memo.paidAmount.toFixed(0)}</span>
                         {memo.dueAmount > 0 && (
                           <span style={{ color: '#ffb74d' }}>বাকি: ৳{memo.dueAmount.toFixed(0)}</span>
@@ -725,7 +873,15 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
                           <span style={{ color: '#10b981', fontWeight: 'bold' }}>লাভ: ৳{memo.totalProfit.toFixed(0)}</span>
                         )}
                         {memo.totalLoss > 0 && (
-                          <span style={{ color: '#ef5350', fontWeight: 'bold' }}>লস: ৳{memo.totalLoss.toFixed(0)}</span>
+                          <span style={{
+                            color: filter === 'loss' ? '#fff' : '#ef5350',
+                            background: filter === 'loss' ? '#ef4444' : 'rgba(239, 68, 68, 0.15)',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            fontWeight: 'bold'
+                          }}>
+                            লস: ৳{memo.totalLoss.toFixed(2)}
+                          </span>
                         )}
                       </div>
                     )}
