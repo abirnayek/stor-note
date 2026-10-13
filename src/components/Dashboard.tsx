@@ -28,13 +28,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           <h3>{t('investorAccount')}</h3>
         </div>
         
-        <div className="dashboard-card action-card" onClick={() => onNavigate('lots')}>
+        <div className="dashboard-card" onClick={() => onNavigate('lots')}>
           <ShoppingBag size={48} className="card-icon" />
           <h3>{t('purchaseAccount')}</h3>
         </div>
 
         <div className="dashboard-card" onClick={() => onNavigate('stock')}>
-          <Package size={48} className="card-icon" style={{ color: '#72be44' }} />
+          <Package size={48} className="card-icon" />
           <h3>{t('stockAccount')}</h3>
         </div>
       </div>
