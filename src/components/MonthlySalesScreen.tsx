@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Calendar, FileText, Trash2, Search, Filter } from 'lucide-react';
+import { ChevronLeft, Calendar, FileText, Trash2, Search, Filter, TrendingUp, TrendingDown } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { MONTHS, parseMemoMonthYear, enToBnDigits } from '../utils/dateUtils';
@@ -26,6 +26,10 @@ interface MonthlyMemo {
   totalBill: number;
   paidAmount: number;
   dueAmount: number;
+  totalProfit: number;
+  cashProfit: number;
+  dueProfit: number;
+  totalLoss: number;
   timestamp: number;
 }
 
@@ -85,21 +89,71 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
 
       let name = memo.customerName || memo.name || memo.supplierName || `Memo ${id}`;
       let totalBill = 0;
+      let memoProfit = 0;
+      let memoLoss = 0;
+
+      let lotPurchaseMemo: any = null;
+      if (effectiveLot) {
+        const rawLotStr = localStorage.getItem(`memo_lot_${effectiveLot}`) || localStorage.getItem(`memo_lot_${String(effectiveLot).padStart(2, '0')}`);
+        if (rawLotStr) {
+          try { lotPurchaseMemo = JSON.parse(rawLotStr); } catch(e) {}
+        }
+      }
 
       if (memo.entries && Array.isArray(memo.entries)) {
         memo.entries.forEach((entry: any) => {
+          let buyRate = Number(entry.buyRate) || 0;
+          if (buyRate === 0 && lotPurchaseMemo && Array.isArray(lotPurchaseMemo.entries)) {
+            let found = null;
+            if (entry.serialNo) {
+              const sNum = parseInt(String(entry.serialNo), 10);
+              if (!isNaN(sNum) && lotPurchaseMemo.entries[sNum - 1]) {
+                found = lotPurchaseMemo.entries[sNum - 1];
+              }
+            }
+            if (!found && entry.name) {
+              found = lotPurchaseMemo.entries.find((e: any) => e.name && e.name.trim().toLowerCase() === entry.name.trim().toLowerCase());
+            }
+            if (found && found.totalKg && found.totalPrice) {
+              const autoRate = Number(found.totalPrice) / Number(found.totalKg);
+              let costPercent = 0;
+              if (lotPurchaseMemo.totalPriceMain && lotPurchaseMemo.totalCostMain) {
+                costPercent = (Number(lotPurchaseMemo.totalCostMain) / Number(lotPurchaseMemo.totalPriceMain)) * 100;
+              }
+              buyRate = autoRate + (autoRate * costPercent / 100);
+            }
+          }
+
           let baseRate = 0;
           if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
             baseRate = Number(entry.manualSaleRate);
           } else {
-            baseRate = Number(entry.buyRate) || 0;
+            baseRate = buyRate;
           }
           let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
           let finalRate = baseRate + (baseRate * currentProfitPercent / 100);
           let totalKgNum = Number(entry.totalKg) || 0;
           let weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
+
           if (weightInKg > 0 && finalRate > 0) {
-            totalBill += weightInKg * finalRate;
+            const entrySaleAmount = weightInKg * finalRate;
+            totalBill += entrySaleAmount;
+
+            if (buyRate > 0) {
+              const entryCostAmount = weightInKg * buyRate;
+              const diff = entrySaleAmount - entryCostAmount;
+              if (diff >= 0) {
+                memoProfit += diff;
+              } else {
+                memoLoss += Math.abs(diff);
+              }
+            } else if (currentProfitPercent > 0) {
+              const diff = weightInKg * (baseRate * currentProfitPercent / 100);
+              memoProfit += diff;
+            } else if (currentProfitPercent < 0) {
+              const diff = weightInKg * (baseRate * Math.abs(currentProfitPercent) / 100);
+              memoLoss += diff;
+            }
           }
         });
       }
@@ -110,6 +164,19 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
 
       const paidAmount = Number(memo.paidAmount !== undefined ? memo.paidAmount : (memo.deposit || 0));
       const dueAmount = Math.max(0, Math.round((totalBill - paidAmount) * 100) / 100);
+
+      let cashProfit = 0;
+      let dueProfit = 0;
+      if (memoProfit > 0) {
+        if (totalBill > 0) {
+          const ratio = Math.min(1, Math.max(0, paidAmount / totalBill));
+          cashProfit = Math.round(memoProfit * ratio * 100) / 100;
+          dueProfit = Math.round((memoProfit - cashProfit) * 100) / 100;
+        } else {
+          cashProfit = memoProfit;
+          dueProfit = 0;
+        }
+      }
 
       let status: 'paid' | 'due' | 'draft' = memo.status || 'draft';
       if (memo.status === 'paid' || memo.paidDate || (totalBill > 0 && dueAmount <= 0)) {
@@ -150,6 +217,10 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         totalBill,
         paidAmount,
         dueAmount,
+        totalProfit: Math.round(memoProfit * 100) / 100,
+        cashProfit,
+        dueProfit,
+        totalLoss: Math.round(memoLoss * 100) / 100,
         timestamp: ts
       });
     };
@@ -220,11 +291,23 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
     let paidAmountTotal = 0;
     let dueMemosCount = 0;
     let dueAmountTotal = 0;
+    let totalProfit = 0;
+    let cashProfit = 0;
+    let dueProfit = 0;
+    let totalLoss = 0;
+    let lossMemosCount = 0;
 
     memos.forEach(m => {
       totalAmount += m.totalBill;
       paidAmountTotal += m.paidAmount;
       dueAmountTotal += m.dueAmount;
+      totalProfit += m.totalProfit;
+      cashProfit += m.cashProfit;
+      dueProfit += m.dueProfit;
+      totalLoss += m.totalLoss;
+      if (m.totalLoss > 0) {
+        lossMemosCount++;
+      }
       if (m.status === 'paid') {
         paidMemosCount++;
       } else if (m.status === 'due') {
@@ -238,7 +321,12 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
       paidMemosCount,
       paidAmountTotal,
       dueMemosCount,
-      dueAmountTotal
+      dueAmountTotal,
+      totalProfit,
+      cashProfit,
+      dueProfit,
+      totalLoss,
+      lossMemosCount
     };
   }, [memos]);
 
@@ -412,6 +500,69 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
               {language === 'bn' ? enToBnDigits(stats.dueMemosCount) : stats.dueMemosCount} {language === 'bn' ? 'টি বকেয়া রয়েছে' : 'due memos'}
             </div>
           </div>
+
+          {/* Card 5: Monthly Profit Portion (বর্তমান মাসে লাভের অংশ) */}
+          <div className="monthly-summary-card" style={{
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(5, 150, 105, 0.1))',
+            border: '1px solid rgba(16, 185, 129, 0.35)'
+          }}>
+            <div className="monthly-summary-title" style={{ color: '#6ee7b7', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <TrendingUp size={13} style={{ color: '#10b981' }} />
+              {language === 'bn' ? 'বর্তমান মাসে লাভের অংশ' : 'Monthly Profit Portion'}
+            </div>
+            <div>
+              <div style={{ fontSize: '0.68rem', color: '#a7f3d0', textTransform: 'uppercase', letterSpacing: '0.3px', fontWeight: 'bold' }}>
+                {language === 'bn' ? 'মোট লাভ' : 'Total Profit'}
+              </div>
+              <div className="monthly-summary-value" style={{ color: '#10b981' }}>
+                ৳ {stats.totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+
+            {/* Sub-breakdown: Cash Profit & Due Profit */}
+            <div className="profit-sub-breakdown">
+              <div>
+                <div className="profit-sub-label" style={{ color: '#a7f3d0' }}>
+                  {language === 'bn' ? 'হাতে নগদ লাভ' : 'Cash Profit'}
+                </div>
+                <div className="profit-sub-value" style={{ color: '#34d399' }}>
+                  ৳ {stats.cashProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div style={{ borderLeft: '1px solid rgba(255,255,255,0.12)', paddingLeft: '5px' }}>
+                <div className="profit-sub-label" style={{ color: '#fed7aa' }}>
+                  {language === 'bn' ? 'বাকিতে লাভ' : 'Due Profit'}
+                </div>
+                <div className="profit-sub-value" style={{ color: '#fb923c' }}>
+                  ৳ {stats.dueProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 6: Monthly Loss Portion (বর্তমান মাসে লসের অংশ) */}
+          <div className="monthly-summary-card" style={{
+            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.16), rgba(185, 28, 28, 0.1))',
+            border: '1px solid rgba(239, 68, 68, 0.35)'
+          }}>
+            <div className="monthly-summary-title" style={{ color: '#fca5a5', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <TrendingDown size={13} style={{ color: '#ef4444' }} />
+              {language === 'bn' ? 'বর্তমান মাসে লসের অংশ' : 'Monthly Loss Portion'}
+            </div>
+            <div>
+              <div style={{ fontSize: '0.68rem', color: '#fca5a5', textTransform: 'uppercase', letterSpacing: '0.3px', fontWeight: 'bold' }}>
+                {language === 'bn' ? 'মোট লস' : 'Total Loss'}
+              </div>
+              <div className="monthly-summary-value" style={{ color: '#ef5350' }}>
+                ৳ {stats.totalLoss.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+            <div className="monthly-summary-sub" style={{ color: stats.totalLoss > 0 ? '#fca5a5' : '#888' }}>
+              {stats.totalLoss > 0
+                ? (language === 'bn' ? `${enToBnDigits(stats.lossMemosCount)} টি মেমোতে লস` : `${stats.lossMemosCount} memos with loss`)
+                : (language === 'bn' ? 'এই মাসে কোনো লস নেই' : 'No loss this month')}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -552,12 +703,18 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
                       {memo.timeStr && <span>({memo.timeStr})</span>}
                     </div>
 
-                    {/* Paid & Due breakdown */}
+                    {/* Paid & Due & Profit breakdown */}
                     {memo.totalBill > 0 && (
-                      <div style={{ fontSize: '0.75rem', color: '#bbb', display: 'flex', gap: '0.6rem', marginTop: '2px' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#bbb', display: 'flex', flexWrap: 'wrap', gap: '0.6rem', marginTop: '2px' }}>
                         <span>নগদ: ৳{memo.paidAmount.toFixed(0)}</span>
                         {memo.dueAmount > 0 && (
                           <span style={{ color: '#ffb74d' }}>বাকি: ৳{memo.dueAmount.toFixed(0)}</span>
+                        )}
+                        {memo.totalProfit > 0 && (
+                          <span style={{ color: '#10b981', fontWeight: 'bold' }}>লাভ: ৳{memo.totalProfit.toFixed(0)}</span>
+                        )}
+                        {memo.totalLoss > 0 && (
+                          <span style={{ color: '#ef5350', fontWeight: 'bold' }}>লস: ৳{memo.totalLoss.toFixed(0)}</span>
                         )}
                       </div>
                     )}
