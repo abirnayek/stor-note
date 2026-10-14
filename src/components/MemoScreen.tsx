@@ -334,7 +334,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
     : 0;
 
   const tableTotalPrice = memoState.entries.reduce((sum, entry) => {
-    return sum + (typeof entry.totalPrice === 'number' ? entry.totalPrice : 0);
+    return sum + (Number(entry.totalPrice) || 0);
   }, 0);
 
   const mainPrice = Number(memoState.totalPriceMain || 0);
@@ -366,26 +366,151 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
     }));
   };
 
+  const getCustomerMemoCanvas = async (): Promise<HTMLCanvasElement | null> => {
+    if (!memoRef.current) return null;
+    return await html2canvas(memoRef.current, {
+      scale: 2,
+      backgroundColor: '#092115',
+      useCORS: true,
+      logging: false,
+      ignoreElements: (el) => el.hasAttribute('data-html2canvas-ignore')
+    });
+  };
+
+  const totalBill = tableTotalPrice > 0 ? tableTotalPrice : (Number(memoState.totalPriceMain) || 0);
+  const paid = Number(memoState.paidAmount) || 0;
+  const due = totalBill - paid;
+
   const handleDownload = async () => {
-    if (memoRef.current) {
-      try {
-        const canvas = await html2canvas(memoRef.current, { scale: 2, backgroundColor: '#092115' }); // Match dark theme
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`Memo_Lot_${lotNumber}.pdf`);
-      } catch (err) {
-        console.error('Failed to download PDF', err);
+    try {
+      const canvas = await getCustomerMemoCanvas();
+      if (!canvas) return;
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Purchase_Memo_Lot_${lotNumber || 'Memo'}.pdf`);
+    } catch (err) {
+      console.error('Failed to download PDF', err);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      const canvas = await getCustomerMemoCanvas();
+      if (!canvas) return;
+
+      const supplier = memoState.supplierName ? memoState.supplierName.trim() : `লট ${lotNumber}`;
+      const cleanFileName = `Purchase_Memo_Lot_${lotNumber || 'Memo'}.png`;
+
+      const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
+      if (!blob) return;
+
+      const file = new File([blob], cleanFileName, { type: 'image/png' });
+      const summaryText = `*সামুদ্রিক মাছ নোটবুক - ক্রয় মেমো*\nসাপ্লায়ার: ${supplier}\nতারিখ: ${memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\nমোট বিল: ৳ ${totalBill}\nজমা: ৳ ${(Number(memoState.paidAmount) || 0).toFixed(2)}\nবকেয়া: ৳ ${due}`;
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `ক্রয় মেমো - লট ${lotNumber}`,
+          text: summaryText
+        });
+      } else if (navigator.share) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = cleanFileName;
+        a.click();
+        await navigator.share({
+          title: `ক্রয় মেমো - লট ${lotNumber}`,
+          text: summaryText
+        });
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = cleanFileName;
+        a.click();
+        alert(language === 'bn' ? 'মেমোর কপি ডাউনলোড হয়েছে!' : 'Memo downloaded!');
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error('Share failed', err);
       }
     }
   };
 
-  const shareUrl = window.location.href;
-  const shareText = `Check out this Purchase Memo (Lot: ${lotNumber})`;
+  const handleWhatsApp = async () => {
+    try {
+      const canvas = await getCustomerMemoCanvas();
+      const supplier = memoState.supplierName ? memoState.supplierName.trim() : `লট ${lotNumber}`;
+      const cleanFileName = `Purchase_Memo_Lot_${lotNumber || 'Memo'}.png`;
 
+      let itemsText = '';
+      memoState.entries.forEach((e, idx) => {
+        if ((e.name && e.name.trim() !== '') || Number(e.totalKg) > 0) {
+          itemsText += `\n${idx + 1}. ${e.name || 'পণ্য'} - ${e.totalKg} ${e.weightUnit || 'kg'} = ৳${e.totalPrice}`;
+        }
+      });
 
+      const waText = `*সামুদ্রিক মাছ নোটবুক - ক্রয় মেমো*\nসাপ্লায়ার: ${supplier}\nতারিখ: ${memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\n----------------------------------\n*পণ্যের বিবরণ:*${itemsText}\n----------------------------------\n*মোট ক্রয় মূল্য: ৳ ${totalBill}*\nজমা: ৳ ${(Number(memoState.paidAmount) || 0).toFixed(2)}\n*বকেয়া: ৳ ${due}*`;
+
+      let phone = (memoState.supplierPhone || '').replace(/[^\d]/g, '');
+      if (phone.length === 11 && phone.startsWith('01')) {
+        phone = '88' + phone;
+      }
+
+      if (canvas) {
+        const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
+        if (blob) {
+          const file = new File([blob], cleanFileName, { type: 'image/png' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: `ক্রয় মেমো - লট ${lotNumber}`,
+              text: waText
+            });
+            return;
+          } else {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = cleanFileName;
+            a.click();
+          }
+        }
+      }
+
+      const waUrl = phone 
+        ? `https://wa.me/${phone}?text=${encodeURIComponent(waText)}`
+        : `https://wa.me/?text=${encodeURIComponent(waText)}`;
+      window.open(waUrl, '_blank');
+    } catch (err) {
+      console.error('WhatsApp error', err);
+    }
+  };
+
+  const handleEmail = async () => {
+    try {
+      const canvas = await getCustomerMemoCanvas();
+      const supplier = memoState.supplierName ? memoState.supplierName.trim() : `Lot ${lotNumber}`;
+      const cleanFileName = `Purchase_Memo_Lot_${lotNumber || 'Memo'}.png`;
+
+      const emailBody = `Purchase Memo - Samudrik Mach Notebook\nSupplier: ${supplier}\nDate: ${memoState.createdAt || today}\nLot: ${lotNumber || 'N/A'}\nTotal: Tk ${totalBill}\nPaid: Tk ${(Number(memoState.paidAmount) || 0).toFixed(2)}\nDue: Tk ${due}`;
+
+      if (canvas) {
+        const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
+        if (blob) {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = cleanFileName;
+          a.click();
+        }
+      }
+
+      window.open(`mailto:?subject=${encodeURIComponent(`Purchase Memo - Lot ${lotNumber}`)}&body=${encodeURIComponent(emailBody)}`);
+    } catch (err) {
+      console.error('Email error', err);
+    }
+  };
 
   return (
     <div className="memo-screen">
@@ -412,18 +537,18 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
           </button>
 
           <div className="share-group">
-            <button className="btn-icon action-fb" onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`)} title="Share on Facebook">
+            <button className="btn-icon action-fb" onClick={handleShare} title={language === 'bn' ? 'শেয়ার করুন (হোয়াটসঅ্যাপ, মেসেঞ্জার, ফেসবুক ইত্যাদি)' : 'Share via apps'}>
               <Share2 size={24} />
             </button>
-            <button className="btn-icon action-wa" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`)} title="Share on WhatsApp">
+            <button className="btn-icon action-wa" onClick={handleWhatsApp} title={language === 'bn' ? 'হোয়াটসঅ্যাপে পাঠান' : 'Share on WhatsApp'}>
               <MessageCircle size={24} />
             </button>
-            <button className="btn-icon action-mail" onClick={() => window.open(`mailto:?subject=Purchase Memo&body=${encodeURIComponent(shareText + ' ' + shareUrl)}`)} title="Share via Email">
+            <button className="btn-icon action-mail" onClick={handleEmail} title={language === 'bn' ? 'ইমেইল করুন' : 'Share via Email'}>
               <Mail size={24} />
             </button>
           </div>
 
-          <button className="btn-icon action-download" onClick={handleDownload} title="Download PDF">
+          <button className="btn-icon action-download" onClick={handleDownload} title={language === 'bn' ? 'মেমো PDF ডাউনলোড' : 'Download PDF'}>
             <Download size={24} />
           </button>
         </div>

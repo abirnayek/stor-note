@@ -35,7 +35,20 @@ export const calculateMemoTotals = (memoData: any): { totalBill: number; paidAmo
   let totalBill = 0;
   const entries = memo.entries && Array.isArray(memo.entries) ? memo.entries : (memoData.entries && Array.isArray(memoData.entries) ? memoData.entries : []);
 
-  if (entries.length > 0) {
+  const isPurchase = memo.type === 'purchase' || memoData.type === 'purchase' || memo.customerType === 'purchase' || memoData.customerType === 'purchase' || String(memoData.id || '').startsWith('purchase_');
+
+  if (isPurchase) {
+    let purchaseTotal = 0;
+    if (entries.length > 0) {
+      entries.forEach((entry: any) => {
+        purchaseTotal += Number(entry.totalPrice) || 0;
+      });
+    }
+    if (purchaseTotal === 0) {
+      purchaseTotal = Number(memo.totalPriceMain) || Number(memoData.totalPriceMain) || Number(memo.totalBill) || Number(memoData.totalBill) || 0;
+    }
+    totalBill = purchaseTotal;
+  } else if (entries.length > 0) {
     entries.forEach((entry: any) => {
       let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
       let buyRateNum = Number(entry.buyRate) || 0;
@@ -63,7 +76,7 @@ export const calculateMemoTotals = (memoData: any): { totalBill: number; paidAmo
     });
   }
 
-  // Fallback for purchase memo or root total price
+  // Fallback for root total price
   if (totalBill === 0) {
     if (memo.totalPriceMain && Number(memo.totalPriceMain) > 0) {
       totalBill = Number(memo.totalPriceMain);
@@ -141,8 +154,27 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
     try { dueData = JSON.parse(dueStr); } catch (e) {}
   }
 
-  // 3. Check lot keys if canonical not found
-  if (!canonicalData) {
+  // 3. Check purchase memo if memoId starts with purchase_lot_ or purchase_
+  if (memoId.startsWith('purchase_lot_') || memoId.startsWith('purchase_')) {
+    const lotPart = memoId.replace('purchase_lot_', '').replace('purchase_', '');
+    const pStr = localStorage.getItem(`memo_lot_${lotPart}`) || localStorage.getItem(`memo_lot_${String(lotPart).padStart(2, '0')}`);
+    if (pStr) {
+      try {
+        const rawP = JSON.parse(pStr);
+        lotData = {
+          ...rawP,
+          id: memoId,
+          type: 'purchase',
+          customerType: 'purchase',
+          name: rawP.supplierName || `লট ${lotPart} সাপ্লায়ার`,
+          lotNumber: Number(lotPart)
+        };
+      } catch (e) {}
+    }
+  }
+
+  // 4. Check lot keys if canonical not found
+  if (!canonicalData && !lotData) {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (k && k.startsWith('sales_memo_lot_') && k.endsWith(`_memo_${memoId}`)) {
@@ -301,6 +333,11 @@ export const syncAllDueAccounts = (): {
     } else if (key.startsWith('sales_memo_lot_') && key.includes('_memo_')) {
       const parts = key.split('_memo_');
       if (parts[1]) allCandidateIds.add(parts[1]);
+    } else if (key.startsWith('memo_lot_')) {
+      const lotStr = key.replace('memo_lot_', '');
+      if (lotStr && !isNaN(Number(lotStr))) {
+        allCandidateIds.add(`purchase_lot_${lotStr}`);
+      }
     }
   }
 

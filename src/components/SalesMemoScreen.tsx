@@ -877,24 +877,178 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     });
   };
 
+  const getCustomerMemoCanvas = async (): Promise<HTMLCanvasElement | null> => {
+    if (!memoRef.current) return null;
+    return await html2canvas(memoRef.current, {
+      scale: 2,
+      backgroundColor: '#092115',
+      useCORS: true,
+      logging: false,
+      ignoreElements: (el) => el.hasAttribute('data-html2canvas-ignore')
+    });
+  };
+
   const handleDownload = async () => {
-    if (memoRef.current) {
-      try {
-        const canvas = await html2canvas(memoRef.current, { scale: 2, backgroundColor: '#092115' }); // Match dark theme
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`Sales_Memo_Lot_${lotNumber}.pdf`);
-      } catch (err) {
-        console.error('Failed to download PDF', err);
+    try {
+      const canvas = await getCustomerMemoCanvas();
+      if (!canvas) return;
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      const customerName = memoState.customerName ? memoState.customerName.trim().replace(/\s+/g, '_') : 'Customer';
+      pdf.save(`Sales_Memo_${customerName}_Lot_${lotNumber || 'Memo'}.pdf`);
+    } catch (err) {
+      console.error('Failed to download PDF', err);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      const canvas = await getCustomerMemoCanvas();
+      if (!canvas) return;
+
+      const customerName = memoState.customerName ? memoState.customerName.trim() : 'সম্মানিত ক্রেতা';
+      const cleanFileName = `Memo_${customerName.replace(/\s+/g, '_')}.png`;
+
+      const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
+      if (!blob) return;
+
+      const file = new File([blob], cleanFileName, { type: 'image/png' });
+      const summaryText = `*সামুদ্রিক মাছ নোটবুক - বিক্রয় মেমো*\nক্রেতা: ${customerName}\nতারিখ: ${memoState.customDate || memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\nমোট বিল: ৳ ${grandTotal.toFixed(2)}\nজমা: ৳ ${(Number(memoState.paidAmount) || 0).toFixed(2)}\nবকেয়া: ৳ ${dueAmount.toFixed(2)}`;
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `বিক্রয় মেমো - ${customerName}`,
+          text: summaryText
+        });
+      } else if (navigator.share) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = cleanFileName;
+        a.click();
+        await navigator.share({
+          title: `বিক্রয় মেমো - ${customerName}`,
+          text: summaryText
+        });
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = cleanFileName;
+        a.click();
+        try {
+          await navigator.clipboard.writeText(summaryText);
+          alert(language === 'bn' 
+            ? 'মেমোর কপি ডাউনলোড হয়েছে এবং বিবরণ ক্লিপবোর্ডে কপি হয়েছে! আপনি যেকোনো মেসেজিং অ্যাপে শেয়ার করতে পারেন।' 
+            : 'Memo downloaded and summary copied to clipboard!');
+        } catch (e) {
+          alert(language === 'bn' ? 'মেমোর কপি ডাউনলোড হয়েছে!' : 'Memo downloaded!');
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error('Share failed', err);
       }
     }
   };
 
-  const shareUrl = window.location.href;
-  const shareText = `Check out this Sales Memo (Lot: ${lotNumber})`;
+  const handleWhatsApp = async () => {
+    try {
+      const canvas = await getCustomerMemoCanvas();
+      const customerName = memoState.customerName ? memoState.customerName.trim() : 'সম্মানিত ক্রেতা';
+      const cleanFileName = `Memo_${customerName.replace(/\s+/g, '_')}.png`;
+
+      let itemsText = '';
+      memoState.entries.forEach((e, idx) => {
+        if ((e.name && e.name.trim() !== '') || Number(e.totalKg) > 0) {
+          const kg = Number(e.totalKg) || 0;
+          const rate = Number(e.manualSaleRate) || 0;
+          const total = (kg * rate) > 0 ? (kg * rate) : 0;
+          itemsText += `\n${idx + 1}. ${e.name || 'মাছ'} - ${kg} ${e.weightUnit || 'kg'} × ৳${rate} = ৳${total.toFixed(2)}`;
+        }
+      });
+
+      const waText = `*সামুদ্রিক মাছ নোটবুক - বিক্রয় মেমো*\nক্রেতা: ${customerName}\nমোবাইল: ${memoState.mobile || 'N/A'}\nতারিখ: ${memoState.customDate || memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\n----------------------------------\n*পণ্যের বিবরণ:*${itemsText}\n----------------------------------\nমাছের মোট মূল্য: ৳ ${fishTotal.toFixed(2)}${commissionAmount > 0 ? `\nকমিশন: ${(memoState.commissionOperation || 'subtract') === 'add' ? '+' : '-'} ৳ ${commissionAmount.toFixed(2)}` : ''}${totalDeductions > 0 ? `\nকর্তন/ছাড়: - ৳ ${totalDeductions.toFixed(2)}` : ''}\n*চূড়ান্ত মোট বিল: ৳ ${grandTotal.toFixed(2)}*\nজমা: ৳ ${(Number(memoState.paidAmount) || 0).toFixed(2)}\n*বকেয়া: ৳ ${dueAmount.toFixed(2)}*\n\nধন্যবাদ!`;
+
+      let phone = (memoState.mobile || '').replace(/[^\d]/g, '');
+      if (phone.length === 11 && phone.startsWith('01')) {
+        phone = '88' + phone;
+      }
+
+      if (canvas) {
+        const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
+        if (blob) {
+          const file = new File([blob], cleanFileName, { type: 'image/png' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: `বিক্রয় মেমো - ${customerName}`,
+              text: waText
+            });
+            return;
+          } else {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = cleanFileName;
+            a.click();
+          }
+        }
+      }
+
+      const waUrl = phone 
+        ? `https://wa.me/${phone}?text=${encodeURIComponent(waText)}`
+        : `https://wa.me/?text=${encodeURIComponent(waText)}`;
+      window.open(waUrl, '_blank');
+    } catch (err) {
+      console.error('WhatsApp error', err);
+    }
+  };
+
+  const handleEmail = async () => {
+    try {
+      const canvas = await getCustomerMemoCanvas();
+      const customerName = memoState.customerName ? memoState.customerName.trim() : 'Customer';
+      const cleanFileName = `Memo_${customerName.replace(/\s+/g, '_')}.png`;
+
+      let itemsText = '';
+      memoState.entries.forEach((e, idx) => {
+        if ((e.name && e.name.trim() !== '') || Number(e.totalKg) > 0) {
+          const kg = Number(e.totalKg) || 0;
+          const rate = Number(e.manualSaleRate) || 0;
+          const total = (kg * rate) > 0 ? (kg * rate) : 0;
+          itemsText += `\n${idx + 1}. ${e.name || 'Fish'} - ${kg} ${e.weightUnit || 'kg'} x Tk ${rate} = Tk ${total.toFixed(2)}`;
+        }
+      });
+
+      const emailBody = `Sales Memo - Samudrik Mach Notebook\nCustomer: ${customerName}\nDate: ${memoState.customDate || memoState.createdAt || today}\nLot: ${lotNumber || 'N/A'}\n----------------------------------\nItems:${itemsText}\n----------------------------------\nFish Total: Tk ${fishTotal.toFixed(2)}\nNet Total: Tk ${grandTotal.toFixed(2)}\nPaid: Tk ${(Number(memoState.paidAmount) || 0).toFixed(2)}\nDue: Tk ${dueAmount.toFixed(2)}\n\nThank you!`;
+
+      if (canvas) {
+        const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
+        if (blob) {
+          const file = new File([blob], cleanFileName, { type: 'image/png' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: `Sales Memo - ${customerName}`,
+              text: emailBody
+            });
+            return;
+          } else {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = cleanFileName;
+            a.click();
+          }
+        }
+      }
+
+      window.open(`mailto:?subject=${encodeURIComponent(`Sales Memo - ${customerName}`)}&body=${encodeURIComponent(emailBody)}`);
+    } catch (err) {
+      console.error('Email error', err);
+    }
+  };
 
 
 
@@ -1040,18 +1194,18 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           </button>
           
           <div className="share-group">
-            <button className="btn-icon action-fb" onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`)} title="Share on Facebook">
+            <button className="btn-icon action-fb" onClick={handleShare} title={language === 'bn' ? 'শেয়ার করুন (হোয়াটসঅ্যাপ, মেসেঞ্জার, ফেসবুক ইত্যাদি)' : 'Share via apps'}>
               <Share2 size={24} />
             </button>
-            <button className="btn-icon action-wa" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`)} title="Share on WhatsApp">
+            <button className="btn-icon action-wa" onClick={handleWhatsApp} title={language === 'bn' ? 'হোয়াটসঅ্যাপে পাঠান' : 'Share on WhatsApp'}>
               <MessageCircle size={24} />
             </button>
-            <button className="btn-icon action-mail" onClick={() => window.open(`mailto:?subject=Sales Memo&body=${encodeURIComponent(shareText + ' ' + shareUrl)}`)} title="Share via Email">
+            <button className="btn-icon action-mail" onClick={handleEmail} title={language === 'bn' ? 'ইমেইল করুন' : 'Share via Email'}>
               <Mail size={24} />
             </button>
           </div>
 
-          <button className="btn-icon action-download" onClick={handleDownload} title="Download PDF">
+          <button className="btn-icon action-download" onClick={handleDownload} title={language === 'bn' ? 'কাস্টমার মেমো PDF ডাউনলোড' : 'Download Customer Memo PDF'}>
             <Download size={24} />
           </button>
         </div>
@@ -1093,7 +1247,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
             </h2>
 
             {/* 4 Header Metric & Action Boxes */}
-            <div style={{
+            <div data-html2canvas-ignore style={{
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
@@ -1469,6 +1623,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   {/* Date Mode Toggle Button */}
                   <button
                     type="button"
+                    data-html2canvas-ignore
                     onClick={() => {
                       const nextMode = !memoState.isOriginalDate;
                       updateMemoState('isOriginalDate', nextMode);
@@ -1525,7 +1680,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 </div>
 
                 {memoState.isOriginalDate === false && memoState.customDate ? (
-                  <div style={{ fontSize: '0.74rem', color: '#72be44', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
+                  <div data-html2canvas-ignore style={{ fontSize: '0.74rem', color: '#72be44', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
                     {(() => {
                       const { month: pM, year: pY } = parseMemoMonthYear(memoState);
                       const mObj = MONTHS.find(m => m.index === pM);
@@ -1535,7 +1690,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                     })()}
                   </div>
                 ) : memoState.updatedAt ? (
-                  <div style={{ fontSize: '0.72rem', color: '#ffb74d', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <div data-html2canvas-ignore style={{ fontSize: '0.72rem', color: '#ffb74d', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span>পরিবর্তিত: {memoState.updatedAt}</span>
                     {memoState.updatedAtTime && <span>({memoState.updatedAtTime})</span>}
                   </div>
@@ -1787,7 +1942,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
                               {/* Extra product badge */}
                               {isExtra && (
-                                <div style={{
+                                <div data-html2canvas-ignore style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: '4px',
@@ -1820,7 +1975,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                                   const badgeBorder = !isAvailable ? 'rgba(255, 82, 82, 0.3)' : isLow ? 'rgba(255, 179, 0, 0.3)' : 'rgba(114, 190, 68, 0.3)';
 
                                   return (
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                                    <div data-html2canvas-ignore style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
                                       <div style={{
                                         display: 'inline-flex',
                                         alignItems: 'center',
@@ -2084,7 +2239,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', minWidth: 0 }}>
               
               {/* Action Toolbar Card */}
-              <div style={{
+              <div data-html2canvas-ignore style={{
                 background: 'linear-gradient(135deg, rgba(18, 48, 32, 0.6) 0%, rgba(10, 28, 18, 0.8) 100%)',
                 border: '1px solid rgba(114, 190, 68, 0.22)',
                 borderRadius: '12px',
@@ -2193,7 +2348,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
               {/* Deductions Edit Card */}
               {deductionsList.length > 0 && (
-                <div style={{
+                <div data-html2canvas-ignore style={{
                   background: 'linear-gradient(135deg, rgba(38, 18, 24, 0.65) 0%, rgba(20, 10, 14, 0.8) 100%)',
                   border: '1px solid rgba(239, 68, 68, 0.32)',
                   borderRadius: '12px',
@@ -2405,23 +2560,25 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
               </div>
 
               {/* Dedicated Commission Section */}
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px',
-                background: 'rgba(0, 0, 0, 0.25)',
-                border: '1px solid rgba(234, 179, 8, 0.35)',
-                borderRadius: '8px',
-                padding: '6px 10px',
-                marginTop: '2px',
-                marginBottom: '2px'
-              }}>
+              <div 
+                data-html2canvas-ignore={commissionAmount === 0 ? true : undefined}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  background: 'rgba(0, 0, 0, 0.25)',
+                  border: '1px solid rgba(234, 179, 8, 0.35)',
+                  borderRadius: '8px',
+                  padding: '6px 10px',
+                  marginTop: '2px',
+                  marginBottom: '2px'
+                }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '0.86rem', color: '#fde047', fontWeight: 600 }}>
                     {language === 'bn' ? 'কমিশন:' : 'Commission:'}
                   </span>
                   
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div data-html2canvas-ignore style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                     {/* Operation toggle */}
                     <div style={{ display: 'inline-flex', borderRadius: '4px', overflow: 'hidden', border: '1px solid rgba(234, 179, 8, 0.4)' }}>
                       <button
