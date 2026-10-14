@@ -221,7 +221,13 @@ const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueTy
             }
 
             return (
-              <ProtectedMemoWrapper key={dueId} passwordKey={`memo_password_due_memo_${dueId}`} onAccessGranted={() => onSelectDue(dueId)}>
+              <ProtectedMemoWrapper 
+                key={dueId} 
+                passwordKey={`memo_password_due_memo_${dueId}`} 
+                name={name || `পরিশোধিত #${dueId}`}
+                type="memo"
+                onAccessGranted={() => onSelectDue(dueId)}
+              >
                 <div className="lot-card" style={{ position: 'relative', cursor: 'pointer' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '80%' }}>

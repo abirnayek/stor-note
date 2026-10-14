@@ -236,7 +236,13 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
             const name = memo.name;
             const autoMsg = memo.autoMessage;
             return (
-              <ProtectedMemoWrapper key={dueId} passwordKey={`memo_password_due_memo_${dueId}`} onAccessGranted={() => onSelectDue(dueId)}>
+              <ProtectedMemoWrapper 
+                key={dueId} 
+                passwordKey={`memo_password_due_memo_${dueId}`} 
+                name={name || `বকেয়া #${dueId}`}
+                type="memo"
+                onAccessGranted={() => onSelectDue(dueId)}
+              >
                 <div className="lot-card" style={{ position: 'relative', cursor: 'pointer' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '80%' }}>

@@ -200,7 +200,13 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
           }
 
           return (
-            <ProtectedMemoWrapper key={`purchase_lot_${lot}_${idx}`} passwordKey={`lot_password_${lot}`} onAccessGranted={() => onSelectLot(lot)}>
+            <ProtectedMemoWrapper 
+              key={`purchase_lot_${lot}_${idx}`} 
+              passwordKey={`lot_password_${lot}`} 
+              name={supplierName ? `লট ${lot} (${supplierName})` : `লট নং ${lot}`}
+              type="lot"
+              onAccessGranted={() => onSelectLot(lot)}
+            >
             <div className="lot-card">
                   <div className="lot-card-header">
                     <Package size={40} className="lot-icon" />

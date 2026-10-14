@@ -164,7 +164,13 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
           
           <div className="lot-grid">
             {activeMemos.map(memo => (
-              <ProtectedMemoWrapper key={memo.id} passwordKey={`memo_password_investor_memo_${memo.id}`} onAccessGranted={() => onSelectMemo(memo.id)}>
+              <ProtectedMemoWrapper 
+                key={memo.id} 
+                passwordKey={`memo_password_investor_memo_${memo.id}`} 
+                name={memo.date || `মেমো #${memo.id}`}
+                type="memo"
+                onAccessGranted={() => onSelectMemo(memo.id)}
+              >
               <div className="lot-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -217,7 +223,13 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
               <p style={{ textAlign: 'center', color: '#aaa', marginTop: '2rem' }}>{t('noCompletedMemos')}</p>
             ) : (
               completedMemos.map(memo => (
-                <ProtectedMemoWrapper key={memo.id} passwordKey={`memo_password_investor_memo_${memo.id}`} onAccessGranted={() => onSelectMemo(memo.id)}>
+                <ProtectedMemoWrapper 
+                  key={memo.id} 
+                  passwordKey={`memo_password_investor_memo_${memo.id}`} 
+                  name={memo.date || `মেমো #${memo.id}`}
+                  type="memo"
+                  onAccessGranted={() => onSelectMemo(memo.id)}
+                >
                 <div className="paid-due-card" style={{ cursor: 'pointer' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

@@ -832,6 +832,8 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
             <ProtectedMemoWrapper
               key={memo.id}
               passwordKey={`memo_password_${memo.id}`}
+              name={memo.name || `মেমো #${memo.id}`}
+              type="memo"
               onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}
             >
               <div

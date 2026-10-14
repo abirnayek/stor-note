@@ -772,7 +772,36 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                   <ProtectedMemoWrapper
                     key={folder.id}
                     passwordKey={folderPwdKey}
+                    name={folder.name}
+                    type="folder"
                     onAccessGranted={() => setSelectedFolderId(folder.id)}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverFolderId !== folder.id) {
+                        setDragOverFolderId(folder.id);
+                      }
+                    }}
+                    onDragEnter={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDragOverFolderId(folder.id);
+                    }}
+                    onDragLeave={(e) => {
+                      e.stopPropagation();
+                      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                      if (dragOverFolderId === folder.id) setDragOverFolderId(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const mId = e.dataTransfer.getData('application/memo-id') || e.dataTransfer.getData('text/plain') || draggedMemoId || (window as any).__draggedMemoId;
+                      setDragOverFolderId(null);
+                      setDraggedMemoId(null);
+                      (window as any).__draggedMemoId = null;
+                      if (mId) moveMemoToFolder(mId, folder.id);
+                    }}
                   >
                     <div
                       className="lot-card action-card"

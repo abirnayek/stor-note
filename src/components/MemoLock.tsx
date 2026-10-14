@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, Unlock, Folder, FileText } from 'lucide-react';
+import { Lock, Unlock, Folder, FileText, Package } from 'lucide-react';
 
 export const MemoLockIcon: React.FC<{ passwordKey: string }> = ({ passwordKey }) => {
     const [locked, setLocked] = useState(false);
@@ -188,22 +188,25 @@ export const ProtectedMemoWrapper: React.FC<ProtectedMemoWrapperProps> = ({
                             display: 'flex',
                             alignItems: 'center',
                             gap: '8px',
-                            background: 'rgba(255, 255, 255, 0.12)',
-                            border: '1px solid rgba(255, 255, 255, 0.25)',
+                            background: 'rgba(20, 24, 30, 0.92)',
+                            border: '1.5px solid rgba(255, 255, 255, 0.4)',
                             padding: '6px 14px',
                             borderRadius: '10px',
                             maxWidth: '92%',
-                            boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
-                            backdropFilter: 'blur(4px)'
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.6)',
+                            backdropFilter: 'blur(6px)',
+                            marginBottom: '4px'
                         }}>
                             {type === 'folder' ? (
                                 <Folder size={18} style={{ color: '#ce93d8', flexShrink: 0 }} />
+                            ) : type === 'lot' ? (
+                                <Package size={18} style={{ color: '#ffb74d', flexShrink: 0 }} />
                             ) : (
                                 <FileText size={18} style={{ color: '#90caf9', flexShrink: 0 }} />
                             )}
                             <span style={{
                                 fontSize: '1.05rem',
-                                fontWeight: 'bold',
+                                fontWeight: 700,
                                 color: '#ffffff',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',

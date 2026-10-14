@@ -268,7 +268,13 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
           const invGross = investorGrossTotals[id] || 0;
           
           return (
-            <ProtectedMemoWrapper key={id} passwordKey={passwordKey} onAccessGranted={() => onSelectInvestor(id)}>
+            <ProtectedMemoWrapper 
+              key={id} 
+              passwordKey={passwordKey} 
+              name={profile.name}
+              type="folder"
+              onAccessGranted={() => onSelectInvestor(id)}
+            >
               <div className="lot-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>

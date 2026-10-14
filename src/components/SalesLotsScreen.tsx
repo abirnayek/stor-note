@@ -360,7 +360,13 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
               )}
 
               {lots.map((lot, idx) => (
-                <ProtectedMemoWrapper key={`sales_lot_${lot}_${idx}`} passwordKey={`sales_lot_password_${lot}`} onAccessGranted={() => onSelectLot(lot)}>
+                <ProtectedMemoWrapper 
+                  key={`sales_lot_${lot}_${idx}`} 
+                  passwordKey={`sales_lot_password_${lot}`} 
+                  name={`লট নং ${lot}`}
+                  type="lot"
+                  onAccessGranted={() => onSelectLot(lot)}
+                >
                   <div
                     className="lot-card"
                     style={{
@@ -746,7 +752,13 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         )}
 
         {filteredGlobalMemos.map(memo => (
-          <ProtectedMemoWrapper key={memo.uniqueKey} passwordKey={`memo_password_${memo.id}`} onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}>
+          <ProtectedMemoWrapper 
+            key={memo.uniqueKey} 
+            passwordKey={`memo_password_${memo.id}`} 
+            name={memo.name || `মেমো #${memo.id}`}
+            type="memo"
+            onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}
+          >
             <div className="lot-card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>

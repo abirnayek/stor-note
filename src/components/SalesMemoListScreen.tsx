@@ -207,6 +207,8 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
             <ProtectedMemoWrapper 
               key={memo.uniqueKey || `sales_memo_${lotNumber}_${memo.id}`} 
               passwordKey={memoPasswordKey} 
+              name={memo.name || `মেমো #${memo.id}`}
+              type="memo"
               onAccessGranted={() => onSelectMemo(memo.id)}
             >
               <div className="lot-card">
