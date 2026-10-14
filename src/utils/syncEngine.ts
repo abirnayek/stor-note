@@ -452,11 +452,22 @@ export const restoreFromCloud = async () => {
   
   isRestoring = true;
   try {
-    const { data, error } = await supabase
-      .from('user_backups')
-      .select('key, value, updated_at');
-      
-    if (error) throw error;
+    // Fetch all rows from cloud with pagination to avoid 1000-row limit truncation
+    const data: any[] = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data: pageData, error } = await supabase
+        .from('user_backups')
+        .select('key, value, updated_at')
+        .range(from, from + pageSize - 1);
+        
+      if (error) throw error;
+      if (!pageData || pageData.length === 0) break;
+      data.push(...pageData);
+      if (pageData.length < pageSize) break;
+      from += pageSize;
+    }
     
     if (data && data.length > 0) {
       const originalSetItem = localStorage.setItem;
@@ -512,28 +523,17 @@ export const restoreFromCloud = async () => {
         }
       });
       
-      // Handle local keys not present in cloud
+      // Handle local keys not present in cloud: upload them to cloud to prevent data loss!
       Object.keys(localTimestamps).forEach(key => {
         if (!cloudKeys.has(key)) {
           const localValue = originalGetItem.call(localStorage, key);
-          if (pendingKeys.has(key)) {
-            // Locally created/updated offline, push to cloud
-            if (localValue !== null && navigator.onLine) {
-              supabase.from('user_backups').upsert({
-                user_id: currentUser.id,
-                key: key,
-                value: localValue,
-                updated_at: new Date(localTimestamps[key]).toISOString()
-              }).then(() => {});
-            }
-          } else {
-            // Key was deleted in cloud on another device! Remove locally!
-            if (localValue !== null) {
-              originalRemoveItem.call(localStorage, key);
-              hasDataChanged = true;
-            }
-            delete localTimestamps[key];
-            timestampsModified = true;
+          if (localValue !== null && !isKeyDeleted(key) && navigator.onLine) {
+            supabase.from('user_backups').upsert({
+              user_id: currentUser.id,
+              key: key,
+              value: localValue,
+              updated_at: new Date(localTimestamps[key] || Date.now()).toISOString()
+            }).then(() => {});
           }
         }
       });

@@ -2,14 +2,51 @@ import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput, DebouncedInput, parseMathOrNumber, focusNewTableRow } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Undo, Redo, MessageCircle, Mail, Share2, Download, Plus, Trash2, Phone, Palette, MinusCircle, Calculator, Zap, Scale, Package, CheckCircle2, AlertCircle, FileText } from 'lucide-react';
+import { ChevronLeft, Undo, Redo, MessageCircle, Mail, Share2, Download, Plus, Trash2, Phone, Palette, MinusCircle, Calculator, Zap, Scale, Package, CheckCircle2, AlertCircle, FileText, Calendar, RotateCcw } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
 import { getLotStock, getLotPurchaseItems, getAllPurchaseItems, type LotStockSummary, type LotPurchaseFishItem } from '../utils/stockUtils';
-import { parseMemoMonthYear, MONTHS, enToBnDigits } from '../utils/dateUtils';
+import { parseMemoMonthYear, MONTHS, enToBnDigits, bnToEnDigits } from '../utils/dateUtils';
+
+// Helper to convert date strings to YYYY-MM-DD for native <input type="date">
+const getIsoDateForPicker = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  const enStr = bnToEnDigits(dateStr).trim();
+  const isoMatch = enStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) return enStr;
+  
+  const dmyMatch = enStr.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    let year = dmyMatch[3];
+    if (year.length === 2) year = '20' + year;
+    return `${year}-${month}-${day}`;
+  }
+  
+  const parsed = parseMemoMonthYear({ customDate: dateStr, isOriginalDate: false });
+  if (parsed.year && parsed.month) {
+    const y = parsed.year.toString();
+    const m = parsed.month.toString().padStart(2, '0');
+    const d = (parsed.day || 1).toString().padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return '';
+};
+
+// Formats YYYY-MM-DD from picker to standard DD-MM-YYYY
+const formatPickerDateToDisplay = (isoStr: string): string => {
+  if (!isoStr) return '';
+  const parts = isoStr.split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return `${day}-${month}-${year}`;
+  }
+  return isoStr;
+};
 
 
 interface SalesMemoScreenProps {
@@ -128,7 +165,14 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     let dueData: any = null;
     const dueStr = localStorage.getItem(`due_memo_${memoId}`);
     if (dueStr) {
-      try { dueData = JSON.parse(dueStr); } catch(e) {}
+      try { 
+        const parsed = JSON.parse(dueStr);
+        // STRICT GUARD: Never import a purchase memo into sales memo!
+        const isPurchaseDue = parsed.type === 'purchase' || parsed.customerType === 'purchase' || memoId.startsWith('purchase_') || (parsed.supplierName && !parsed.customerName);
+        if (!isPurchaseDue) {
+          dueData = parsed;
+        }
+      } catch(e) {}
     }
 
     let parsed: any = null;
@@ -265,6 +309,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
   const storageKey = `sales_memo_${memoId}`;
   const [memoState, setMemoState, undo, redo, canUndo, canRedo] = useHistory<MemoState>(getInitialState(), storageKey);
+  const datePickerInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handleSigChange = () => {
@@ -458,6 +503,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         ...currentState,
         lotNumberInput: validLot !== null ? validLot.toString() : ''
       };
+
+      // STRICT GUARD: Never save purchase memo IDs or purchase types in sales memo storage!
+      if (memoId.startsWith('purchase_') || (currentState.customerType as any) === 'purchase') {
+        console.warn('Prevented saving purchase memo in sales memo storage:', memoId);
+        return;
+      }
 
       // 1. Save to canonical storage key and destination storage key
       const canonicalKey = `sales_memo_${memoId}`;
@@ -673,9 +724,11 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       setMemoState(prev => ({ ...prev, status: currentStatus }), { recordHistory: false });
     }
 
-    // Sync to due accounts if customer type is selected
-    if (memoState.customerType) {
-      const type = memoState.customerType;
+    // Sync to due accounts (default to 'regular' if not explicitly chosen, so due is NEVER lost!)
+    if (memoState.customerType || dueAmount > 0 || (grandTotal > 0 && Number(memoState.paidAmount || 0) > 0)) {
+      const type = (memoState.customerType === 'permanent' || memoState.customerType === 'reseller') 
+        ? memoState.customerType 
+        : (defaultCustomerType === 'permanent' || defaultCustomerType === 'reseller' ? defaultCustomerType : 'regular');
       const allTypes = ['regular', 'permanent', 'reseller'];
       const otherTypes = allTypes.filter(t => t !== type);
       
@@ -891,17 +944,25 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     });
   };
 
+  const generateCustomerMemoPdf = async (): Promise<{ pdf: jsPDF; pdfBlob: Blob; fileName: string } | null> => {
+    const canvas = await getCustomerMemoCanvas();
+    if (!canvas) return null;
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    const customerName = memoState.customerName ? memoState.customerName.trim().replace(/\s+/g, '_') : 'Customer';
+    const fileName = `Sales_Memo_${customerName}_Lot_${lotNumber || 'Memo'}.pdf`;
+    const pdfBlob = pdf.output('blob');
+    return { pdf, pdfBlob, fileName };
+  };
+
   const handleDownload = async () => {
     try {
-      const canvas = await getCustomerMemoCanvas();
-      if (!canvas) return;
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      const customerName = memoState.customerName ? memoState.customerName.trim().replace(/\s+/g, '_') : 'Customer';
-      pdf.save(`Sales_Memo_${customerName}_Lot_${lotNumber || 'Memo'}.pdf`);
+      const res = await generateCustomerMemoPdf();
+      if (!res) return;
+      res.pdf.save(res.fileName);
     } catch (err) {
       console.error('Failed to download PDF', err);
     }
@@ -909,16 +970,11 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
   const handleShare = async () => {
     try {
-      const canvas = await getCustomerMemoCanvas();
-      if (!canvas) return;
-
+      const res = await generateCustomerMemoPdf();
+      if (!res) return;
+      const { pdf, pdfBlob, fileName } = res;
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
       const customerName = memoState.customerName ? memoState.customerName.trim() : 'সম্মানিত ক্রেতা';
-      const cleanFileName = `Memo_${customerName.replace(/\s+/g, '_')}.png`;
-
-      const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
-      if (!blob) return;
-
-      const file = new File([blob], cleanFileName, { type: 'image/png' });
       const paidVal = Number(memoState.paidAmount) || 0;
       const excessVal = (paidVal > grandTotal && grandTotal > 0) ? Math.round((paidVal - grandTotal) * 100) / 100 : 0;
       const summaryText = `*সামুদ্রিক মাছ নোটবুক - বিক্রয় মেমো*\nক্রেতা: ${customerName}\nতারিখ: ${memoState.customDate || memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\nমোট বিল: ৳ ${grandTotal.toFixed(2)}\nজমা: ৳ ${paidVal.toFixed(2)}\n${excessVal > 0 ? `বকেয়া: ৳ 0.00\nঅতিরিক্ত জমা (ফেরত): ৳ ${excessVal.toFixed(2)}` : `বকেয়া: ৳ ${dueAmount.toFixed(2)}`}`;
@@ -929,27 +985,15 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           title: `বিক্রয় মেমো - ${customerName}`,
           text: summaryText
         });
-      } else if (navigator.share) {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = cleanFileName;
-        a.click();
-        await navigator.share({
-          title: `বিক্রয় মেমো - ${customerName}`,
-          text: summaryText
-        });
       } else {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = cleanFileName;
-        a.click();
+        pdf.save(fileName);
         try {
           await navigator.clipboard.writeText(summaryText);
           alert(language === 'bn' 
-            ? 'মেমোর কপি ডাউনলোড হয়েছে এবং বিবরণ ক্লিপবোর্ডে কপি হয়েছে! আপনি যেকোনো মেসেজিং অ্যাপে শেয়ার করতে পারেন।' 
-            : 'Memo downloaded and summary copied to clipboard!');
+            ? 'মেমো PDF ফাইলটি ডাউনলোড হয়েছে এবং বিবরণ ক্লিপবোর্ডে কপি হয়েছে! আপনি যেকোনো মেসেজিং অ্যাপে শেয়ার করতে পারেন।' 
+            : 'Memo PDF downloaded and summary copied to clipboard!');
         } catch (e) {
-          alert(language === 'bn' ? 'মেমোর কপি ডাউনলোড হয়েছে!' : 'Memo downloaded!');
+          alert(language === 'bn' ? 'মেমো PDF ফাইলটি ডাউনলোড হয়েছে!' : 'Memo PDF downloaded!');
         }
       }
     } catch (err: any) {
@@ -961,9 +1005,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
   const handleWhatsApp = async () => {
     try {
-      const canvas = await getCustomerMemoCanvas();
+      const res = await generateCustomerMemoPdf();
       const customerName = memoState.customerName ? memoState.customerName.trim() : 'সম্মানিত ক্রেতা';
-      const cleanFileName = `Memo_${customerName.replace(/\s+/g, '_')}.png`;
 
       let itemsText = '';
       memoState.entries.forEach((e, idx) => {
@@ -984,23 +1027,18 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         phone = '88' + phone;
       }
 
-      if (canvas) {
-        const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
-        if (blob) {
-          const file = new File([blob], cleanFileName, { type: 'image/png' });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: `বিক্রয় মেমো - ${customerName}`,
-              text: waText
-            });
-            return;
-          } else {
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = cleanFileName;
-            a.click();
-          }
+      if (res) {
+        const { pdf, pdfBlob, fileName } = res;
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `বিক্রয় মেমো - ${customerName}`,
+            text: waText
+          });
+          return;
+        } else {
+          pdf.save(fileName);
         }
       }
 
@@ -1015,9 +1053,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
   const handleEmail = async () => {
     try {
-      const canvas = await getCustomerMemoCanvas();
+      const res = await generateCustomerMemoPdf();
       const customerName = memoState.customerName ? memoState.customerName.trim() : 'Customer';
-      const cleanFileName = `Memo_${customerName.replace(/\s+/g, '_')}.png`;
 
       let itemsText = '';
       memoState.entries.forEach((e, idx) => {
@@ -1033,23 +1070,18 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       const excessVal = (paidVal > grandTotal && grandTotal > 0) ? Math.round((paidVal - grandTotal) * 100) / 100 : 0;
       const emailBody = `Sales Memo - Samudrik Mach Notebook\nCustomer: ${customerName}\nDate: ${memoState.customDate || memoState.createdAt || today}\nLot: ${lotNumber || 'N/A'}\n----------------------------------\nItems:${itemsText}\n----------------------------------\nFish Total: Tk ${fishTotal.toFixed(2)}\nNet Total: Tk ${grandTotal.toFixed(2)}\nPaid: Tk ${paidVal.toFixed(2)}\n${excessVal > 0 ? `Due: Tk 0.00\nChange / Refund: Tk ${excessVal.toFixed(2)}` : `Due: Tk ${dueAmount.toFixed(2)}`}\n\nThank you!`;
 
-      if (canvas) {
-        const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
-        if (blob) {
-          const file = new File([blob], cleanFileName, { type: 'image/png' });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: `Sales Memo - ${customerName}`,
-              text: emailBody
-            });
-            return;
-          } else {
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = cleanFileName;
-            a.click();
-          }
+      if (res) {
+        const { pdf, pdfBlob, fileName } = res;
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `Sales Memo - ${customerName}`,
+            text: emailBody
+          });
+          return;
+        } else {
+          pdf.save(fileName);
         }
       }
 
@@ -1627,85 +1659,174 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
             </div>
             
             <div className="meta-item right-align" style={{ alignSelf: 'flex-start', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <span className="memo-label-dark">{t('date')}: </span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <span className="memo-label-dark" style={{ fontSize: '0.9rem' }}>
+                    {language === 'bn' ? 'তারিখ:' : 'Date:'}
+                  </span>
 
-                  {/* Date Mode Toggle Button */}
-                  <button
-                    type="button"
-                    data-html2canvas-ignore
-                    onClick={() => {
-                      const nextMode = !memoState.isOriginalDate;
-                      updateMemoState('isOriginalDate', nextMode);
-                      if (!nextMode && !memoState.customDate) {
-                        updateMemoState('customDate', memoState.updatedAt || memoState.createdAt || today);
-                      }
-                    }}
-                    title={memoState.isOriginalDate !== false ? 'বর্তমানে অরিজিনাল তারিখ দেখাচ্ছে। পরিবর্তন করতে ক্লিক করুন।' : 'বর্তমানে কাস্টম তারিখ দেখাচ্ছে। অরিজিনালে ফিরতে ক্লিক করুন।'}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      background: memoState.isOriginalDate !== false ? 'rgba(114, 190, 68, 0.2)' : 'rgba(255, 152, 0, 0.2)',
-                      border: memoState.isOriginalDate !== false ? '1px solid #72be44' : '1px solid #ff9800',
-                      color: memoState.isOriginalDate !== false ? '#72be44' : '#ffb74d',
-                      borderRadius: '16px',
-                      padding: '2px 8px',
-                      fontSize: '0.72rem',
-                      fontWeight: 'bold',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {memoState.isOriginalDate !== false ? '🔘 অরিজিনাল' : '✏️ কাস্টম'}
-                  </button>
-
-                  {/* Date Display / Input */}
-                  {memoState.isOriginalDate !== false ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#fff', fontSize: '0.9rem' }}>
-                      <span style={{ fontWeight: 'bold' }}>{memoState.createdAt || today}</span>
-                      {memoState.createdAtTime && (
-                        <span style={{ fontSize: '0.75rem', color: '#aaa' }}>({memoState.createdAtTime})</span>
-                      )}
-                    </div>
-                  ) : (
+                  {/* Standard Styled Date Input Box with Integrated Calendar Picker */}
+                  <div style={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    border: '1px solid rgba(114, 190, 68, 0.45)',
+                    borderRadius: '8px',
+                    padding: '3px 6px 3px 10px',
+                    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.25)',
+                    gap: '4px'
+                  }}>
                     <input
                       type="text"
                       value={memoState.customDate || memoState.createdAt || today}
-                      onChange={e => updateMemoState('customDate', e.target.value)}
-                      placeholder="তারিখ লিখুন..."
-                      style={{
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                        borderRadius: '4px',
-                        color: '#fff',
-                        width: '130px',
-                        padding: '2px 6px',
-                        textAlign: 'center',
-                        fontSize: '0.85rem',
-                        fontFamily: 'inherit',
-                        outline: 'none'
+                      onChange={e => {
+                        updateMemoState('customDate', e.target.value);
+                        updateMemoState('isOriginalDate', false);
                       }}
+                      placeholder="DD-MM-YYYY"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        color: '#fff',
+                        fontWeight: 'bold',
+                        fontSize: '0.95rem',
+                        width: '105px',
+                        textAlign: 'center',
+                        fontFamily: 'inherit',
+                        letterSpacing: '0.5px'
+                      }}
+                      title={language === 'bn' ? 'তারিখ লিখুন বা ক্যালেন্ডার আইকনে ক্লিক করুন' : 'Enter date or click calendar icon'}
                     />
+
+                    {/* Hidden Native Date Input for Calendar Picker */}
+                    <input
+                      type="date"
+                      ref={datePickerInputRef}
+                      value={getIsoDateForPicker(memoState.customDate || memoState.createdAt || today)}
+                      onChange={e => {
+                        if (e.target.value) {
+                          const formatted = formatPickerDateToDisplay(e.target.value);
+                          updateMemoState('customDate', formatted);
+                          updateMemoState('isOriginalDate', false);
+                        }
+                      }}
+                      style={{
+                        position: 'absolute',
+                        opacity: 0,
+                        pointerEvents: 'none',
+                        width: 0,
+                        height: 0,
+                        bottom: 0,
+                        right: 0
+                      }}
+                      data-html2canvas-ignore
+                    />
+
+                    {/* Calendar Button */}
+                    <button
+                      type="button"
+                      data-html2canvas-ignore
+                      onClick={() => {
+                        try {
+                          datePickerInputRef.current?.showPicker();
+                        } catch (err) {
+                          datePickerInputRef.current?.focus();
+                        }
+                      }}
+                      title={language === 'bn' ? 'ক্যালেন্ডার খুলুন' : 'Open calendar'}
+                      style={{
+                        background: 'rgba(114, 190, 68, 0.2)',
+                        border: '1px solid rgba(114, 190, 68, 0.4)',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        padding: '4px 6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#72be44',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <Calendar size={15} />
+                    </button>
+                  </div>
+
+                  {/* Reset to Today / Original Date Button */}
+                  {(memoState.isOriginalDate === false || (memoState.customDate && memoState.customDate !== today)) ? (
+                    <button
+                      type="button"
+                      data-html2canvas-ignore
+                      onClick={() => {
+                        updateMemoState('isOriginalDate', true);
+                        updateMemoState('customDate', memoState.createdAt || today);
+                      }}
+                      title={language === 'bn' ? 'আজকের / মূল তারিখে ফিরুন' : 'Reset to original date'}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        background: 'rgba(255, 152, 0, 0.15)',
+                        border: '1px solid rgba(255, 152, 0, 0.4)',
+                        color: '#ffb74d',
+                        borderRadius: '6px',
+                        padding: '3px 8px',
+                        fontSize: '0.72rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <RotateCcw size={11} />
+                      <span>{language === 'bn' ? 'আজকে ফিরুন' : 'Today'}</span>
+                    </button>
+                  ) : (
+                    <span
+                      data-html2canvas-ignore
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        background: 'rgba(114, 190, 68, 0.12)',
+                        border: '1px solid rgba(114, 190, 68, 0.3)',
+                        color: '#72be44',
+                        borderRadius: '6px',
+                        padding: '3px 7px',
+                        fontSize: '0.72rem',
+                        fontWeight: 600
+                      }}
+                    >
+                      <span>{language === 'bn' ? 'আজকের তারিখ' : 'Today'}</span>
+                    </span>
                   )}
                 </div>
 
-                {memoState.isOriginalDate === false && memoState.customDate ? (
-                  <div data-html2canvas-ignore style={{ fontSize: '0.74rem', color: '#72be44', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
-                    {(() => {
-                      const { month: pM, year: pY } = parseMemoMonthYear(memoState);
-                      const mObj = MONTHS.find(m => m.index === pM);
-                      return (
-                        <span>🗓️ হিসাবের মাস: {mObj?.nameBn || ''} {enToBnDigits(pY)}</span>
-                      );
-                    })()}
-                  </div>
-                ) : memoState.updatedAt ? (
-                  <div data-html2canvas-ignore style={{ fontSize: '0.72rem', color: '#ffb74d', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span>পরিবর্তিত: {memoState.updatedAt}</span>
-                    {memoState.updatedAtTime && <span>({memoState.updatedAtTime})</span>}
-                  </div>
-                ) : null}
+                {/* Accounting Month & Modification Time */}
+                <div data-html2canvas-ignore style={{
+                  fontSize: '0.74rem',
+                  color: '#72be44',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 600,
+                  background: 'rgba(114, 190, 68, 0.08)',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(114, 190, 68, 0.2)'
+                }}>
+                  {(() => {
+                    const { month: pM, year: pY } = parseMemoMonthYear(memoState);
+                    const mObj = MONTHS.find(m => m.index === pM);
+                    return (
+                      <span>🗓️ হিসাবের মাস: {mObj?.nameBn || ''} {enToBnDigits(pY)}</span>
+                    );
+                  })()}
+                  {memoState.updatedAt && (
+                    <span style={{ color: '#ffb74d', marginLeft: '2px', borderLeft: '1px solid rgba(255, 255, 255, 0.15)', paddingLeft: '6px' }}>
+                      (পরিবর্তিত: {memoState.updatedAt})
+                    </span>
+                  )}
+                </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span className="memo-label-dark" style={{ fontSize: '0.9rem' }}>{t('lotNoLabel')}</span>

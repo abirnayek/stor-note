@@ -75,6 +75,8 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
   const [showInvestorCallMenu, setShowInvestorCallMenu] = useState(false);
   const memoRef = useRef<HTMLDivElement>(null);
   const { t, language } = useLanguage();
+  const devicePermission = localStorage.getItem('device_permission');
+  const hasEditPermission = devicePermission === 'admin';
   
   
 
@@ -111,6 +113,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
 
 
     const handleSaveInvestorSig = (dataUrl: string) => {
+    if (!hasEditPermission) return;
     setMemo(prev => {
       const next = { ...prev, investorSignature: dataUrl };
       try { localStorage.setItem(`investor_memo_${memoId}`, JSON.stringify(next)); } catch(e) {}
@@ -121,6 +124,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
   };
 
   const handleSaveSellerSig = (dataUrl: string) => {
+    if (!hasEditPermission) return;
     try {
       if (dataUrl) {
         localStorage.setItem('default_seller_signature', dataUrl);
@@ -140,14 +144,17 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
   };
 
   const handleClearInvestorSig = () => {
+    if (!hasEditPermission) return;
     handleSaveInvestorSig('');
   };
 
   const handleClearSellerSig = () => {
+    if (!hasEditPermission) return;
     handleSaveSellerSig('');
   };
 
   const updateProfile = (field: string, value: string) => {
+    if (!hasEditPermission) return;
     const newProfile = { ...profile, [field]: value };
     setProfile(newProfile);
     localStorage.setItem(`investor_profile_${investorId}`, JSON.stringify(newProfile));
@@ -198,6 +205,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
 
 
   const addEntry = () => {
+    if (!hasEditPermission) return;
     const newEntry: InvestEntry = {
       id: Date.now().toString(),
       serial: (memo.entries.length + 1).toString(),
@@ -214,6 +222,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
   };
 
   const addWithdrawEntry = () => {
+    if (!hasEditPermission) return;
     const newEntry: InvestEntry = {
       id: Date.now().toString(),
       serial: (memo.entries.length + 1).toString(),
@@ -229,6 +238,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
   };
 
   const updateEntry = (id: string, field: keyof InvestEntry, value: any) => {
+    if (!hasEditPermission) return;
     setMemo(prev => {
       const updatedEntries = prev.entries.map(e => {
         if (e.id !== id) return e;
@@ -249,6 +259,7 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
   };
 
   const deleteEntry = (id: string) => {
+    if (!hasEditPermission) return;
     setMemo(prev => ({ ...prev, entries: prev.entries.filter(e => e.id !== id) }));
   };
 

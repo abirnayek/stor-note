@@ -1,6 +1,7 @@
 import React from 'react';
 import { type Screen } from '../App';
 import SalesMemoScreen from './SalesMemoScreen';
+import MemoScreen from './MemoScreen';
 import { getNormalizedMemo } from '../utils/dueSyncUtils';
 
 interface DueMemoScreenProps {
@@ -18,9 +19,24 @@ const DueSalesMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType 
     if (isPaid) {
       onNavigate('paid-due-list');
     } else {
-      onNavigate('due-list');
+      onNavigate(dueType === 'purchase' || normMemo.customerType === 'purchase' ? 'due-purchase-list' : 'due-list');
     }
   };
+
+  // Strict guard: If this is a purchase memo/due, NEVER open SalesMemoScreen!
+  if (dueType === 'purchase' || normMemo.customerType === 'purchase' || dueId.startsWith('purchase_')) {
+    let lotNum = targetLotNumber || 1;
+    if (dueId.startsWith('purchase_lot_')) {
+      lotNum = parseInt(dueId.replace('purchase_lot_', ''), 10) || lotNum;
+    }
+    return (
+      <MemoScreen
+        onNavigate={onNavigate}
+        lotNumber={lotNum}
+        onBack={handleBack}
+      />
+    );
+  }
 
   const effectiveType = (normMemo.customerType === 'permanent' || normMemo.customerType === 'regular' || normMemo.customerType === 'reseller')
     ? normMemo.customerType

@@ -501,7 +501,6 @@ function App() {
     const currentPerm = localStorage.getItem('device_permission') || 'admin';
     if (currentPerm === 'view') {
       const viewerBlocked: Screen[] = [
-        'reseller', 'reseller-password',
         'investor-password', 'investor-list', 'investor-memos-list', 'investor-memo',
         'password', 'lots', 'memo'
       ];
@@ -1105,7 +1104,11 @@ function App() {
                 onNavigate={handleNavigate} 
                 dueType={currentDueType} 
                 onSelectDue={(id) => {
-                  navigateTo('due-sales-memo', { dueId: id, isPaidDue: false, dueType: currentDueType });
+                  if (currentDueType === 'purchase' || id.startsWith('purchase_')) {
+                    navigateTo('due-memo', { dueId: id, isPaidDue: false, dueType: 'purchase' });
+                  } else {
+                    navigateTo('due-sales-memo', { dueId: id, isPaidDue: false, dueType: currentDueType });
+                  }
                 }}
               />
             )

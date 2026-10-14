@@ -2,13 +2,51 @@ import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput, DebouncedInput, parseMathOrNumber, focusNewTableRow } from './MathInput';
 import React, { useEffect, useRef, useState } from 'react';
 import { type Screen } from '../App';
-import { Share2, Download, Plus, Trash2, Phone, Undo, Redo, MessageCircle, Mail, ChevronLeft, Lock, X, Package, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { Share2, Download, Plus, Trash2, Phone, Undo, Redo, MessageCircle, Mail, ChevronLeft, Lock, X, Package, CheckCircle2, AlertTriangle, XCircle, Calendar } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
 import { getLotStock, type LotStockSummary } from '../utils/stockUtils';
+import { bnToEnDigits, parseMemoMonthYear } from '../utils/dateUtils';
+
+// Helper to convert date strings to YYYY-MM-DD for native <input type="date">
+const getIsoDateForPicker = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  const enStr = bnToEnDigits(dateStr).trim();
+  const isoMatch = enStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) return enStr;
+  
+  const dmyMatch = enStr.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    let year = dmyMatch[3];
+    if (year.length === 2) year = '20' + year;
+    return `${year}-${month}-${day}`;
+  }
+  
+  const parsed = parseMemoMonthYear({ customDate: dateStr, isOriginalDate: false });
+  if (parsed.year && parsed.month) {
+    const y = parsed.year.toString();
+    const m = parsed.month.toString().padStart(2, '0');
+    const d = (parsed.day || 1).toString().padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return '';
+};
+
+// Formats YYYY-MM-DD from picker to standard DD-MM-YYYY
+const formatPickerDateToDisplay = (isoStr: string): string => {
+  if (!isoStr) return '';
+  const parts = isoStr.split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return `${day}-${month}-${year}`;
+  }
+  return isoStr;
+};
 
 
 interface MemoScreenProps {
@@ -89,6 +127,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
 
   const storageKey = `memo_lot_${lotNumber}`;
   const [memoState, setMemoState, undo, redo, canUndo, canRedo] = useHistory<MemoState>(getInitialState(), storageKey);
+  const datePickerInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handleSigChange = () => {
@@ -126,17 +165,23 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
 
 
   const processMarkDue = () => {
-    const dueId = Date.now().toString();
+    const dueId = lotNumber ? `purchase_lot_${lotNumber}` : `purchase_${Date.now()}`;
+    const supplierNameFinal = memoState.supplierName || (lotNumber ? `লট ${lotNumber} সাপ্লায়ার` : 'সাপ্লায়ার');
     const newDueData = {
       id: dueId,
-      memoState: { ...memoState, status: 'due' },
-      date: today,
-      name: memoState.supplierName,
-      mobile: memoState.supplierPhone,
-      lotNumber: lotNumber,
+      memoState: { ...memoState, status: 'due', type: 'purchase', customerType: 'purchase' },
+      date: memoState.createdAt || today,
+      name: supplierNameFinal,
+      customerName: supplierNameFinal,
+      supplierName: supplierNameFinal,
+      mobile: memoState.supplierPhone || '',
+      lotNumber: lotNumber ? lotNumber.toString() : '',
       deposit: memoState.paidAmount || 0,
+      paidAmount: memoState.paidAmount || 0,
       type: 'purchase',
-      entries: memoState.entries.map(e => {
+      customerType: 'purchase',
+      status: 'due',
+      entries: memoState.entries.map((e, index) => {
         let salePriceAuto = 0;
         let currentProfitPercent = e.profitPercent !== undefined && e.profitPercent !== '' ? Number(e.profitPercent) : (memoState.globalProfitPercent ? Number(memoState.globalProfitPercent) : 0);
         let buyRateNum = Number(e.totalPrice) || 0;
@@ -145,6 +190,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
         }
         return {
           ...e,
+          serialNo: (index + 1).toString(),
+          name: e.name || `পণ্য ${index + 1}`,
           buyRate: e.totalPrice, // buyRate is what we bought it for
           manualSaleRate: salePriceAuto
         };
@@ -152,12 +199,16 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
     };
     
     const existingDuesStr = localStorage.getItem('dues_purchase');
-    const existingDues = existingDuesStr ? JSON.parse(existingDuesStr) : [];
-    localStorage.setItem('dues_purchase', JSON.stringify([...existingDues, dueId]));
+    const existingDues: string[] = existingDuesStr ? JSON.parse(existingDuesStr) : [];
+    if (!existingDues.includes(dueId)) {
+      existingDues.push(dueId);
+      localStorage.setItem('dues_purchase', JSON.stringify(existingDues));
+    }
     
     localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(newDueData));
     
-    alert('Added to Purchase Due Account!');
+    window.dispatchEvent(new Event('storage'));
+    alert(language === 'bn' ? 'ক্রয় বকেয়া অ্যাকাউন্টে যুক্ত হয়েছে!' : 'Added to Purchase Due Account!');
     setShowDueModal(false);
   };
 
@@ -377,16 +428,24 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   const paid = Number(memoState.paidAmount) || 0;
   const due = totalBill - paid;
 
+  const generateCustomerMemoPdf = async (): Promise<{ pdf: jsPDF; pdfBlob: Blob; fileName: string } | null> => {
+    const canvas = await getCustomerMemoCanvas();
+    if (!canvas) return null;
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    const fileName = `Purchase_Memo_Lot_${lotNumber || 'Memo'}.pdf`;
+    const pdfBlob = pdf.output('blob');
+    return { pdf, pdfBlob, fileName };
+  };
+
   const handleDownload = async () => {
     try {
-      const canvas = await getCustomerMemoCanvas();
-      if (!canvas) return;
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Purchase_Memo_Lot_${lotNumber || 'Memo'}.pdf`);
+      const res = await generateCustomerMemoPdf();
+      if (!res) return;
+      res.pdf.save(res.fileName);
     } catch (err) {
       console.error('Failed to download PDF', err);
     }
@@ -394,16 +453,12 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
 
   const handleShare = async () => {
     try {
-      const canvas = await getCustomerMemoCanvas();
-      if (!canvas) return;
+      const res = await generateCustomerMemoPdf();
+      if (!res) return;
+      const { pdf, pdfBlob, fileName } = res;
 
       const supplier = memoState.supplierName ? memoState.supplierName.trim() : `লট ${lotNumber}`;
-      const cleanFileName = `Purchase_Memo_Lot_${lotNumber || 'Memo'}.png`;
-
-      const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
-      if (!blob) return;
-
-      const file = new File([blob], cleanFileName, { type: 'image/png' });
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
       const summaryText = `*সামুদ্রিক মাছ নোটবুক - ক্রয় মেমো*\nসাপ্লায়ার: ${supplier}\nতারিখ: ${memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\nমোট বিল: ৳ ${totalBill}\nজমা: ৳ ${(Number(memoState.paidAmount) || 0).toFixed(2)}\nবকেয়া: ৳ ${due}`;
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -412,21 +467,16 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
           title: `ক্রয় মেমো - লট ${lotNumber}`,
           text: summaryText
         });
-      } else if (navigator.share) {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = cleanFileName;
-        a.click();
-        await navigator.share({
-          title: `ক্রয় মেমো - লট ${lotNumber}`,
-          text: summaryText
-        });
       } else {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = cleanFileName;
-        a.click();
-        alert(language === 'bn' ? 'মেমোর কপি ডাউনলোড হয়েছে!' : 'Memo downloaded!');
+        pdf.save(fileName);
+        try {
+          await navigator.clipboard.writeText(summaryText);
+          alert(language === 'bn' 
+            ? 'মেমো PDF ফাইলটি ডাউনলোড হয়েছে এবং বিবরণ ক্লিপবোর্ডে কপি হয়েছে! আপনি যেকোনো অ্যাপে শেয়ার করতে পারেন।' 
+            : 'Memo PDF downloaded and summary copied to clipboard!');
+        } catch (e) {
+          alert(language === 'bn' ? 'মেমো PDF ফাইলটি ডাউনলোড হয়েছে!' : 'Memo PDF downloaded!');
+        }
       }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
@@ -437,9 +487,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
 
   const handleWhatsApp = async () => {
     try {
-      const canvas = await getCustomerMemoCanvas();
+      const res = await generateCustomerMemoPdf();
       const supplier = memoState.supplierName ? memoState.supplierName.trim() : `লট ${lotNumber}`;
-      const cleanFileName = `Purchase_Memo_Lot_${lotNumber || 'Memo'}.png`;
 
       let itemsText = '';
       memoState.entries.forEach((e, idx) => {
@@ -455,23 +504,18 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
         phone = '88' + phone;
       }
 
-      if (canvas) {
-        const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
-        if (blob) {
-          const file = new File([blob], cleanFileName, { type: 'image/png' });
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: `ক্রয় মেমো - লট ${lotNumber}`,
-              text: waText
-            });
-            return;
-          } else {
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = cleanFileName;
-            a.click();
-          }
+      if (res) {
+        const { pdf, pdfBlob, fileName } = res;
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `ক্রয় মেমো - লট ${lotNumber}`,
+            text: waText
+          });
+          return;
+        } else {
+          pdf.save(fileName);
         }
       }
 
@@ -486,19 +530,22 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
 
   const handleEmail = async () => {
     try {
-      const canvas = await getCustomerMemoCanvas();
+      const res = await generateCustomerMemoPdf();
       const supplier = memoState.supplierName ? memoState.supplierName.trim() : `Lot ${lotNumber}`;
-      const cleanFileName = `Purchase_Memo_Lot_${lotNumber || 'Memo'}.png`;
-
       const emailBody = `Purchase Memo - Samudrik Mach Notebook\nSupplier: ${supplier}\nDate: ${memoState.createdAt || today}\nLot: ${lotNumber || 'N/A'}\nTotal: Tk ${totalBill}\nPaid: Tk ${(Number(memoState.paidAmount) || 0).toFixed(2)}\nDue: Tk ${due}`;
 
-      if (canvas) {
-        const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
-        if (blob) {
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = cleanFileName;
-          a.click();
+      if (res) {
+        const { pdf, pdfBlob, fileName } = res;
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `Purchase Memo - Lot ${lotNumber}`,
+            text: emailBody
+          });
+          return;
+        } else {
+          pdf.save(fileName);
         }
       }
 
@@ -572,15 +619,87 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
               <span className="memo-label-dark">{t('lotNumber')}</span>
               <span className="memo-value-dark" style={{ marginLeft: 10 }}>{lotNumber?.toString().padStart(2, '0')}</span>
             </div>
-            <div className="meta-item text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div className="meta-item text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span className="memo-label-dark">{t('date')}</span>
-                <DebouncedInput
-                  type="text"
-                  value={memoState.createdAt || today}
-                  onChange={e => updateMemoState('createdAt', e.target.value)}
-                  style={{ background: 'transparent', border: 'none', color: '#fff', width: '120px', marginLeft: 10, textAlign: 'center', fontSize: 'inherit', fontFamily: 'inherit', outline: 'none' }}
-                />
+                <div style={{
+                  position: 'relative',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: 'rgba(0, 0, 0, 0.4)',
+                  border: '1px solid rgba(114, 190, 68, 0.45)',
+                  borderRadius: '8px',
+                  padding: '2px 6px 2px 8px',
+                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.25)',
+                  gap: '4px'
+                }}>
+                  <input
+                    type="text"
+                    value={memoState.createdAt || today}
+                    onChange={e => updateMemoState('createdAt', e.target.value)}
+                    placeholder="DD-MM-YYYY"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: '#fff',
+                      fontWeight: 'bold',
+                      fontSize: '0.92rem',
+                      width: '105px',
+                      textAlign: 'center',
+                      fontFamily: 'inherit',
+                      letterSpacing: '0.5px'
+                    }}
+                    title={language === 'bn' ? 'তারিখ লিখুন বা ক্যালেন্ডার আইকনে ক্লিক করুন' : 'Enter date or click calendar icon'}
+                  />
+                  <input
+                    type="date"
+                    ref={datePickerInputRef}
+                    value={getIsoDateForPicker(memoState.createdAt || today)}
+                    onChange={e => {
+                      if (e.target.value) {
+                        const formatted = formatPickerDateToDisplay(e.target.value);
+                        updateMemoState('createdAt', formatted);
+                      }
+                    }}
+                    style={{
+                      position: 'absolute',
+                      opacity: 0,
+                      pointerEvents: 'none',
+                      width: 0,
+                      height: 0,
+                      bottom: 0,
+                      right: 0
+                    }}
+                    data-html2canvas-ignore
+                  />
+                  <button
+                    type="button"
+                    data-html2canvas-ignore
+                    onClick={() => {
+                      try {
+                        datePickerInputRef.current?.showPicker();
+                      } catch (err) {
+                        datePickerInputRef.current?.focus();
+                      }
+                    }}
+                    title={language === 'bn' ? 'ক্যালেন্ডার খুলুন' : 'Open calendar'}
+                    style={{
+                      background: 'rgba(114, 190, 68, 0.2)',
+                      border: '1px solid rgba(114, 190, 68, 0.4)',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      padding: '3px 5px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#72be44',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <Calendar size={14} />
+                  </button>
+                </div>
               </div>
               {memoState.updatedAt && (
                 <div style={{ fontSize: '0.75rem', color: '#ffb74d', marginTop: '2px' }}>

@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Search, Package, CheckCircle2, AlertTriangle, XCircle, ArrowRight, Layers, LayoutGrid, Table, Calendar, ArrowUpDown } from 'lucide-react';
+import { ChevronLeft, Search, Package, CheckCircle2, AlertTriangle, XCircle, ArrowRight, Layers, LayoutGrid, Table, Calendar, ArrowUpDown, Download, Share2, MessageCircle } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getAllLotsStock, type LotStockSummary, type FishStockItem } from '../utils/stockUtils';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 interface StockScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -17,6 +19,7 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
   const [statusFilter, setStatusFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all');
   const [sortBy, setSortBy] = useState<'running_out' | 'lot_serial' | 'remaining_asc' | 'remaining_desc'>('running_out');
   const [lotsStock, setLotsStock] = useState<LotStockSummary[]>([]);
+  const stockReportRef = useRef<HTMLDivElement>(null);
 
   const loadStockData = () => {
     const data = getAllLotsStock();
@@ -145,6 +148,87 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
     setViewMode('detail');
   };
 
+  const generateStockPdf = async (): Promise<{ pdf: jsPDF; pdfBlob: Blob; fileName: string } | null> => {
+    if (!stockReportRef.current) return null;
+    const canvas = await html2canvas(stockReportRef.current, { scale: 2, backgroundColor: '#092115' });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const lotLabel = selectedLot === 'all' ? 'All_Lots' : `Lot_${selectedLot}`;
+    const fileName = `Stock_Report_${lotLabel}_${dateStr}.pdf`;
+    const pdfBlob = pdf.output('blob');
+    return { pdf, pdfBlob, fileName };
+  };
+
+  const handleDownloadStockPdf = async () => {
+    try {
+      const res = await generateStockPdf();
+      if (!res) return;
+      res.pdf.save(res.fileName);
+    } catch (err) {
+      console.error('Failed to download stock PDF', err);
+    }
+  };
+
+  const handleShareStockPdf = async () => {
+    try {
+      const res = await generateStockPdf();
+      if (!res) return;
+      const { pdf, pdfBlob, fileName } = res;
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+      const summaryText = `*সামুদ্রিক মাছ নোটবুক - স্টক রিপোর্ট*\nমোট ক্রয়: ${totalPurchased.toFixed(2)} কেজি\nমোট বিক্রি: ${totalSold.toFixed(2)} কেজি\n*বর্তমান মোট স্টক: ${totalRemaining.toFixed(2)} কেজি*`;
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'মাছের স্টক রিপোর্ট',
+          text: summaryText
+        });
+      } else {
+        pdf.save(fileName);
+        try {
+          await navigator.clipboard.writeText(summaryText);
+          alert(language === 'bn' ? 'স্টক রিপোর্ট PDF ডাউনলোড হয়েছে এবং বিবরণ ক্লিপবোর্ডে কপি হয়েছে!' : 'Stock Report PDF downloaded!');
+        } catch (e) {
+          alert(language === 'bn' ? 'স্টক রিপোর্ট PDF ডাউনলোড হয়েছে!' : 'Stock Report PDF downloaded!');
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error('Share failed', err);
+      }
+    }
+  };
+
+  const handleWhatsAppStockPdf = async () => {
+    try {
+      const res = await generateStockPdf();
+      const summaryText = `*সামুদ্রিক মাছ নোটবুক - স্টক রিপোর্ট*\nমোট ক্রয়: ${totalPurchased.toFixed(2)} কেজি\nমোট বিক্রি: ${totalSold.toFixed(2)} কেজি\n*বর্তমান মোট স্টক: ${totalRemaining.toFixed(2)} কেজি*`;
+
+      if (res) {
+        const { pdf, pdfBlob, fileName } = res;
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'মাছের স্টক রিপোর্ট',
+            text: summaryText
+          });
+          return;
+        } else {
+          pdf.save(fileName);
+        }
+      }
+
+      window.open(`https://wa.me/?text=${encodeURIComponent(summaryText)}`, '_blank');
+    } catch (err) {
+      console.error('WhatsApp stock error', err);
+    }
+  };
+
   return (
     <div className="stock-screen" style={{ paddingBottom: '3rem' }}>
       {/* Header */}
@@ -233,6 +317,34 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
               <div style={{ fontSize: '0.68rem', color: '#72be44', textTransform: 'uppercase', letterSpacing: '0.5px' }}>বর্তমান মোট স্টক</div>
               <div style={{ fontSize: '1.12rem', fontWeight: 'bold', color: '#72be44' }}>{totalRemaining.toFixed(2)} <span style={{ fontSize: '0.72rem', fontWeight: 'normal' }}>কেজি</span></div>
             </div>
+          </div>
+
+          {/* Export Stock PDF actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button 
+              className="btn-icon" 
+              onClick={handleShareStockPdf}
+              title={language === 'bn' ? 'স্টক রিপোর্ট PDF শেয়ার করুন' : 'Share Stock PDF'}
+              style={{ background: 'rgba(255, 255, 255, 0.08)', borderRadius: '8px', padding: '6px', color: '#fff' }}
+            >
+              <Share2 size={18} />
+            </button>
+            <button 
+              className="btn-icon" 
+              onClick={handleWhatsAppStockPdf}
+              title={language === 'bn' ? 'WhatsApp-এ শেয়ার করুন' : 'Share on WhatsApp'}
+              style={{ background: 'rgba(37, 211, 102, 0.15)', border: '1px solid rgba(37, 211, 102, 0.3)', borderRadius: '8px', padding: '6px', color: '#25D366' }}
+            >
+              <MessageCircle size={18} />
+            </button>
+            <button 
+              className="btn-icon" 
+              onClick={handleDownloadStockPdf}
+              title={language === 'bn' ? 'স্টক রিপোর্ট PDF ডাউনলোড' : 'Download Stock PDF'}
+              style={{ background: 'rgba(114, 190, 68, 0.2)', border: '1px solid rgba(114, 190, 68, 0.4)', borderRadius: '8px', padding: '6px', color: '#72be44' }}
+            >
+              <Download size={18} />
+            </button>
           </div>
         </div>
       </div>
@@ -873,6 +985,74 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
           </div>
         </div>
       )}
+
+      {/* Hidden printable Stock Report for high quality PDF generation */}
+      <div style={{ position: 'fixed', left: '-9999px', top: 0, width: '800px', zIndex: -1 }}>
+        <div ref={stockReportRef} style={{ background: '#092115', color: '#ffffff', padding: '28px', fontFamily: 'sans-serif' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #72be44', paddingBottom: '14px', marginBottom: '16px' }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '22px', color: '#ffffff' }}>সামুদ্রিক মাছ নোটবুক</h1>
+              <h3 style={{ margin: '4px 0 0', fontSize: '15px', color: '#72be44' }}>
+                মাছের স্টক ইনভেন্টরি রিপোর্ট {selectedLot !== 'all' ? `(লট নং: ${selectedLot})` : '(সব লট)'}
+              </h3>
+            </div>
+            <div style={{ textAlign: 'right', fontSize: '12px', color: '#cbd5e1' }}>
+              <div>তারিখ: {new Date().toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+              <div>সময়: {new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' })}</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+            <div style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '8px 12px', textAlign: 'center' }}>
+              <div style={{ fontSize: '11px', color: '#94a3b8' }}>মোট ক্রয়</div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffffff' }}>{totalPurchased.toFixed(2)} কেজি</div>
+            </div>
+            <div style={{ flex: 1, background: 'rgba(255, 152, 0, 0.1)', border: '1px solid rgba(255, 152, 0, 0.3)', borderRadius: '8px', padding: '8px 12px', textAlign: 'center' }}>
+              <div style={{ fontSize: '11px', color: '#ffb74d' }}>মোট বিক্রি</div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#ffb74d' }}>{totalSold.toFixed(2)} কেজি</div>
+            </div>
+            <div style={{ flex: 1, background: 'rgba(114, 190, 68, 0.15)', border: '1px solid rgba(114, 190, 68, 0.4)', borderRadius: '8px', padding: '8px 12px', textAlign: 'center' }}>
+              <div style={{ fontSize: '11px', color: '#72be44' }}>বর্তমান মোট স্টক</div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#72be44' }}>{totalRemaining.toFixed(2)} কেজি</div>
+            </div>
+          </div>
+
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', color: '#ffffff' }}>
+            <thead>
+              <tr style={{ background: '#123020', borderBottom: '2px solid #72be44' }}>
+                <th style={{ padding: '8px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>নং</th>
+                <th style={{ padding: '8px', textAlign: 'left', border: '1px solid rgba(255,255,255,0.1)' }}>মাছের নাম</th>
+                <th style={{ padding: '8px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>লট</th>
+                <th style={{ padding: '8px', textAlign: 'right', border: '1px solid rgba(255,255,255,0.1)' }}>ক্রয় (কেজি)</th>
+                <th style={{ padding: '8px', textAlign: 'right', border: '1px solid rgba(255,255,255,0.1)' }}>বিক্রি (কেজি)</th>
+                <th style={{ padding: '8px', textAlign: 'right', border: '1px solid rgba(255,255,255,0.1)' }}>অবশিষ্ট স্টক (কেজি)</th>
+                <th style={{ padding: '8px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>অবস্থা</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedItems.map((item, idx) => (
+                <tr key={`print_${item.lotNumber}_${item.serialNo}_${idx}`} style={{ background: idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)' }}>
+                  <td style={{ padding: '6px 8px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.08)' }}>{idx + 1}</td>
+                  <td style={{ padding: '6px 8px', fontWeight: 'bold', border: '1px solid rgba(255,255,255,0.08)' }}>{item.name}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.08)' }}>লট {item.lotNumber}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', border: '1px solid rgba(255,255,255,0.08)' }}>{item.purchasedKg.toFixed(2)}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', border: '1px solid rgba(255,255,255,0.08)' }}>{item.soldKg.toFixed(2)}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 'bold', color: item.remainingKg > 0 ? '#4ade80' : '#f87171', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    {item.remainingKg.toFixed(2)}
+                  </td>
+                  <td style={{ padding: '6px 8px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    {item.status === 'out_of_stock' ? 'স্টক শেষ' : item.status === 'low_stock' ? 'স্টক কম' : 'স্টকে আছে'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px', fontSize: '11px', color: '#94a3b8', textAlign: 'center' }}>
+            সামুদ্রিক মাছ নোটবুক — ডিজিটাল ম্যানেজমেন্ট সিস্টেম
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

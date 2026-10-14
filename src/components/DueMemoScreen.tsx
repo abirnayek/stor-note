@@ -422,24 +422,124 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
   };
 
 
+  const generateDueMemoPdf = async (): Promise<{ pdf: jsPDF; pdfBlob: Blob; fileName: string } | null> => {
+    if (!memoRef.current) return null;
+    const canvas = await html2canvas(memoRef.current, { scale: 2, backgroundColor: '#092115' });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    const clientName = (memoState.name || 'Due').trim().replace(/\s+/g, '_');
+    const fileName = `Due_Memo_${clientName}_${dueType}_${dueId}.pdf`;
+    const pdfBlob = pdf.output('blob');
+    return { pdf, pdfBlob, fileName };
+  };
+
   const handleDownload = async () => {
-    if (memoRef.current) {
-      try {
-        const canvas = await html2canvas(memoRef.current, { scale: 2, backgroundColor: '#092115' });
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`Due_Memo_${dueType}_${dueId}.pdf`);
-      } catch (err) {
-        console.error('Failed to download PDF', err);
+    try {
+      const res = await generateDueMemoPdf();
+      if (!res) return;
+      res.pdf.save(res.fileName);
+    } catch (err) {
+      console.error('Failed to download PDF', err);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      const res = await generateDueMemoPdf();
+      if (!res) return;
+      const { pdf, pdfBlob, fileName } = res;
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+      const clientName = memoState.name || 'গ্রাহক';
+      const summaryText = `*সামুদ্রিক মাছ নোটবুক - বকেয়া মেমো*\nনাম: ${clientName}\nতারিখ: ${memoState.date || ''}\nমোট বিল: ৳ ${totalPrice.toFixed(2)}\nজমা: ৳ ${totalDeposit.toFixed(2)}\nবকেয়া: ৳ ${Math.max(0, totalDueAmount).toFixed(2)}`;
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `বকেয়া মেমো - ${clientName}`,
+          text: summaryText
+        });
+      } else {
+        pdf.save(fileName);
+        try {
+          await navigator.clipboard.writeText(summaryText);
+          alert(language === 'bn' 
+            ? 'মেমো PDF ফাইলটি ডাউনলোড হয়েছে এবং বিবরণ ক্লিপবোর্ডে কপি হয়েছে!' 
+            : 'Memo PDF downloaded and summary copied to clipboard!');
+        } catch (e) {
+          alert(language === 'bn' ? 'মেমো PDF ফাইলটি ডাউনলোড হয়েছে!' : 'Memo PDF downloaded!');
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error('Share failed', err);
       }
     }
   };
 
-  const shareUrl = window.location.href;
-  const shareText = `Check out this Due Memo (${dueType === 'regular' ? 'Regular' : dueType === 'permanent' ? 'Permanent' : 'Purchase'} Due)`;
+  const handleWhatsApp = async () => {
+    try {
+      const res = await generateDueMemoPdf();
+      const clientName = memoState.name || 'গ্রাহক';
+      const waText = `*সামুদ্রিক মাছ নোটবুক - বকেয়া মেমো*\nনাম: ${clientName}\nতারিখ: ${memoState.date || ''}\nমোবাইল: ${memoState.mobile || 'N/A'}\n----------------------------------\nমোট বিল: ৳ ${totalPrice.toFixed(2)}\nজমা: ৳ ${totalDeposit.toFixed(2)}\n*বর্তমান বকেয়া: ৳ ${Math.max(0, totalDueAmount).toFixed(2)}*\n\nধন্যবাদ!`;
+
+      let phone = (memoState.mobile || '').replace(/[^\d]/g, '');
+      if (phone.length === 11 && phone.startsWith('01')) {
+        phone = '88' + phone;
+      }
+
+      if (res) {
+        const { pdf, pdfBlob, fileName } = res;
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `বকেয়া মেমো - ${clientName}`,
+            text: waText
+          });
+          return;
+        } else {
+          pdf.save(fileName);
+        }
+      }
+
+      const waUrl = phone 
+        ? `https://wa.me/${phone}?text=${encodeURIComponent(waText)}`
+        : `https://wa.me/?text=${encodeURIComponent(waText)}`;
+      window.open(waUrl, '_blank');
+    } catch (err) {
+      console.error('WhatsApp error', err);
+    }
+  };
+
+  const handleEmail = async () => {
+    try {
+      const res = await generateDueMemoPdf();
+      const clientName = memoState.name || 'Customer';
+      const emailBody = `Due Memo - Samudrik Mach Notebook\nName: ${clientName}\nDate: ${memoState.date || ''}\nTotal: Tk ${totalPrice.toFixed(2)}\nPaid: Tk ${totalDeposit.toFixed(2)}\nDue Amount: Tk ${Math.max(0, totalDueAmount).toFixed(2)}\n\nThank you!`;
+
+      if (res) {
+        const { pdf, pdfBlob, fileName } = res;
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `Due Memo - ${clientName}`,
+            text: emailBody
+          });
+          return;
+        } else {
+          pdf.save(fileName);
+        }
+      }
+
+      window.open(`mailto:?subject=${encodeURIComponent(`Due Memo - ${clientName}`)}&body=${encodeURIComponent(emailBody)}`);
+    } catch (err) {
+      console.error('Email error', err);
+    }
+  };
 
   return (
     <div className="memo-screen">
@@ -462,13 +562,13 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
             <Redo size={24} />
           </button>
           <div className="share-group">
-            <button className="btn-icon action-fb" onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`)} title="Share on Facebook">
+            <button className="btn-icon action-fb" onClick={handleShare} title="Share Memo PDF">
               <Share2 size={24} />
             </button>
-            <button className="btn-icon action-wa" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(shareText + ' ' + shareUrl)}`)} title="Share on WhatsApp">
+            <button className="btn-icon action-wa" onClick={handleWhatsApp} title="Share PDF on WhatsApp">
               <MessageCircle size={24} />
             </button>
-            <button className="btn-icon action-mail" onClick={() => window.open(`mailto:?subject=Due Memo&body=${encodeURIComponent(shareText + ' ' + shareUrl)}`)} title="Share via Email">
+            <button className="btn-icon action-mail" onClick={handleEmail} title="Share PDF via Email">
               <Mail size={24} />
             </button>
           </div>

@@ -7,7 +7,10 @@ export const MemoLockIcon: React.FC<{ passwordKey: string }> = ({ passwordKey })
     const [pwd, setPwd] = useState('');
 
     useEffect(() => {
-        setLocked(!!localStorage.getItem(passwordKey));
+        const check = () => setLocked(!!localStorage.getItem(passwordKey));
+        check();
+        window.addEventListener('storage', check);
+        return () => window.removeEventListener('storage', check);
     }, [passwordKey]);
 
     const handleSave = () => {
@@ -18,7 +21,18 @@ export const MemoLockIcon: React.FC<{ passwordKey: string }> = ({ passwordKey })
             localStorage.removeItem(passwordKey);
             setLocked(false);
         }
+        window.dispatchEvent(new Event('storage'));
         setShowModal(false);
+    };
+
+    const handleRemove = () => {
+        if (window.confirm('আপনি কি নিশ্চিত এই পাসওয়ার্ডটি মুছে ফেলতে চান?')) {
+            localStorage.removeItem(passwordKey);
+            setLocked(false);
+            window.dispatchEvent(new Event('storage'));
+            setShowModal(false);
+            alert('পাসওয়ার্ড সফলভাবে মুছে ফেলা হয়েছে!');
+        }
     };
     
     return (
@@ -36,26 +50,36 @@ export const MemoLockIcon: React.FC<{ passwordKey: string }> = ({ passwordKey })
                 <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setShowModal(false); }} style={{ zIndex: 10000 }}>
                   <div className="modal-content" onClick={e => e.stopPropagation()} style={{ color: '#fff' }}>
                     <div className="modal-header" style={{ marginBottom: '1rem' }}>
-                      <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Set Memo Password</h2>
+                      <h2 style={{ margin: 0, fontSize: '1.2rem' }}>পাসওয়ার্ড সেট / পরিবর্তন</h2>
                     </div>
                     <div className="form-group">
-                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Password (Leave blank to remove)</label>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>নতুন পাসওয়ার্ড দিন (খালি রাখলে পাসওয়ার্ড মুছে যাবে)</label>
                       <input 
                         type="text" 
                         value={pwd}
                         onChange={e => setPwd(e.target.value)}
-                        placeholder="Enter password..."
+                        placeholder="পাসওয়ার্ড লিখুন..."
                         className="supplier-input"
                         style={{ width: '100%', padding: '0.75rem', borderRadius: '6px' }}
                         autoFocus
                       />
                     </div>
-                    <div className="modal-actions" style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+                    <div className="modal-actions" style={{ display: 'flex', gap: '0.8rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
                       <button className="btn btn-secondary" onClick={() => setShowModal(false)} style={{ flex: 1 }}>
-                        Cancel
+                        বাতিল
                       </button>
+                      {locked && (
+                        <button 
+                          type="button"
+                          className="btn" 
+                          onClick={handleRemove}
+                          style={{ flex: 1, background: '#ef4444', color: '#fff', border: 'none', fontWeight: 'bold' }}
+                        >
+                          পাসওয়ার্ড মুছুন
+                        </button>
+                      )}
                       <button className="btn btn-primary" onClick={handleSave} style={{ flex: 1 }}>
-                        Save
+                        সেভ করুন
                       </button>
                     </div>
                   </div>
@@ -99,9 +123,14 @@ export const ProtectedMemoWrapper: React.FC<ProtectedMemoWrapperProps> = ({
     const [isLocked, setIsLocked] = useState(false);
 
     useEffect(() => {
-        const saved = localStorage.getItem(passwordKey);
-        const bypass = localStorage.getItem('disableLotPassword') === 'true';
-        setIsLocked(!!(saved && saved.trim() !== '' && !bypass));
+        const check = () => {
+            const saved = localStorage.getItem(passwordKey);
+            const bypass = localStorage.getItem('disableLotPassword') === 'true';
+            setIsLocked(!!(saved && saved.trim() !== '' && !bypass));
+        };
+        check();
+        window.addEventListener('storage', check);
+        return () => window.removeEventListener('storage', check);
     }, [passwordKey]);
 
     const handleClick = (e: React.MouseEvent) => {
@@ -113,6 +142,40 @@ export const ProtectedMemoWrapper: React.FC<ProtectedMemoWrapperProps> = ({
             setPwd('');
         } else {
             onAccessGranted();
+        }
+    };
+
+    const handleRemovePassword = () => {
+        const saved = localStorage.getItem(passwordKey);
+        if (!saved) {
+            setIsLocked(false);
+            setShowPrompt(false);
+            return;
+        }
+
+        const proceedDelete = () => {
+            localStorage.removeItem(passwordKey);
+            setIsLocked(false);
+            setShowPrompt(false);
+            setPwd('');
+            window.dispatchEvent(new Event('storage'));
+            alert('পাসওয়ার্ড সফলভাবে মুছে ফেলা হয়েছে! এখন যে কেউ সরাসরি প্রবেশ করতে পারবে।');
+        };
+
+        if (pwd && pwd.trim() === saved.trim()) {
+            if (window.confirm('আপনি কি নিশ্চিত এই ফোল্ডার/মেমোর পাসওয়ার্ডটি মুছে ফেলতে চান?')) {
+                proceedDelete();
+            }
+        } else if (pwd && pwd.trim() !== saved.trim()) {
+            alert('ভুল পাসওয়ার্ড! পাসওয়ার্ড মুছতে বক্সে সঠিক পাসওয়ার্ডটি লিখে এই বাটনে ক্লিক করুন।');
+        } else {
+            const entered = window.prompt('পাসওয়ার্ডটি মুছে ফেলতে বর্তমান পাসওয়ার্ডটি লিখুন:');
+            if (entered === null) return;
+            if (entered.trim() === saved.trim()) {
+                proceedDelete();
+            } else {
+                alert('ভুল পাসওয়ার্ড! পাসওয়ার্ড মোছা হয়নি।');
+            }
         }
     };
 
@@ -266,12 +329,37 @@ export const ProtectedMemoWrapper: React.FC<ProtectedMemoWrapperProps> = ({
                           autoFocus
                         />
                       </div>
-                      <div className="modal-actions" style={{ display: 'flex', gap: '0.8rem' }}>
-                        <button type="button" className="btn btn-secondary" onClick={() => setShowPrompt(false)} style={{ flex: 1 }}>
-                          বাতিল
-                        </button>
-                        <button type="submit" className="btn btn-primary" style={{ flex: 1, background: 'linear-gradient(135deg, #ff9800, #f57c00)', border: 'none', color: '#fff', fontWeight: 'bold' }}>
-                          আনলক করুন
+                      <div className="modal-actions" style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginTop: '1rem' }}>
+                        <div style={{ display: 'flex', gap: '0.8rem' }}>
+                          <button type="button" className="btn btn-secondary" onClick={() => setShowPrompt(false)} style={{ flex: 1 }}>
+                            বাতিল
+                          </button>
+                          <button type="submit" className="btn btn-primary" style={{ flex: 1, background: 'linear-gradient(135deg, #ff9800, #f57c00)', border: 'none', color: '#fff', fontWeight: 'bold' }}>
+                            প্রবেশ করুন
+                          </button>
+                        </div>
+
+                        <button 
+                          type="button" 
+                          onClick={handleRemovePassword}
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            border: '1px solid rgba(239, 68, 68, 0.45)',
+                            color: '#f87171',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            fontSize: '0.86rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            fontWeight: 600,
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          <Unlock size={15} />
+                          <span>পাসওয়ার্ড মুছে ফেলুন (Remove Password)</span>
                         </button>
                       </div>
                     </form>

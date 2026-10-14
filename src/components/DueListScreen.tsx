@@ -60,10 +60,19 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
 
   const handleToggleCategory = (dueId: string, currentType: 'regular' | 'permanent' | 'purchase' | 'reseller', e: React.MouseEvent) => {
     e.stopPropagation();
-    const targetType = currentType === 'permanent' ? 'regular' : 'permanent';
+    // Cycle: regular -> permanent -> reseller -> regular
+    const targetType: 'regular' | 'permanent' | 'reseller' = 
+      currentType === 'regular' ? 'permanent' : currentType === 'permanent' ? 'reseller' : 'regular';
+
+    const targetLabel = targetType === 'regular'
+      ? (language === 'bn' ? 'সাধারণ বকেয়া' : 'Regular Due')
+      : targetType === 'permanent'
+        ? (language === 'bn' ? 'আড়তদারের বকেয়া' : 'Aratdar Due')
+        : (language === 'bn' ? 'রিসেলার বকেয়া' : 'Reseller Due');
+
     const confirmMsg = language === 'bn'
-      ? `এই মেমোটি ${targetType === 'regular' ? 'সাধারণ বকেয়া' : 'আড়তদারের বকেয়া'}-তে স্থানান্তর করতে চান?`
-      : `Move this memo to ${targetType === 'regular' ? 'Regular Due' : 'Aratdar Due'}?`;
+      ? `এই মেমোটি ${targetLabel}-তে স্থানান্তর করতে চান?`
+      : `Move this memo to ${targetLabel}?`;
 
     if (window.confirm(confirmMsg)) {
       changeDueCustomerType(dueId, targetType);
@@ -71,8 +80,13 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
     }
   };
 
-  const titleKey = dueType === 'regular' ? 'regularDue' : dueType === 'permanent' ? 'permanentDue' : 'purchaseDue';
-  const title = titleKey === 'purchaseDue' ? 'ক্রয় বকেয়া' : t(titleKey);
+  const title = dueType === 'regular'
+    ? t('regularDue')
+    : dueType === 'permanent'
+      ? t('permanentDue')
+      : dueType === 'reseller'
+        ? (language === 'bn' ? 'রিসেলার বকেয়া' : 'Reseller Due')
+        : (language === 'bn' ? 'ক্রয় বকেয়া' : 'Purchase Due');
 
   let setMsgCount = 0;
   let emptyMsgCount = 0;
@@ -264,36 +278,67 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
                     {/* Customer Type Indicator & Category Mover Button */}
                     {dueType !== 'purchase' && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                        <span style={{
-                          fontSize: '0.72rem',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          background: memo.customerType === 'permanent' ? 'rgba(171, 71, 188, 0.2)' : 'rgba(33, 150, 243, 0.2)',
-                          color: memo.customerType === 'permanent' ? '#ce93d8' : '#90caf9',
-                          border: `1px solid ${memo.customerType === 'permanent' ? 'rgba(171, 71, 188, 0.4)' : 'rgba(33, 150, 243, 0.4)'}`,
-                          fontWeight: 'bold'
-                        }}>
-                          {memo.customerType === 'permanent' ? 'আড়তদার' : 'সাধারণ ক্রেতা'}
-                        </span>
-                        <button
-                          onClick={(e) => handleToggleCategory(dueId, memo.customerType, e)}
-                          title={memo.customerType === 'permanent' ? 'সাধারণ বকেয়ায় স্থানান্তর করুন' : 'আড়তদারের বকেয়ায় স্থানান্তর করুন'}
-                          style={{
-                            background: 'rgba(255,255,255,0.08)',
-                            border: '1px solid rgba(255,255,255,0.2)',
-                            borderRadius: '4px',
-                            color: '#eee',
-                            fontSize: '0.7rem',
-                            padding: '2px 7px',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          <ArrowLeftRight size={11} />
-                          {memo.customerType === 'permanent' ? 'সাধারণে নিন' : 'আড়তদারে নিন'}
-                        </button>
+                        {(() => {
+                          const isReseller = memo.customerType === 'reseller';
+                          const isPermanent = memo.customerType === 'permanent';
+                          const bg = isReseller 
+                            ? 'rgba(0, 200, 83, 0.2)' 
+                            : isPermanent 
+                              ? 'rgba(171, 71, 188, 0.2)' 
+                              : 'rgba(33, 150, 243, 0.2)';
+                          const color = isReseller ? '#00e676' : isPermanent ? '#ce93d8' : '#90caf9';
+                          const border = isReseller 
+                            ? 'rgba(0, 200, 83, 0.4)' 
+                            : isPermanent 
+                              ? 'rgba(171, 71, 188, 0.4)' 
+                              : 'rgba(33, 150, 243, 0.4)';
+                          const label = isReseller 
+                            ? (language === 'bn' ? 'রিসেলার' : 'Reseller')
+                            : isPermanent 
+                              ? (language === 'bn' ? 'আড়তদার' : 'Aratdar')
+                              : (language === 'bn' ? 'সাধারণ ক্রেতা' : 'Regular Customer');
+
+                          const nextLabel = memo.customerType === 'regular'
+                            ? (language === 'bn' ? 'আড়তদারে নিন' : 'To Aratdar')
+                            : memo.customerType === 'permanent'
+                              ? (language === 'bn' ? 'রিসেলারে নিন' : 'To Reseller')
+                              : (language === 'bn' ? 'সাধারণে নিন' : 'To Regular');
+
+                          return (
+                            <>
+                              <span style={{
+                                fontSize: '0.72rem',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                background: bg,
+                                color: color,
+                                border: `1px solid ${border}`,
+                                fontWeight: 'bold'
+                              }}>
+                                {label}
+                              </span>
+                              <button
+                                onClick={(e) => handleToggleCategory(dueId, memo.customerType, e)}
+                                title={language === 'bn' ? 'ক্যাটাগরি স্থানান্তর করুন' : 'Change Due Category'}
+                                style={{
+                                  background: 'rgba(255,255,255,0.08)',
+                                  border: '1px solid rgba(255,255,255,0.2)',
+                                  borderRadius: '4px',
+                                  color: '#eee',
+                                  fontSize: '0.7rem',
+                                  padding: '2px 7px',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <ArrowLeftRight size={11} />
+                                {nextLabel}
+                              </button>
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>

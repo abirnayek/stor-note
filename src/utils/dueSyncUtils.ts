@@ -386,6 +386,10 @@ export const syncAllDueAccounts = (): {
       return;
     }
 
+    if (id.startsWith('purchase_')) {
+      localStorage.removeItem(`sales_memo_${id}`);
+    }
+
     const memo = getNormalizedMemo(id);
 
     // If completely empty draft with no entries, no name and 0 total, check if it was in user's active dues

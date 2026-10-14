@@ -50,7 +50,7 @@ const ResellerScreen: React.FC<ResellerScreenProps> = ({ onNavigate, onSelectMem
 
   const { language } = useLanguage();
   const devicePermission = localStorage.getItem('device_permission');
-  const hasEditPermission = devicePermission === 'admin';
+  const hasEditPermission = devicePermission === 'admin' || devicePermission === 'edit';
 
   const loadFolders = () => {
     try {
