@@ -9,7 +9,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
 import { getLotStock, getLotPurchaseItems, getAllPurchaseItems, type LotStockSummary, type LotPurchaseFishItem } from '../utils/stockUtils';
-import { parseMemoMonthYear } from '../utils/dateUtils';
+import { parseMemoMonthYear, MONTHS, enToBnDigits } from '../utils/dateUtils';
 
 
 interface SalesMemoScreenProps {
@@ -470,9 +470,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         
         let memoTimestamp = 0;
         if (stateToSave.isOriginalDate === false && stateToSave.customDate) {
-          const { month: parsedM, year: parsedY } = parseMemoMonthYear(stateToSave);
-          const dayMatch = stateToSave.customDate.match(/(?:^|[^\d])([1-9]|[12]\d|3[01])(?:[^\d]|$)/);
-          const day = dayMatch ? parseInt(dayMatch[1], 10) : 15;
+          const { month: parsedM, year: parsedY, day: parsedD } = parseMemoMonthYear(stateToSave);
+          const day = parsedD || 15;
           memoTimestamp = new Date(parsedY, parsedM - 1, day, 12, 0, 0).getTime();
         } else {
           memoTimestamp = tsMap[canonicalKey]
@@ -1525,12 +1524,22 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   )}
                 </div>
 
-                {memoState.updatedAt && (
+                {memoState.isOriginalDate === false && memoState.customDate ? (
+                  <div style={{ fontSize: '0.74rem', color: '#72be44', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
+                    {(() => {
+                      const { month: pM, year: pY } = parseMemoMonthYear(memoState);
+                      const mObj = MONTHS.find(m => m.index === pM);
+                      return (
+                        <span>🗓️ হিসাবের মাস: {mObj?.nameBn || ''} {enToBnDigits(pY)}</span>
+                      );
+                    })()}
+                  </div>
+                ) : memoState.updatedAt ? (
                   <div style={{ fontSize: '0.72rem', color: '#ffb74d', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span>পরিবর্তিত: {memoState.updatedAt}</span>
                     {memoState.updatedAtTime && <span>({memoState.updatedAtTime})</span>}
                   </div>
-                )}
+                ) : null}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span className="memo-label-dark" style={{ fontSize: '0.9rem' }}>{t('lotNoLabel')}</span>

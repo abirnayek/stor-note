@@ -99,7 +99,11 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         ts = Number(id);
       }
 
-      const { month: mIdx, year: mYear, dateStr, timeStr } = parseMemoMonthYear(memo, ts);
+      const { month: mIdx, year: mYear, dateStr, timeStr, day } = parseMemoMonthYear(memo, ts);
+
+      if (memo.isOriginalDate === false && memo.customDate && day) {
+        ts = new Date(mYear, mIdx - 1, day, 12, 0, 0).getTime();
+      }
 
       // Filter by this month & year
       if (mIdx !== monthIndex || mYear !== year) {
@@ -275,7 +279,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         status,
         statusText,
         statusColor,
-        dateStr: dateStr || memo.createdAt || '',
+        dateStr: (memo.isOriginalDate === false && memo.customDate) ? memo.customDate : (dateStr || memo.createdAt || ''),
         timeStr: timeStr || memo.createdAtTime || '',
         totalBill,
         paidAmount,

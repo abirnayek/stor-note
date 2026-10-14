@@ -38,10 +38,11 @@ export const enToBnDigits = (num: number | string): string => {
 export const parseMemoMonthYear = (
   memo: any,
   timestamp?: number
-): { month: number; year: number; dateStr: string; timeStr?: string } => {
+): { month: number; year: number; dateStr: string; timeStr?: string; day?: number } => {
   const now = new Date();
   let month = now.getMonth() + 1;
   let year = now.getFullYear();
+  let day: number | undefined = undefined;
   let dateStr = '';
   let timeStr = '';
 
@@ -79,7 +80,7 @@ export const parseMemoMonthYear = (
 
   if (rawDate) {
     dateStr = rawDate;
-    const converted = bnToEnDigits(rawDate).toLowerCase();
+    const converted = bnToEnDigits(rawDate).toLowerCase().trim();
 
     // 1. Check Bengali and English month keywords
     const monthPatterns: [RegExp, number][] = [
@@ -106,60 +107,82 @@ export const parseMemoMonthYear = (
       }
     }
 
-    if (!foundKeyword) {
-      // 2. Check ISO format: YYYY-MM-DD or YYYY/MM/DD
-      const isoMatch = converted.match(/(?:^|[^\d])(20\d{2})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})(?:[^\d]|$)/);
-      if (isoMatch) {
-        const y = parseInt(isoMatch[1], 10);
-        const m = parseInt(isoMatch[2], 10);
-        if (y >= 2000) year = y;
-        if (m >= 1 && m <= 12) month = m;
-        foundKeyword = true;
+    if (foundKeyword) {
+      // Extract numbers to identify day and year
+      const nums = (converted.match(/\d+/g) || []).map(Number);
+      if (nums.length === 1) {
+        if (nums[0] >= 2000 && nums[0] <= 2099) year = nums[0];
+        else if (nums[0] >= 1 && nums[0] <= 31) day = nums[0];
+        else if (nums[0] > 31 && nums[0] < 100) year = 2000 + nums[0];
+      } else if (nums.length >= 2) {
+        const y4 = nums.find(n => n >= 2000 && n <= 2099);
+        if (y4) {
+          year = y4;
+          const d = nums.find(n => n !== y4 && n >= 1 && n <= 31);
+          if (d) day = d;
+        } else {
+          // If two numbers e.g. 14, 26
+          if (nums[0] >= 1 && nums[0] <= 31) {
+            day = nums[0];
+            year = nums[1] < 100 ? 2000 + nums[1] : nums[1];
+          } else {
+            day = nums[1] >= 1 && nums[1] <= 31 ? nums[1] : undefined;
+            year = nums[0] < 100 ? 2000 + nums[0] : nums[0];
+          }
+        }
       }
-    }
+    } else {
+      // 2. Check 3-part date: DD-MM-YY, DD-MM-YYYY, DD/MM/YY, DD.MM.YY, YYYY-MM-DD
+      const parts3 = converted.match(/(?:^|[^\d])(\d{1,4})[\/\-\.\s](\d{1,2})[\/\-\.\s](\d{2,4})(?:[^\d]|$)/);
+      if (parts3) {
+        const p1 = parseInt(parts3[1], 10);
+        const p2 = parseInt(parts3[2], 10);
+        const p3 = parseInt(parts3[3], 10);
 
-    if (!foundKeyword) {
-      // 3. Check DD/MM/YYYY or DD-MM-YYYY format
-      const dmyMatch = converted.match(/(?:^|[^\d])(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})(?:[^\d]|$)/);
-      if (dmyMatch) {
-        const p2 = parseInt(dmyMatch[2], 10);
-        const p3 = parseInt(dmyMatch[3], 10);
-        if (p3 >= 2000) year = p3;
-        if (p2 >= 1 && p2 <= 12) month = p2;
-        foundKeyword = true;
+        if (p1 >= 2000) {
+          // YYYY-MM-DD
+          year = p1;
+          if (p2 >= 1 && p2 <= 12) month = p2;
+          if (p3 >= 1 && p3 <= 31) day = p3;
+        } else {
+          // DD-MM-YY or DD-MM-YYYY
+          if (p2 > 12 && p1 <= 12) {
+            month = p1;
+            day = p2;
+          } else {
+            day = p1;
+            if (p2 >= 1 && p2 <= 12) month = p2;
+          }
+          year = p3 < 100 ? 2000 + p3 : p3;
+        }
+      } else {
+        // 3. Check 2-part date: MM-YYYY, MM/YYYY, MM-YY, MM/YY
+        const parts2 = converted.match(/(?:^|[^\d])(\d{1,2})[\/\-\.\s](\d{2,4})(?:[^\d]|$)/);
+        if (parts2) {
+          const p1 = parseInt(parts2[1], 10);
+          const p2 = parseInt(parts2[2], 10);
+          if (p1 >= 1 && p1 <= 12) {
+            month = p1;
+            year = p2 < 100 ? 2000 + p2 : p2;
+          }
+        }
       }
-    }
-
-    if (!foundKeyword) {
-      // 4. Check MM/YYYY format
-      const myMatch = converted.match(/(?:^|[^\d])(\d{1,2})[\/\-\.](\d{4})(?:[^\d]|$)/);
-      if (myMatch) {
-        const m = parseInt(myMatch[1], 10);
-        const y = parseInt(myMatch[2], 10);
-        if (y >= 2000) year = y;
-        if (m >= 1 && m <= 12) month = m;
-        foundKeyword = true;
-      }
-    }
-
-    // Extract 4 digit year anywhere in string
-    const yearMatch = converted.match(/(?:^|[^\d])(20\d{2})(?:[^\d]|$)/);
-    if (yearMatch) {
-      year = parseInt(yearMatch[1], 10);
     }
   } else if (timestamp && timestamp > 0) {
     const d = new Date(timestamp);
     if (!isNaN(d.getTime())) {
       month = d.getMonth() + 1;
       year = d.getFullYear();
+      day = d.getDate();
     }
   } else if (memo?.id && !isNaN(Number(memo.id)) && Number(memo.id) > 1000000000) {
     const d = new Date(Number(memo.id));
     if (!isNaN(d.getTime())) {
       month = d.getMonth() + 1;
       year = d.getFullYear();
+      day = d.getDate();
     }
   }
 
-  return { month, year, dateStr, timeStr };
+  return { month, year, dateStr, timeStr, day };
 };
