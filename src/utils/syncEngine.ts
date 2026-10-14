@@ -641,6 +641,22 @@ export const setupRealtimeSync = () => {
         }
       }
     })
+    .on('broadcast', { event: 'global_force_logout' }, async ({ payload }: any) => {
+      const myDeviceId = localStorage.getItem('device_id');
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (payload?.except_device_id && myDeviceId === payload.except_device_id) {
+        return;
+      }
+      if (isLocalhost && payload?.except_localhost) {
+        return;
+      }
+      localStorage.removeItem('cached_is_authenticated');
+      localStorage.removeItem('cached_user_session');
+      localStorage.removeItem('device_permission');
+      try { await supabase.auth.signOut(); } catch(e) {}
+      localStorage.clear();
+      window.location.reload();
+    })
     .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -679,6 +695,65 @@ export const broadcastDevicePermission = (deviceId: string, permission: string) 
         payload: { device_id: deviceId, permission }
       });
     } catch (e) {}
+  }
+};
+
+export const forceLogoutEverywhere = async (exceptCurrentDevice: boolean = true) => {
+  const activeUser = currentUser || getStoredUserCached();
+  const currentDeviceId = localStorage.getItem('device_id');
+  const now = Date.now();
+
+  localStorage.setItem('force_logout_timestamp', now.toString());
+  if (exceptCurrentDevice) {
+    localStorage.setItem('device_login_timestamp', (now + 5000).toString());
+  }
+
+  if (activeUser && navigator.onLine) {
+    // 1. Write force_logout_timestamp to cloud user_backups so any device syncs it
+    try {
+      await supabase.from('user_backups').upsert({
+        user_id: activeUser.id,
+        key: 'force_logout_timestamp',
+        value: now.toString(),
+        updated_at: new Date(now).toISOString()
+      });
+    } catch (e) {}
+
+    // 2. Mark all active_sessions in database as revoked
+    try {
+      if (exceptCurrentDevice && currentDeviceId) {
+        await supabase.from('active_sessions')
+          .update({ status: 'revoked' })
+          .neq('device_id', currentDeviceId);
+      } else {
+        await supabase.from('active_sessions')
+          .update({ status: 'revoked' });
+      }
+    } catch (e) {}
+
+    // 3. Send real-time broadcast to instantly terminate all running sessions
+    try {
+      if (realtimeChannel) {
+        realtimeChannel.send({
+          type: 'broadcast',
+          event: 'global_force_logout',
+          payload: {
+            timestamp: now,
+            except_device_id: exceptCurrentDevice ? currentDeviceId : null,
+            except_localhost: exceptCurrentDevice
+          }
+        });
+      }
+    } catch (e) {}
+  }
+
+  if (!exceptCurrentDevice) {
+    localStorage.removeItem('cached_is_authenticated');
+    localStorage.removeItem('cached_user_session');
+    localStorage.removeItem('device_permission');
+    try { await supabase.auth.signOut(); } catch(e) {}
+    localStorage.clear();
+    window.location.reload();
   }
 };
 

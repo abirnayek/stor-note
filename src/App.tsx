@@ -216,19 +216,42 @@ function App() {
               if (!navigator.onLine) return;
               if (isLocalhost) return; // Localhost development is always admin, never kicked out
 
-              const currentId = localStorage.getItem('device_id');
-              if (!currentId) {
-                // If logged in on phone but no deviceId recorded, clear and re-login with valid tracking
-                localStorage.removeItem('cached_is_authenticated');
-                localStorage.removeItem('cached_user_session');
-                localStorage.removeItem('device_permission');
-                try { await supabase.auth.signOut(); } catch(e) {}
-                localStorage.clear();
-                window.location.reload();
-                return;
-              }
-
               try {
+                // 1. Direct cloud check for force_logout_timestamp
+                const { data: forceLogoutData } = await supabase
+                  .from('user_backups')
+                  .select('value')
+                  .eq('key', 'force_logout_timestamp')
+                  .maybeSingle();
+
+                const cloudForceLogoutTs = forceLogoutData?.value ? Number(forceLogoutData.value) : 0;
+                const localForceLogoutTs = Number(localStorage.getItem('force_logout_timestamp') || '0');
+                const effectiveForceLogoutTs = Math.max(cloudForceLogoutTs, localForceLogoutTs);
+                const myLoginTs = Number(localStorage.getItem('device_login_timestamp') || '0');
+
+                if (effectiveForceLogoutTs > 0 && myLoginTs < effectiveForceLogoutTs) {
+                  console.warn('[Security] Device logged in before force_logout_timestamp. Logging out...');
+                  localStorage.removeItem('cached_is_authenticated');
+                  localStorage.removeItem('cached_user_session');
+                  localStorage.removeItem('device_permission');
+                  try { await supabase.auth.signOut(); } catch(e) {}
+                  localStorage.clear();
+                  window.location.reload();
+                  return;
+                }
+
+                const currentId = localStorage.getItem('device_id');
+                if (!currentId) {
+                  // If logged in on phone but no deviceId recorded, clear and re-login with valid tracking
+                  localStorage.removeItem('cached_is_authenticated');
+                  localStorage.removeItem('cached_user_session');
+                  localStorage.removeItem('device_permission');
+                  try { await supabase.auth.signOut(); } catch(e) {}
+                  localStorage.clear();
+                  window.location.reload();
+                  return;
+                }
+
                 const { data, error } = await supabase
                   .from('active_sessions')
                   .select('status, permission')

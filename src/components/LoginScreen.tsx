@@ -78,6 +78,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         }, { onConflict: 'device_id' });
         
         localStorage.setItem('device_permission', initialPermission);
+        localStorage.setItem('device_login_timestamp', Date.now().toString());
         localStorage.setItem('cached_is_authenticated', 'true');
         localStorage.setItem('cached_user_session', JSON.stringify({ user: authData.user, id: authData.user.id, email: authData.user.email }));
       }

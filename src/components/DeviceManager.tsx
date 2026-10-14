@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Trash2, Shield, ShieldAlert, Monitor, Smartphone } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
-import { broadcastDeviceKickout, broadcastDevicePermission } from '../utils/syncEngine';
+import { broadcastDeviceKickout, broadcastDevicePermission, forceLogoutEverywhere } from '../utils/syncEngine';
 
 interface DeviceManagerProps {
   onClose: () => void;
@@ -19,7 +19,10 @@ interface Session {
 const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [kickoutLoading, setKickoutLoading] = useState(false);
   const currentDeviceId = localStorage.getItem('device_id');
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const isAdmin = isLocalhost || localStorage.getItem('device_permission') === 'admin';
 
   useEffect(() => {
     fetchSessions();
@@ -66,17 +69,17 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
   };
 
   const handleKickOutAllOthers = async () => {
-    if (!currentDeviceId) return;
-    if (window.confirm("আপনি কি এই ডিভাইস ছাড়া অন্য সকল ডিভাইস অবিলম্বে লগআউট করতে চান?")) {
-      const otherSessions = sessions.filter(s => s.device_id !== currentDeviceId);
-      for (const s of otherSessions) {
-        await supabase
-          .from('active_sessions')
-          .update({ status: 'revoked' })
-          .eq('device_id', s.device_id);
-        broadcastDeviceKickout(s.device_id);
+    if (window.confirm("আপনি কি এই ডিভাইস ছাড়া অন্য সকল ডিভাইস (পূর্বের ও বর্তমান সব লগইন) অবিলম্বে লগআউট করতে চান?")) {
+      setKickoutLoading(true);
+      try {
+        await forceLogoutEverywhere(true);
+        await fetchSessions();
+        alert("সকল অন্যান্য ডিভাইস সফলভাবে লগআউট করা হয়েছে।");
+      } catch (e: any) {
+        alert("Error logging out devices: " + (e?.message || e));
+      } finally {
+        setKickoutLoading(false);
       }
-      fetchSessions();
     }
   };
 
@@ -167,26 +170,29 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
                   </div>
                 </div>
               ))}
-            {sessions.filter(s => s.device_id !== currentDeviceId).length > 0 && (
+            {isAdmin && (
               <button 
                 onClick={handleKickOutAllOthers}
+                disabled={kickoutLoading}
                 style={{
-                  marginTop: '1rem',
-                  padding: '0.8rem',
+                  marginTop: '1.2rem',
+                  padding: '0.85rem',
                   background: 'rgba(255, 82, 82, 0.15)',
                   border: '1px solid #ff5252',
                   borderRadius: '8px',
                   color: '#ff5252',
                   fontWeight: 'bold',
-                  cursor: 'pointer',
+                  cursor: kickoutLoading ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '0.5rem',
-                  width: '100%'
+                  width: '100%',
+                  opacity: kickoutLoading ? 0.7 : 1,
+                  fontSize: '0.95rem'
                 }}
               >
-                <Trash2 size={16} /> অন্যান্য সকল ডিভাইস লগআউট করুন
+                <Trash2 size={18} /> {kickoutLoading ? 'লগআউট হচ্ছে...' : 'অন্যান্য সকল ডিভাইস থেকে অবিলম্বে ফোর্স লগআউট করুন'}
               </button>
             )}
               </>
