@@ -620,6 +620,27 @@ export const setupRealtimeSync = () => {
         handleIncomingData(payload.key, payload.value, payload.ts || Date.now(), payload.action || 'SET');
       }
     })
+    .on('broadcast', { event: 'device_kickout' }, async ({ payload }: any) => {
+      if (payload && payload.device_id) {
+        const myDeviceId = localStorage.getItem('device_id');
+        if (myDeviceId === payload.device_id) {
+          localStorage.removeItem('cached_is_authenticated');
+          localStorage.removeItem('cached_user_session');
+          try { await supabase.auth.signOut(); } catch(e) {}
+          localStorage.clear();
+          window.location.reload();
+        }
+      }
+    })
+    .on('broadcast', { event: 'device_permission_change' }, ({ payload }: any) => {
+      if (payload && payload.device_id) {
+        const myDeviceId = localStorage.getItem('device_id');
+        if (myDeviceId === payload.device_id && payload.permission) {
+          localStorage.setItem('device_permission', payload.permission);
+          window.dispatchEvent(new Event('settingsChange'));
+        }
+      }
+    })
     .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -635,6 +656,30 @@ export const setupRealtimeSync = () => {
         }
     })
     .subscribe();
+};
+
+export const broadcastDeviceKickout = (deviceId: string) => {
+  if (realtimeChannel) {
+    try {
+      realtimeChannel.send({
+        type: 'broadcast',
+        event: 'device_kickout',
+        payload: { device_id: deviceId }
+      });
+    } catch (e) {}
+  }
+};
+
+export const broadcastDevicePermission = (deviceId: string, permission: string) => {
+  if (realtimeChannel) {
+    try {
+      realtimeChannel.send({
+        type: 'broadcast',
+        event: 'device_permission_change',
+        payload: { device_id: deviceId, permission }
+      });
+    } catch (e) {}
+  }
 };
 
 export const pushUnsyncedLocalData = async (forceAll: boolean = false) => {

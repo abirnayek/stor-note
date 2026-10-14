@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Trash2, Shield, ShieldAlert, Monitor, Smartphone } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
+import { broadcastDeviceKickout, broadcastDevicePermission } from '../utils/syncEngine';
 
 interface DeviceManagerProps {
   onClose: () => void;
@@ -46,6 +47,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
         .eq('device_id', deviceId);
         
       if (!error) {
+        broadcastDeviceKickout(deviceId);
         fetchSessions();
       }
     }
@@ -58,6 +60,7 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
       .eq('device_id', deviceId);
       
     if (!error) {
+      broadcastDevicePermission(deviceId, newPermission);
       fetchSessions();
     }
   };
