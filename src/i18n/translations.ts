@@ -16,6 +16,8 @@ export const translations = {
     currentDue: 'বর্তমান বকেয়া:',
     totalBill: 'মোট বিল',
     grandTotal: 'সর্বমোট',
+    excessReturn: 'অতিরিক্ত জমা (ফেরত):',
+    excessReturnHint: 'গ্রাহককে ফেরত দিতে হবে',
 
     appTitle: 'সামুদ্রিক মাছ নোটবুক',
     memoHeaderTitle: 'সামুদ্রিক মাছ',
@@ -175,6 +177,8 @@ export const translations = {
     currentDue: 'Current Due:',
     totalBill: 'Total Bill',
     grandTotal: 'Grand Total',
+    excessReturn: 'Excess / Change Due:',
+    excessReturnHint: 'Refund to customer',
 
     appTitle: 'Sea Fish Notebook',
     memoHeaderTitle: 'Sea Fish',

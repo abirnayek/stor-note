@@ -708,10 +708,16 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
                   style={{ width: '100%', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-color)', padding: '5px', borderRadius: '4px', textAlign: 'center', fontWeight: 'bold' }}
                 />
               </div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
-                  <span style={{ display: 'inline-block', width: '120px' }}>{t('totalDue')}</span> 
-                  <span style={{ color: '#ff9800' }}>{totalDueAmount.toFixed(2)}</span>
+              <div style={{ fontSize: '1.2rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '0.5rem', marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ display: 'inline-block' }}>{t('totalDue')}</span> 
+                  <span style={{ color: totalDueAmount > 0 ? '#ff9800' : '#72be44' }}>{Math.max(0, totalDueAmount).toFixed(2)}</span>
               </div>
+              {totalDueAmount < 0 && (
+                <div style={{ fontSize: '0.95rem', fontWeight: 'bold', marginTop: '0.4rem', color: '#00e676', display: 'flex', justifyContent: 'space-between', background: 'rgba(0, 230, 118, 0.1)', padding: '5px 8px', borderRadius: '5px', border: '1px solid rgba(0, 230, 118, 0.3)' }}>
+                  <span>↩️ {language === 'bn' ? 'অতিরিক্ত জমা (ফেরত):' : 'Excess / Return:'}</span>
+                  <span>৳ {Math.abs(totalDueAmount).toFixed(2)}</span>
+                </div>
+              )}
             </div>
           </div>
 

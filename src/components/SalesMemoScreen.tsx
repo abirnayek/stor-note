@@ -930,7 +930,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       if (!blob) return;
 
       const file = new File([blob], cleanFileName, { type: 'image/png' });
-      const summaryText = `*সামুদ্রিক মাছ নোটবুক - বিক্রয় মেমো*\nক্রেতা: ${customerName}\nতারিখ: ${memoState.customDate || memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\nমোট বিল: ৳ ${grandTotal.toFixed(2)}\nজমা: ৳ ${(Number(memoState.paidAmount) || 0).toFixed(2)}\nবকেয়া: ৳ ${dueAmount.toFixed(2)}`;
+      const paidVal = Number(memoState.paidAmount) || 0;
+      const excessVal = (paidVal > grandTotal && grandTotal > 0) ? Math.round((paidVal - grandTotal) * 100) / 100 : 0;
+      const summaryText = `*সামুদ্রিক মাছ নোটবুক - বিক্রয় মেমো*\nক্রেতা: ${customerName}\nতারিখ: ${memoState.customDate || memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\nমোট বিল: ৳ ${grandTotal.toFixed(2)}\nজমা: ৳ ${paidVal.toFixed(2)}\n${excessVal > 0 ? `বকেয়া: ৳ 0.00\nঅতিরিক্ত জমা (ফেরত): ৳ ${excessVal.toFixed(2)}` : `বকেয়া: ৳ ${dueAmount.toFixed(2)}`}`;
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
@@ -984,7 +986,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         }
       });
 
-      const waText = `*সামুদ্রিক মাছ নোটবুক - বিক্রয় মেমো*\nক্রেতা: ${customerName}\nমোবাইল: ${memoState.mobile || 'N/A'}\nতারিখ: ${memoState.customDate || memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\n----------------------------------\n*পণ্যের বিবরণ:*${itemsText}\n----------------------------------\nমাছের মোট মূল্য: ৳ ${fishTotal.toFixed(2)}${commissionAmount > 0 ? `\nকমিশন: ${(memoState.commissionOperation || 'subtract') === 'add' ? '+' : '-'} ৳ ${commissionAmount.toFixed(2)}` : ''}${totalDeductions > 0 ? `\nকর্তন/ছাড়: - ৳ ${totalDeductions.toFixed(2)}` : ''}\n*চূড়ান্ত মোট বিল: ৳ ${grandTotal.toFixed(2)}*\nজমা: ৳ ${(Number(memoState.paidAmount) || 0).toFixed(2)}\n*বকেয়া: ৳ ${dueAmount.toFixed(2)}*\n\nধন্যবাদ!`;
+      const paidVal = Number(memoState.paidAmount) || 0;
+      const excessVal = (paidVal > grandTotal && grandTotal > 0) ? Math.round((paidVal - grandTotal) * 100) / 100 : 0;
+      const waText = `*সামুদ্রিক মাছ নোটবুক - বিক্রয় মেমো*\nক্রেতা: ${customerName}\nমোবাইল: ${memoState.mobile || 'N/A'}\nতারিখ: ${memoState.customDate || memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\n----------------------------------\n*পণ্যের বিবরণ:*${itemsText}\n----------------------------------\nমাছের মোট মূল্য: ৳ ${fishTotal.toFixed(2)}${commissionAmount > 0 ? `\nকমিশন: ${(memoState.commissionOperation || 'subtract') === 'add' ? '+' : '-'} ৳ ${commissionAmount.toFixed(2)}` : ''}${totalDeductions > 0 ? `\nকর্তন/ছাড়: - ৳ ${totalDeductions.toFixed(2)}` : ''}\n*চূড়ান্ত মোট বিল: ৳ ${grandTotal.toFixed(2)}*\nজমা: ৳ ${paidVal.toFixed(2)}\n${excessVal > 0 ? `*বকেয়া: ৳ 0.00*\n*গ্রাহককে ফেরত: ৳ ${excessVal.toFixed(2)}*` : `*বকেয়া: ৳ ${dueAmount.toFixed(2)}*`}\n\nধন্যবাদ!`;
 
       let phone = (memoState.mobile || '').replace(/[^\d]/g, '');
       if (phone.length === 11 && phone.startsWith('01')) {
@@ -1036,7 +1040,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         }
       });
 
-      const emailBody = `Sales Memo - Samudrik Mach Notebook\nCustomer: ${customerName}\nDate: ${memoState.customDate || memoState.createdAt || today}\nLot: ${lotNumber || 'N/A'}\n----------------------------------\nItems:${itemsText}\n----------------------------------\nFish Total: Tk ${fishTotal.toFixed(2)}\nNet Total: Tk ${grandTotal.toFixed(2)}\nPaid: Tk ${(Number(memoState.paidAmount) || 0).toFixed(2)}\nDue: Tk ${dueAmount.toFixed(2)}\n\nThank you!`;
+      const paidVal = Number(memoState.paidAmount) || 0;
+      const excessVal = (paidVal > grandTotal && grandTotal > 0) ? Math.round((paidVal - grandTotal) * 100) / 100 : 0;
+      const emailBody = `Sales Memo - Samudrik Mach Notebook\nCustomer: ${customerName}\nDate: ${memoState.customDate || memoState.createdAt || today}\nLot: ${lotNumber || 'N/A'}\n----------------------------------\nItems:${itemsText}\n----------------------------------\nFish Total: Tk ${fishTotal.toFixed(2)}\nNet Total: Tk ${grandTotal.toFixed(2)}\nPaid: Tk ${paidVal.toFixed(2)}\n${excessVal > 0 ? `Due: Tk 0.00\nChange / Refund: Tk ${excessVal.toFixed(2)}` : `Due: Tk ${dueAmount.toFixed(2)}`}\n\nThank you!`;
 
       if (canvas) {
         const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
@@ -1177,7 +1183,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   } else {
     grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions + commissionAmount) * 100) / 100);
   }
-  const dueAmount = Math.max(0, Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100);
+  const paidNum = Number(memoState.paidAmount || 0);
+  const dueAmount = Math.max(0, Math.round((grandTotal - paidNum) * 100) / 100);
+  const excessAmount = (paidNum > grandTotal && grandTotal > 0) ? Math.round((paidNum - grandTotal) * 100) / 100 : 0;
 
   const totalKgSum = memoState.entries.reduce((sum, entry) => {
     const kg = Number(entry.totalKg) || 0;
@@ -2525,6 +2533,10 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                       <span style={{ background: 'rgba(255, 152, 0, 0.15)', color: '#ffb74d', border: '1px solid rgba(255, 152, 0, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                         <AlertCircle size={12} /> {language === 'bn' ? 'বকেয়া মেমো' : 'Due Memo'}
                       </span>
+                    ) : excessAmount > 0 ? (
+                      <span style={{ background: 'rgba(52, 211, 153, 0.18)', color: '#34d399', border: '1px solid rgba(52, 211, 153, 0.45)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <CheckCircle2 size={12} /> {language === 'bn' ? `পরিশোধিত (ফেরত: ৳ ${excessAmount.toFixed(2)})` : `Paid (Refund: ৳ ${excessAmount.toFixed(2)})`}
+                      </span>
                     ) : grandTotal > 0 ? (
                       <span style={{ background: 'rgba(114, 190, 68, 0.15)', color: '#72be44', border: '1px solid rgba(114, 190, 68, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                         <CheckCircle2 size={12} /> {language === 'bn' ? 'পরিশোধিত' : 'Paid in Full'}
@@ -2798,7 +2810,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                     Due (Baki):
                   </span>
                   {dueAmount === 0 && grandTotal > 0 && (
-                    <span style={{ fontSize: '0.7rem', color: '#72be44', fontWeight: 600 }}>
+                    <span style={{ fontSize: '0.7rem', color: excessAmount > 0 ? '#34d399' : '#72be44', fontWeight: 600 }}>
                       {language === 'bn' ? '✔ পরিশোধিত' : 'Paid in full'}
                     </span>
                   )}
@@ -2811,6 +2823,38 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   ৳ {dueAmount.toFixed(2)}
                 </span>
               </div>
+
+              {/* Excess Payment / Return to Customer */}
+              {excessAmount > 0 && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(5, 150, 105, 0.28) 100%)',
+                  border: '1px solid rgba(52, 211, 153, 0.5)',
+                  padding: '0.55rem 0.75rem',
+                  borderRadius: '8px',
+                  marginTop: '0.5rem',
+                  boxShadow: '0 2px 10px rgba(0, 0, 0, 0.25)'
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: '0.88rem', fontWeight: 'bold', color: '#34d399', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span>↩️</span> {t('excessReturn') || (language === 'bn' ? 'অতিরিক্ত জমা (ফেরত):' : 'Excess / Change Due:')}
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: '#a7f3d0', fontWeight: 600 }}>
+                      {t('excessReturnHint') || (language === 'bn' ? 'গ্রাহককে ফেরত দিতে হবে' : 'Refund to customer')}
+                    </span>
+                  </div>
+                  <span style={{
+                    fontWeight: 'bold',
+                    color: '#34d399',
+                    fontSize: '1.25rem',
+                    textShadow: '0 0 10px rgba(52, 211, 153, 0.35)'
+                  }}>
+                    ৳ {excessAmount.toFixed(2)}
+                  </span>
+                </div>
+              )}
             </div>
 
           </div>

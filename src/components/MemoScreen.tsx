@@ -945,9 +945,19 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
             <div className="summary-card-dark" style={{ borderLeft: '4px solid #ff5252', flex: '1 1 200px' }}>
               <span className="memo-label-dark">{t('currentDue') || 'বর্তমান বাকি'}</span>
               <span className="calc-value" style={{ fontSize: '1.2rem', color: (mainPrice - Number(memoState.paidAmount || 0)) > 0 ? '#ff5252' : '#72be44' }}>
-                {(mainPrice - Number(memoState.paidAmount || 0)).toFixed(2)}
+                {Math.max(0, mainPrice - Number(memoState.paidAmount || 0)).toFixed(2)}
               </span>
             </div>
+            {Number(memoState.paidAmount || 0) > mainPrice && mainPrice > 0 && (
+              <div className="summary-card-dark" style={{ borderLeft: '4px solid #00e676', flex: '1 1 200px', background: 'rgba(0, 230, 118, 0.08)' }}>
+                <span className="memo-label-dark" style={{ color: '#00e676', fontWeight: 600 }}>
+                  {language === 'bn' ? 'অতিরিক্ত জমা (ফেরত):' : 'Excess / Return:'}
+                </span>
+                <span className="calc-value" style={{ fontSize: '1.2rem', color: '#00e676', fontWeight: 'bold' }}>
+                  ৳ {(Number(memoState.paidAmount || 0) - mainPrice).toFixed(2)}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Real-time Fish Stock Line & Section */}
