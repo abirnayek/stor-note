@@ -129,7 +129,14 @@ export const ProtectedMemoWrapper: React.FC<ProtectedMemoWrapperProps> = ({
 
     return (
         <div 
-            style={{ position: 'relative', width: '100%', height: '100%', cursor: 'pointer' }}
+            style={{ 
+                position: 'relative', 
+                width: '100%', 
+                height: '100%', 
+                cursor: 'pointer',
+                borderRadius: '14px',
+                overflow: 'hidden'
+            }}
             onClick={handleClick}
             draggable={draggable}
             onDragStart={onDragStart}
@@ -144,10 +151,10 @@ export const ProtectedMemoWrapper: React.FC<ProtectedMemoWrapperProps> = ({
                     width: '100%',
                     height: '100%',
                     ...(isLocked ? {
-                        filter: 'blur(3.5px)',
-                        WebkitFilter: 'blur(3.5px)',
+                        filter: 'blur(4px)',
+                        WebkitFilter: 'blur(4px)',
                         userSelect: 'none' as const,
-                        opacity: 0.88,
+                        opacity: 0.75,
                     } : {}),
                     transition: 'filter 0.2s ease, opacity 0.2s ease',
                 }}
@@ -169,9 +176,11 @@ export const ProtectedMemoWrapper: React.FC<ProtectedMemoWrapperProps> = ({
                         cursor: 'pointer',
                         zIndex: 20,
                         borderRadius: '14px',
-                        border: '1.5px solid rgba(255, 152, 0, 0.85)',
-                        boxShadow: '0 0 16px rgba(255, 152, 0, 0.25), inset 0 0 10px rgba(0, 0, 0, 0.4)',
-                        background: 'rgba(8, 20, 14, 0.78)',
+                        border: '1.5px solid rgba(255, 152, 0, 0.9)',
+                        boxShadow: '0 0 16px rgba(255, 152, 0, 0.3), inset 0 0 12px rgba(0, 0, 0, 0.6)',
+                        background: 'rgba(9, 22, 16, 0.88)',
+                        backdropFilter: 'blur(6px)',
+                        WebkitBackdropFilter: 'blur(6px)',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',

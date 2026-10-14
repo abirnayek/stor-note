@@ -6,7 +6,7 @@ import {
   Edit3, ArrowRight, X 
 } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
-import { getAllGlobalSalesMemos, getAratdarMemos, deleteSalesMemoCompletely, type SalesMemoGlobalItem } from '../utils/dueSyncUtils';
+import { getAllGlobalSalesMemos, getAratdarMemos, deleteSalesMemoCompletely, moveSalesMemoToFolder, type SalesMemoGlobalItem } from '../utils/dueSyncUtils';
 import { moveToTrash } from '../utils/trashUtils';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 
@@ -259,56 +259,15 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
   };
 
   const moveMemoToFolder = (memoId: string, folderId: string) => {
-    const targetFolder = folders.find(f => f.id === folderId);
-    const memo = memos.find(m => m.id === memoId);
-    if (!targetFolder || !memo) return;
+    const targetFolder = folders.find(f => String(f.id) === String(folderId));
+    if (!targetFolder) return;
 
-    // 1. Update canonical sales_memo_${memoId}
-    const memoKey = `sales_memo_${memoId}`;
-    const memoStr = localStorage.getItem(memoKey);
-    if (memoStr) {
-      try {
-        const parsed = JSON.parse(memoStr);
-        parsed.folderId = folderId;
-        parsed.folderName = targetFolder.name;
-        if (parsed.memoState) {
-          parsed.memoState.folderId = folderId;
-          parsed.memoState.folderName = targetFolder.name;
-        }
-        localStorage.setItem(memoKey, JSON.stringify(parsed));
-      } catch (err) {}
-    }
-
-    // 2. Also update any lot-specific keys sales_memo_lot_*_memo_${memoId}
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith('sales_memo_lot_') && k.endsWith(`_memo_${memoId}`)) {
-        try {
-          const obj = JSON.parse(localStorage.getItem(k) || '{}');
-          obj.folderId = folderId;
-          obj.folderName = targetFolder.name;
-          if (obj.memoState) {
-            obj.memoState.folderId = folderId;
-            obj.memoState.folderName = targetFolder.name;
-          }
-          localStorage.setItem(k, JSON.stringify(obj));
-        } catch (e) {}
-      }
-    }
-
-    try {
-      const tsRaw = localStorage.getItem('local_timestamps');
-      let tsMap: Record<string, number> = tsRaw ? JSON.parse(tsRaw) : {};
-      tsMap[memoKey] = Date.now();
-      localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
-    } catch (err) {}
-
-    window.dispatchEvent(new Event('storage'));
+    const res = moveSalesMemoToFolder(memoId, folderId, targetFolder.name);
     loadMemos();
 
     const msg = language === 'bn'
-      ? `"${memo.name || '#' + memo.id}" মেমোটি সফলভাবে "${targetFolder.name}" ফোল্ডারে সরানো হয়েছে!`
-      : `Memo "${memo.name || '#' + memo.id}" moved into "${targetFolder.name}" folder!`;
+      ? `"${res.memoTitle}" মেমোটি সফলভাবে "${targetFolder.name}" ফোল্ডারে সরানো হয়েছে!`
+      : `Memo "${res.memoTitle}" moved into "${targetFolder.name}" folder!`;
     setDropSuccessMsg(msg);
     setTimeout(() => setDropSuccessMsg(null), 3500);
   };
@@ -317,28 +276,11 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
     e.preventDefault();
     if (!movingMemo) return;
 
-    const matchedFolder = folders.find(f => f.id === targetFolderId);
-    const memoKey = `sales_memo_${movingMemo.id}`;
-    const memoStr = localStorage.getItem(memoKey);
-    if (memoStr) {
-      try {
-        const parsed = JSON.parse(memoStr);
-        parsed.folderId = targetFolderId || '';
-        parsed.folderName = matchedFolder ? matchedFolder.name : '';
-        localStorage.setItem(memoKey, JSON.stringify(parsed));
-      } catch (err) {}
-    }
-
-    try {
-      const tsRaw = localStorage.getItem('local_timestamps');
-      let tsMap: Record<string, number> = tsRaw ? JSON.parse(tsRaw) : {};
-      tsMap[memoKey] = Date.now();
-      localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
-    } catch (err) {}
-
-    window.dispatchEvent(new Event('storage'));
+    const matchedFolder = folders.find(f => String(f.id) === String(targetFolderId));
+    moveSalesMemoToFolder(movingMemo.id, targetFolderId || '', matchedFolder ? matchedFolder.name : '');
     loadMemos();
     setMovingMemo(null);
+    setTargetFolderId('');
   };
 
   const formatNumber = (num: number) => {
@@ -805,25 +747,6 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                   >
                     <div
                       className="lot-card action-card"
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = 'move';
-                      }}
-                      onDragEnter={(e) => {
-                        e.preventDefault();
-                        setDragOverFolderId(folder.id);
-                      }}
-                      onDragLeave={(e) => {
-                        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-                        if (dragOverFolderId === folder.id) setDragOverFolderId(null);
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const mId = e.dataTransfer.getData('application/memo-id') || e.dataTransfer.getData('text/plain') || draggedMemoId;
-                        setDragOverFolderId(null);
-                        setDraggedMemoId(null);
-                        if (mId) moveMemoToFolder(mId, folder.id);
-                      }}
                       style={{
                         position: 'relative',
                         cursor: 'pointer',
@@ -844,7 +767,9 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                           : '0 6px 20px rgba(0, 0, 0, 0.3)',
                         transform: dragOverFolderId === folder.id ? 'scale(1.02)' : 'none',
                         transition: 'all 0.2s ease',
-                        boxSizing: 'border-box'
+                        boxSizing: 'border-box',
+                        height: '100%',
+                        minHeight: '170px'
                       }}
                     >
                       {/* Drag Over Drop Indicator Overlay */}
@@ -853,18 +778,19 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                           position: 'absolute',
                           inset: 0,
                           borderRadius: '14px',
-                          background: 'rgba(74, 20, 140, 0.85)',
+                          background: 'rgba(74, 20, 140, 0.88)',
                           display: 'flex',
                           flexDirection: 'column',
                           alignItems: 'center',
                           justifyContent: 'center',
                           gap: '8px',
                           zIndex: 35,
-                          backdropFilter: 'blur(2px)'
+                          pointerEvents: 'none',
+                          backdropFilter: 'blur(3px)'
                         }}>
                           <FolderOpen size={42} style={{ color: '#fff' }} />
                           <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '1rem' }}>
-                            {language === 'bn' ? 'ফোল্ডারে ড্রপ করুন' : 'Drop into Folder'}
+                            {language === 'bn' ? `"${folder.name}" ফোল্ডারে ড্রপ করুন` : `Drop into "${folder.name}"`}
                           </span>
                         </div>
                       )}
@@ -1012,20 +938,6 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                       name={memo.name || `মেমো #${memo.id}`}
                       type="memo"
                       onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}
-                      draggable={true}
-                      onDragStart={(e) => {
-                        e.stopPropagation();
-                        e.dataTransfer.setData('text/plain', memo.id);
-                        e.dataTransfer.setData('application/memo-id', memo.id);
-                        e.dataTransfer.effectAllowed = 'copyMove';
-                        setDraggedMemoId(memo.id);
-                        (window as any).__draggedMemoId = memo.id;
-                      }}
-                      onDragEnd={() => {
-                        setDraggedMemoId(null);
-                        setDragOverFolderId(null);
-                        (window as any).__draggedMemoId = null;
-                      }}
                     >
                       <div
                         className="lot-card action-card"
@@ -1034,7 +946,7 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                           e.stopPropagation();
                           e.dataTransfer.setData('text/plain', memo.id);
                           e.dataTransfer.setData('application/memo-id', memo.id);
-                          e.dataTransfer.effectAllowed = 'copyMove';
+                          e.dataTransfer.effectAllowed = 'move';
                           setDraggedMemoId(memo.id);
                           (window as any).__draggedMemoId = memo.id;
                         }}

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { type Screen } from '../App';
-import { Plus, ChevronLeft, ChevronRight, Package, Calendar, Trash2, FileText, Folder, Store, Users, ArrowRight } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Package, Calendar, Trash2, FileText, Folder, Store, Users, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { MONTHS, enToBnDigits } from '../utils/dateUtils';
-import { getAllGlobalSalesMemos, deleteSalesMemoCompletely, type SalesMemoGlobalItem } from '../utils/dueSyncUtils';
+import { getAllGlobalSalesMemos, deleteSalesMemoCompletely, moveSalesMemoToLot, type SalesMemoGlobalItem } from '../utils/dueSyncUtils';
 import { useLanguage } from '../i18n/LanguageContext';
 
 interface SalesLotsScreenProps {
@@ -28,6 +28,9 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
   const [newLotPassword, setNewLotPassword] = useState('');
   const [viewMode, setViewMode] = useState<'both' | 'lots' | 'aratdar'>('both');
   const [memoFilter, setMemoFilter] = useState<'all' | 'lots' | 'aratdar' | 'reseller'>('all');
+  const [draggedMemoId, setDraggedMemoId] = useState<string | null>(null);
+  const [dragOverLotNumber, setDragOverLotNumber] = useState<number | null>(null);
+  const [dropSuccessMsg, setDropSuccessMsg] = useState<string | null>(null);
   const { t, language } = useLanguage();
   const devicePermission = localStorage.getItem('device_permission');
   const hasEditPermission = devicePermission === 'edit' || devicePermission === 'admin';
@@ -114,6 +117,17 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
     window.addEventListener('storage', loadGlobalMemos);
     return () => window.removeEventListener('storage', loadGlobalMemos);
   }, [lots]);
+
+  const handleMoveMemoToLot = (memoId: string, targetLot: number) => {
+    const res = moveSalesMemoToLot(memoId, targetLot);
+    const allMemos = getAllGlobalSalesMemos();
+    setGlobalMemos(allMemos);
+    const msg = language === 'bn'
+      ? `"${res.memoTitle}" মেমোটি সফলভাবে লট নং ${targetLot}-এ স্থানান্তর করা হয়েছে!`
+      : `Memo "${res.memoTitle}" moved to Lot #${targetLot} successfully!`;
+    setDropSuccessMsg(msg);
+    setTimeout(() => setDropSuccessMsg(null), 3500);
+  };
 
   const handleAddLot = () => {
     const nextLot = lots.length > 0 ? Math.max(...lots) + 1 : 1;
@@ -219,6 +233,25 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
           </div>
         </div>
       </div>
+
+      {/* Drop Success Notification Banner */}
+      {dropSuccessMsg && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(46, 125, 50, 0.95), rgba(76, 175, 80, 0.95))',
+          color: '#fff',
+          padding: '12px 18px',
+          borderRadius: '12px',
+          margin: '1rem 0 0.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          boxShadow: '0 4px 15px rgba(46, 125, 50, 0.4)',
+          animation: 'fadeIn 0.3s ease'
+        }}>
+          <CheckCircle2 size={20} />
+          <span style={{ fontWeight: 600 }}>{dropSuccessMsg}</span>
+        </div>
+      )}
 
       {/* Top Section View Switcher Pills */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '1.25rem 0 0.8rem', flexWrap: 'wrap', gap: '0.6rem' }}>
@@ -359,27 +392,81 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                 </div>
               )}
 
-              {lots.map((lot, idx) => (
-                <ProtectedMemoWrapper 
-                  key={`sales_lot_${lot}_${idx}`} 
-                  passwordKey={`sales_lot_password_${lot}`} 
-                  name={`লট নং ${lot}`}
-                  type="lot"
-                  onAccessGranted={() => onSelectLot(lot)}
-                >
-                  <div
-                    className="lot-card"
-                    style={{
-                      flex: '0 0 175px',
-                      minWidth: '175px',
-                      height: '160px',
-                      padding: '1.1rem',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      boxSizing: 'border-box'
+              {lots.map((lot, idx) => {
+                const isDragOver = dragOverLotNumber === lot;
+                return (
+                  <ProtectedMemoWrapper 
+                    key={`sales_lot_${lot}_${idx}`} 
+                    passwordKey={`sales_lot_password_${lot}`} 
+                    name={`লট নং ${lot}`}
+                    type="lot"
+                    onAccessGranted={() => onSelectLot(lot)}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverLotNumber !== lot) setDragOverLotNumber(lot);
+                    }}
+                    onDragEnter={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDragOverLotNumber(lot);
+                    }}
+                    onDragLeave={(e) => {
+                      e.stopPropagation();
+                      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                      if (dragOverLotNumber === lot) setDragOverLotNumber(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const mId = e.dataTransfer.getData('application/memo-id') || e.dataTransfer.getData('text/plain') || draggedMemoId || (window as any).__draggedMemoId;
+                      setDragOverLotNumber(null);
+                      setDraggedMemoId(null);
+                      (window as any).__draggedMemoId = null;
+                      if (mId) handleMoveMemoToLot(mId, lot);
                     }}
                   >
+                    <div
+                      className="lot-card"
+                      style={{
+                        flex: '0 0 175px',
+                        minWidth: '175px',
+                        height: '160px',
+                        padding: '1.1rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        boxSizing: 'border-box',
+                        position: 'relative',
+                        border: isDragOver ? '2px dashed #ffb74d' : undefined,
+                        boxShadow: isDragOver ? '0 0 20px rgba(255, 152, 0, 0.6)' : undefined,
+                        transform: isDragOver ? 'scale(1.03)' : 'none',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {/* Drag Over Drop Indicator Overlay */}
+                      {isDragOver && (
+                        <div style={{
+                          position: 'absolute',
+                          inset: 0,
+                          borderRadius: '12px',
+                          background: 'rgba(230, 81, 0, 0.92)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          zIndex: 35,
+                          pointerEvents: 'none',
+                          backdropFilter: 'blur(3px)'
+                        }}>
+                          <Package size={36} style={{ color: '#fff' }} />
+                          <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.88rem', textAlign: 'center', padding: '0 4px' }}>
+                            {language === 'bn' ? `লট ${lot}-এ ড্রপ করুন` : `Drop to Lot ${lot}`}
+                          </span>
+                        </div>
+                      )}
                     <div className="lot-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Package size={36} className="lot-icon" />
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -407,7 +494,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                     </div>
                   </div>
                 </ProtectedMemoWrapper>
-              ))}
+              );
+            })}
             </div>
           </div>
         )}
@@ -759,7 +847,29 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
             type="memo"
             onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}
           >
-            <div className="lot-card">
+            <div 
+              className="lot-card"
+              draggable={true}
+              onDragStart={(e) => {
+                e.stopPropagation();
+                e.dataTransfer.setData('text/plain', memo.id);
+                e.dataTransfer.setData('application/memo-id', memo.id);
+                e.dataTransfer.effectAllowed = 'move';
+                setDraggedMemoId(memo.id);
+                (window as any).__draggedMemoId = memo.id;
+              }}
+              onDragEnd={() => {
+                setDraggedMemoId(null);
+                setDragOverLotNumber(null);
+                (window as any).__draggedMemoId = null;
+              }}
+              style={{
+                cursor: 'grab',
+                opacity: draggedMemoId === memo.id ? 0.35 : 1,
+                boxShadow: draggedMemoId === memo.id ? '0 0 16px rgba(255, 183, 77, 0.5)' : undefined,
+                transition: 'all 0.2s ease'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -807,6 +917,29 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                 <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
                   <MemoLockIcon passwordKey={`memo_password_${memo.id}`} />
                 </div>
+              </div>
+
+              {/* Drag indicator chip */}
+              <div style={{ marginTop: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '6px' }}>
+                <span style={{ 
+                  fontSize: '0.74rem', 
+                  color: '#ffb74d', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  background: 'rgba(255, 152, 0, 0.12)',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  border: '1px dashed rgba(255, 152, 0, 0.35)'
+                }}>
+                  <Package size={12} />
+                  {language === 'bn' ? '+ ড্র্যাগ করে লটে রাখুন' : '+ Drag to Lot'}
+                </span>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                  {memo.lotNumber !== null 
+                    ? (language === 'bn' ? `বর্তমান: লট ${memo.lotNumber}` : `Current: Lot ${memo.lotNumber}`)
+                    : (language === 'bn' ? 'লটবিহীন' : 'No Lot')}
+                </span>
               </div>
             </div>
           </ProtectedMemoWrapper>

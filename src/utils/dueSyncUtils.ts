@@ -1066,3 +1066,206 @@ export const getAratdarMemos = (): SalesMemoGlobalItem[] => {
   return all.filter(m => m.customerType === 'permanent');
 };
 
+/**
+ * Moves a sales memo into a specific folder (updating all relevant storage keys).
+ * Preserves all memo amounts and data without any modification.
+ */
+export const moveSalesMemoToFolder = (memoId: string, folderId: string, folderName: string): { success: boolean; memoTitle: string } => {
+  const cleanId = String(memoId).replace(/^sales_memo_/, '').replace(/^due_memo_/, '').trim();
+  const memoKey = `sales_memo_${cleanId}`;
+  let memoTitle = '#' + cleanId;
+
+  // 1. Update canonical sales_memo_${cleanId}
+  const memoStr = localStorage.getItem(memoKey);
+  if (memoStr) {
+    try {
+      const parsed = JSON.parse(memoStr);
+      if (parsed.customerName) memoTitle = parsed.customerName;
+      parsed.folderId = folderId;
+      parsed.folderName = folderName;
+      if (parsed.memoState) {
+        parsed.memoState.folderId = folderId;
+        parsed.memoState.folderName = folderName;
+      }
+      localStorage.setItem(memoKey, JSON.stringify(parsed));
+    } catch (e) {}
+  }
+
+  // 2. Update any sales_memo_lot_*_memo_${cleanId}
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('sales_memo_lot_') && k.endsWith(`_memo_${cleanId}`)) {
+      try {
+        const obj = JSON.parse(localStorage.getItem(k) || '{}');
+        obj.folderId = folderId;
+        obj.folderName = folderName;
+        if (obj.memoState) {
+          obj.memoState.folderId = folderId;
+          obj.memoState.folderName = folderName;
+        }
+        localStorage.setItem(k, JSON.stringify(obj));
+      } catch (e) {}
+    }
+  }
+
+  // 3. Update due_memo_${cleanId}
+  const dueKey = `due_memo_${cleanId}`;
+  const dueStr = localStorage.getItem(dueKey);
+  if (dueStr) {
+    try {
+      const parsed = JSON.parse(dueStr);
+      parsed.folderId = folderId;
+      parsed.folderName = folderName;
+      if (parsed.memoState) {
+        parsed.memoState.folderId = folderId;
+        parsed.memoState.folderName = folderName;
+      }
+      localStorage.setItem(dueKey, JSON.stringify(parsed));
+    } catch (e) {}
+  }
+
+  // 4. Update sales_memo_list_*
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('sales_memo_list_')) {
+      try {
+        const listStr = localStorage.getItem(k);
+        if (listStr) {
+          const list = JSON.parse(listStr);
+          if (Array.isArray(list)) {
+            let changed = false;
+            list.forEach((item: any) => {
+              if (String(item.id) === cleanId) {
+                item.folderId = folderId;
+                item.folderName = folderName;
+                changed = true;
+              }
+            });
+            if (changed) {
+              localStorage.setItem(k, JSON.stringify(list));
+            }
+          }
+        }
+      } catch (e) {}
+    }
+  }
+
+  // 5. Update timestamp
+  try {
+    const tsRaw = localStorage.getItem('local_timestamps');
+    let tsMap: Record<string, number> = tsRaw ? JSON.parse(tsRaw) : {};
+    tsMap[memoKey] = Date.now();
+    localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
+  } catch (err) {}
+
+  window.dispatchEvent(new Event('storage'));
+  return { success: true, memoTitle };
+};
+
+/**
+ * Moves a sales memo to a specific lot number (updating all relevant storage keys).
+ * If the memo had no lot or another lot number, updates it to newLotNumber.
+ */
+export const moveSalesMemoToLot = (memoId: string, newLotNumber: number): { success: boolean; memoTitle: string } => {
+  const cleanId = String(memoId).replace(/^sales_memo_/, '').replace(/^due_memo_/, '').trim();
+  const memoKey = `sales_memo_${cleanId}`;
+  let memoTitle = '#' + cleanId;
+
+  // 1. Read and update canonical sales_memo_${cleanId}
+  const memoStr = localStorage.getItem(memoKey);
+  if (memoStr) {
+    try {
+      const parsed = JSON.parse(memoStr);
+      if (parsed.customerName) memoTitle = parsed.customerName;
+      parsed.lotNumber = newLotNumber;
+      parsed.lotNumberInput = String(newLotNumber);
+      if (parsed.memoState) {
+        parsed.memoState.lotNumber = newLotNumber;
+        parsed.memoState.lotNumberInput = String(newLotNumber);
+      }
+      localStorage.setItem(memoKey, JSON.stringify(parsed));
+    } catch (e) {}
+  }
+
+  // 2. Scan and migrate any existing sales_memo_lot_*_memo_${cleanId} keys
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('sales_memo_lot_') && k.endsWith(`_memo_${cleanId}`)) {
+      try {
+        const obj = JSON.parse(localStorage.getItem(k) || '{}');
+        obj.lotNumber = newLotNumber;
+        obj.lotNumberInput = String(newLotNumber);
+        if (obj.memoState) {
+          obj.memoState.lotNumber = newLotNumber;
+          obj.memoState.lotNumberInput = String(newLotNumber);
+        }
+        localStorage.removeItem(k);
+        localStorage.setItem(`sales_memo_lot_${newLotNumber}_memo_${cleanId}`, JSON.stringify(obj));
+      } catch (e) {}
+    }
+  }
+
+  // Ensure new lot key exists
+  const targetLotKey = `sales_memo_lot_${newLotNumber}_memo_${cleanId}`;
+  if (!localStorage.getItem(targetLotKey) && memoStr) {
+    try {
+      const parsed = JSON.parse(memoStr);
+      parsed.lotNumber = newLotNumber;
+      parsed.lotNumberInput = String(newLotNumber);
+      localStorage.setItem(targetLotKey, JSON.stringify(parsed));
+    } catch (e) {}
+  }
+
+  // 3. Update due_memo_${cleanId}
+  const dueKey = `due_memo_${cleanId}`;
+  const dueStr = localStorage.getItem(dueKey);
+  if (dueStr) {
+    try {
+      const parsed = JSON.parse(dueStr);
+      parsed.lotNumber = newLotNumber;
+      parsed.lotNumberInput = String(newLotNumber);
+      if (parsed.memoState) {
+        parsed.memoState.lotNumber = newLotNumber;
+        parsed.memoState.lotNumberInput = String(newLotNumber);
+      }
+      localStorage.setItem(dueKey, JSON.stringify(parsed));
+    } catch (e) {}
+  }
+
+  // 4. Update sales_memo_list_* (remove from old, add/update in target)
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('sales_memo_list_')) {
+      try {
+        const listStr = localStorage.getItem(k);
+        if (listStr) {
+          const list = JSON.parse(listStr);
+          if (Array.isArray(list)) {
+            const isTarget = k === `sales_memo_list_${newLotNumber}`;
+            let filtered = list.filter((item: any) => String(item.id) !== cleanId);
+            if (isTarget) {
+              const itemToAdd = list.find((item: any) => String(item.id) === cleanId) || (memoStr ? JSON.parse(memoStr) : { id: cleanId });
+              itemToAdd.lotNumber = newLotNumber;
+              filtered.push(itemToAdd);
+            }
+            localStorage.setItem(k, JSON.stringify(filtered));
+          }
+        }
+      } catch (e) {}
+    }
+  }
+
+  // 5. Update timestamps
+  try {
+    const tsRaw = localStorage.getItem('local_timestamps');
+    let tsMap: Record<string, number> = tsRaw ? JSON.parse(tsRaw) : {};
+    tsMap[memoKey] = Date.now();
+    tsMap[targetLotKey] = Date.now();
+    localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
+  } catch (err) {}
+
+  window.dispatchEvent(new Event('storage'));
+  return { success: true, memoTitle };
+};
+
+
