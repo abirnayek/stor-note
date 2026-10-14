@@ -267,28 +267,17 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const [memoState, setMemoState, undo, redo, canUndo, canRedo] = useHistory<MemoState>(getInitialState(), storageKey);
 
   useEffect(() => {
-    const handleStorage = () => {
+    const handleSigChange = () => {
       const defaultSig = localStorage.getItem('default_seller_signature') || '';
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (!parsed.sellerSignature && defaultSig) {
-            parsed.sellerSignature = defaultSig;
-          }
-          setMemoState(parsed);
-        } catch(e) {}
-      } else if (defaultSig) {
-        setMemoState(prev => ({ ...prev, sellerSignature: defaultSig }));
+      if (defaultSig) {
+        setMemoState(prev => (prev.sellerSignature === defaultSig ? prev : { ...prev, sellerSignature: defaultSig }), { recordHistory: false });
       }
     };
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener('global_seller_signature_changed', handleStorage);
+    window.addEventListener('global_seller_signature_changed', handleSigChange);
     return () => {
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('global_seller_signature_changed', handleStorage);
+      window.removeEventListener('global_seller_signature_changed', handleSigChange);
     };
-  }, [storageKey]);
+  }, []);
   const [saveStatus, setSaveStatus] = useState<string>('Saved');
   const [showBusinessCallMenu, setShowBusinessCallMenu] = useState(false);
   const [showBusinessCallMenu2, setShowBusinessCallMenu2] = useState(false);
@@ -333,7 +322,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         };
       });
       return { ...prev, entries: updated };
-    });
+    }, { immediate: true });
     setActiveSuggestRowId(null);
 
     // Auto-focus next input (weight / totalKg) in the same row
@@ -401,7 +390,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         ...(prev.deductions || []),
         { id: `ded_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, title: defaultTitle, amount: '' }
       ]
-    }));
+    }), { immediate: true });
   };
 
   const updateDeduction = (id: string, field: keyof MemoDeduction, value: any) => {
@@ -415,7 +404,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     setMemoState(prev => ({
       ...prev,
       deductions: (prev.deductions || []).filter(d => d.id !== id)
-    }));
+    }), { immediate: true });
   };
 
   const isMounted = useRef(false);
@@ -614,7 +603,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         minute: '2-digit',
         hour12: true
       });
-      setMemoState(prev => ({ ...prev, updatedAt: today, updatedAtTime: editTime }));
+      setMemoState(prev => ({ ...prev, updatedAt: today, updatedAtTime: editTime }), { recordHistory: false });
       return;
     }
 
@@ -681,7 +670,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       : memoState;
 
     if (memoState.status !== currentStatus) {
-      setMemoState(prev => ({ ...prev, status: currentStatus }));
+      setMemoState(prev => ({ ...prev, status: currentStatus }), { recordHistory: false });
     }
 
     // Sync to due accounts if customer type is selected
@@ -871,7 +860,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           manualSaleRate: ''
         }
       ]
-    }));
+    }), { immediate: true });
     focusNewTableRow();
   };
 
@@ -888,7 +877,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         ...prev,
         entries: filtered.map((e, idx) => ({ ...e, serialNo: (idx + 1).toString() }))
       };
-    });
+    }, { immediate: true });
   };
 
   const getCustomerMemoCanvas = async (): Promise<HTMLCanvasElement | null> => {

@@ -1,26 +1,48 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
+export interface SetHistoryOptions {
+  recordHistory?: boolean; // default true. If false, updates state without affecting history/redo
+  immediate?: boolean;     // default false. If true, immediately pushes a history checkpoint without debouncing
+}
+
+export type SetWithHistory<T> = (
+  newState: T | ((prev: T) => T),
+  options?: SetHistoryOptions
+) => void;
+
 export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: number = 100) {
   const [state, setState] = useState<T>(initialState);
+  const stateRef = useRef<T>(initialState);
+  stateRef.current = state;
+
   const historyRef = useRef<T[]>([]); // Past states stack for Undo
   const redoRef = useRef<T[]>([]);    // Future states stack for Redo
-  const isInternalUpdate = useRef(false);
+  const pendingBaseStateRef = useRef<T | null>(null); // Base state before a debounced typing burst
   const debounceTimerRef = useRef<any>(null);
-  const lastPushedStateRef = useRef<string>(JSON.stringify(initialState));
+
+  const [historyCount, setHistoryCount] = useState(0);
+  const [redoCount, setRedoCount] = useState(0);
+
+  const persistState = useCallback((val: T) => {
+    if (storageKey) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(val));
+      } catch (e) {}
+    }
+  }, [storageKey]);
 
   useEffect(() => {
     if (!storageKey) return;
     
-    const handleStorage = () => {
-      if (isInternalUpdate.current) {
-         isInternalUpdate.current = false;
-         return;
-      }
+    const handleStorage = (e: StorageEvent) => {
+      // Only reload if the event is for this exact storageKey from another tab/window
+      if (e.key && e.key !== storageKey) return;
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           setState(parsed);
+          stateRef.current = parsed;
         } catch(e) {}
       }
     };
@@ -29,8 +51,21 @@ export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: 
     return () => window.removeEventListener('storage', handleStorage);
   }, [storageKey]);
 
-  const setWithHistory = useCallback((newState: T | ((prev: T) => T)) => {
-    isInternalUpdate.current = true;
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  const setWithHistory: SetWithHistory<T> = useCallback((
+    newState: T | ((prev: T) => T),
+    options?: SetHistoryOptions
+  ) => {
+    const recordHistory = options?.recordHistory !== false;
+    const immediate = options?.immediate === true;
+
     setState((prev) => {
       const nextState = typeof newState === 'function' ? (newState as Function)(prev) : newState;
       
@@ -39,59 +74,139 @@ export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: 
 
       if (prevSerialized === nextSerialized) return prev;
 
-      // Clear redo stack on new user action
-      redoRef.current = [];
-
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
+      if (!recordHistory) {
+        // Programmatic / background update: update state & storage without disturbing history or redo
+        stateRef.current = nextState;
+        persistState(nextState);
+        return nextState;
       }
-      
-      debounceTimerRef.current = setTimeout(() => {
-        if (prevSerialized !== lastPushedStateRef.current) {
-          try {
-            historyRef.current.push(JSON.parse(prevSerialized));
-            if (historyRef.current.length > maxHistory) {
-              historyRef.current.shift();
-            }
-            lastPushedStateRef.current = prevSerialized;
-          } catch(e) {}
-        }
-      }, 300);
 
+      // New user action clears redo stack
+      if (redoRef.current.length > 0) {
+        redoRef.current = [];
+        setRedoCount(0);
+      }
+
+      if (immediate) {
+        // If there was an active typing session pending, commit it first
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+          debounceTimerRef.current = null;
+        }
+        if (pendingBaseStateRef.current !== null) {
+          const baseSerialized = JSON.stringify(pendingBaseStateRef.current);
+          if (baseSerialized !== prevSerialized) {
+            historyRef.current.push(JSON.parse(baseSerialized));
+          }
+          pendingBaseStateRef.current = null;
+        }
+
+        // Commit previous state as an immediate discrete checkpoint
+        historyRef.current.push(JSON.parse(prevSerialized));
+        if (historyRef.current.length > maxHistory) {
+          historyRef.current.shift();
+        }
+        setHistoryCount(historyRef.current.length);
+      } else {
+        // User typing action: establish baseline state for this edit sequence
+        if (pendingBaseStateRef.current === null) {
+          pendingBaseStateRef.current = JSON.parse(prevSerialized);
+          setHistoryCount(historyRef.current.length + 1); // Instantly enable Undo button while typing
+        }
+
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+        }
+
+        debounceTimerRef.current = setTimeout(() => {
+          if (pendingBaseStateRef.current !== null) {
+            const baseSerialized = JSON.stringify(pendingBaseStateRef.current);
+            const currentSerialized = JSON.stringify(stateRef.current);
+            if (baseSerialized !== currentSerialized) {
+              historyRef.current.push(JSON.parse(baseSerialized));
+              if (historyRef.current.length > maxHistory) {
+                historyRef.current.shift();
+              }
+            }
+            pendingBaseStateRef.current = null;
+            setHistoryCount(historyRef.current.length);
+          }
+        }, 400);
+      }
+
+      stateRef.current = nextState;
+      persistState(nextState);
       return nextState;
     });
-  }, [maxHistory]);
+  }, [maxHistory, persistState]);
 
   const undo = useCallback(() => {
-    if (historyRef.current.length === 0) return;
-    isInternalUpdate.current = true;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
     setState((current) => {
-      const previousState = historyRef.current.pop()!;
-      redoRef.current.push(JSON.parse(JSON.stringify(current)));
-      lastPushedStateRef.current = JSON.stringify(previousState);
-      if (storageKey) {
-        try { localStorage.setItem(storageKey, JSON.stringify(previousState)); } catch(e) {}
+      let previousState: T | undefined;
+
+      // If user was in the middle of typing, rolling back to the typing baseline is the first undo step
+      if (pendingBaseStateRef.current !== null) {
+        previousState = pendingBaseStateRef.current;
+        pendingBaseStateRef.current = null;
+        redoRef.current.push(JSON.parse(JSON.stringify(current)));
+      } else if (historyRef.current.length > 0) {
+        previousState = historyRef.current.pop();
+        if (previousState) {
+          redoRef.current.push(JSON.parse(JSON.stringify(current)));
+        }
       }
+
+      if (!previousState) return current;
+
+      if (redoRef.current.length > maxHistory) {
+        redoRef.current.shift();
+      }
+
+      stateRef.current = previousState;
+      persistState(previousState);
+
+      setHistoryCount(historyRef.current.length);
+      setRedoCount(redoRef.current.length);
+
       return previousState;
     });
-  }, [storageKey]);
+  }, [persistState, maxHistory]);
 
   const redo = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+      pendingBaseStateRef.current = null;
+    }
+
     if (redoRef.current.length === 0) return;
-    isInternalUpdate.current = true;
+
     setState((current) => {
-      const nextState = redoRef.current.pop()!;
+      const nextState = redoRef.current.pop();
+      if (!nextState) return current;
+
       historyRef.current.push(JSON.parse(JSON.stringify(current)));
-      lastPushedStateRef.current = JSON.stringify(nextState);
-      if (storageKey) {
-        try { localStorage.setItem(storageKey, JSON.stringify(nextState)); } catch(e) {}
+      if (historyRef.current.length > maxHistory) {
+        historyRef.current.shift();
       }
+
+      stateRef.current = nextState;
+      persistState(nextState);
+
+      setHistoryCount(historyRef.current.length);
+      setRedoCount(redoRef.current.length);
+
       return nextState;
     });
-  }, [storageKey]);
+  }, [persistState, maxHistory]);
 
-  const canUndo = historyRef.current.length > 0;
-  const canRedo = redoRef.current.length > 0;
+  const canUndo = historyCount > 0 || pendingBaseStateRef.current !== null;
+  const canRedo = redoCount > 0;
 
   return [state, setWithHistory, undo, redo, canUndo, canRedo] as const;
 }

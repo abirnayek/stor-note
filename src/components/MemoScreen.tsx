@@ -91,28 +91,17 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   const [memoState, setMemoState, undo, redo, canUndo, canRedo] = useHistory<MemoState>(getInitialState(), storageKey);
 
   useEffect(() => {
-    const handleStorage = () => {
+    const handleSigChange = () => {
       const defaultSig = localStorage.getItem('default_seller_signature') || '';
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (!parsed.sellerSignature && defaultSig) {
-            parsed.sellerSignature = defaultSig;
-          }
-          setMemoState(parsed);
-        } catch(e) {}
-      } else if (defaultSig) {
-        setMemoState(prev => ({ ...prev, sellerSignature: defaultSig }));
+      if (defaultSig) {
+        setMemoState(prev => (prev.sellerSignature === defaultSig ? prev : { ...prev, sellerSignature: defaultSig }), { recordHistory: false });
       }
     };
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener('global_seller_signature_changed', handleStorage);
+    window.addEventListener('global_seller_signature_changed', handleSigChange);
     return () => {
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('global_seller_signature_changed', handleStorage);
+      window.removeEventListener('global_seller_signature_changed', handleSigChange);
     };
-  }, [storageKey]);
+  }, []);
   const [saveStatus, setSaveStatus] = useState<string>('Saved');
   const [showSupplierCallMenu, setShowSupplierCallMenu] = useState(false);
   const [showBusinessCallMenu, setShowBusinessCallMenu] = useState(false);
@@ -235,7 +224,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
     }
 
     if (memoState.createdAt && memoState.createdAt !== today && memoState.updatedAt !== today) {
-      setMemoState(prev => ({ ...prev, updatedAt: today }));
+      setMemoState(prev => ({ ...prev, updatedAt: today }), { recordHistory: false });
       return;
     }
 
@@ -361,7 +350,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
     setMemoState(prev => ({
       ...prev,
       entries: [...prev.entries, { id: Date.now().toString(), name: '', totalKg: '', totalPrice: '', profitPercent: '' }]
-    }));
+    }), { immediate: true });
     focusNewTableRow();
   };
 
@@ -370,7 +359,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
     setMemoState(prev => ({
       ...prev,
       entries: prev.entries.filter(e => e.id !== id)
-    }));
+    }), { immediate: true });
   };
 
   const getCustomerMemoCanvas = async (): Promise<HTMLCanvasElement | null> => {
