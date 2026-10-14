@@ -180,8 +180,10 @@ function App() {
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      let activeUser: any = null;
       if (session) {
         setSession(session);
+        activeUser = session.user;
         localStorage.setItem('cached_is_authenticated', 'true');
         localStorage.setItem('cached_user_session', JSON.stringify({ user: session.user, id: session.user.id, email: session.user.email }));
       } else {
@@ -191,13 +193,14 @@ function App() {
         if (hasCachedAuth && cachedUserStr) {
           try {
             const cachedUser = JSON.parse(cachedUserStr);
-            setSession({ user: cachedUser.user || cachedUser });
+            activeUser = cachedUser.user || cachedUser;
+            setSession({ user: activeUser });
           } catch(e) {}
         }
       }
       setLoadingAuth(false);
 
-      if (session && navigator.onLine) {
+      if (activeUser && navigator.onLine) {
         (async () => {
           try {
             await restoreFromCloud();
@@ -207,15 +210,23 @@ function App() {
             
             // --- Device Validity Check & Auto-logout Heartbeat ---
             let deviceId = localStorage.getItem('device_id');
-            if (!deviceId) {
-              deviceId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)) + Date.now().toString(36);
-              localStorage.setItem('device_id', deviceId);
-            }
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
             const checkDeviceStatus = async () => {
               if (!navigator.onLine) return;
+              if (isLocalhost) return; // Localhost development is always admin, never kicked out
+
               const currentId = localStorage.getItem('device_id');
-              if (!currentId) return;
+              if (!currentId) {
+                // If logged in on phone but no deviceId recorded, clear and re-login with valid tracking
+                localStorage.removeItem('cached_is_authenticated');
+                localStorage.removeItem('cached_user_session');
+                localStorage.removeItem('device_permission');
+                try { await supabase.auth.signOut(); } catch(e) {}
+                localStorage.clear();
+                window.location.reload();
+                return;
+              }
 
               try {
                 const { data, error } = await supabase
@@ -224,10 +235,12 @@ function App() {
                   .eq('device_id', currentId)
                   .maybeSingle();
 
-                // If cloud explicitly says revoked, logout immediately!
-                if (!error && data && data.status === 'revoked') {
+                // If cloud explicitly says revoked OR if device was removed/deleted from active_sessions by admin:
+                if (!error && (!data || data.status === 'revoked')) {
+                  console.warn('[DeviceCheck] Device session is revoked or removed. Logging out immediately...');
                   localStorage.removeItem('cached_is_authenticated');
                   localStorage.removeItem('cached_user_session');
+                  localStorage.removeItem('device_permission');
                   try { await supabase.auth.signOut(); } catch(e) {}
                   localStorage.clear();
                   window.location.reload();
@@ -235,13 +248,7 @@ function App() {
                 }
 
                 if (data && data.permission) {
-                  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-                  if (isLocalhost && data.permission !== 'admin') {
-                    await supabase.from('active_sessions').update({ permission: 'admin' }).eq('device_id', currentId);
-                    localStorage.setItem('device_permission', 'admin');
-                  } else {
-                    localStorage.setItem('device_permission', data.permission);
-                  }
+                  localStorage.setItem('device_permission', data.permission);
                   window.dispatchEvent(new Event('settingsChange'));
                 }
               } catch (e) {}
@@ -249,24 +256,27 @@ function App() {
 
             await checkDeviceStatus();
 
-            // Setup realtime listener for this specific device to auto-logout if kicked
-            const channelName = `device_${deviceId}`;
-            const existingChannels = supabase.getChannels();
-            const alreadySubscribed = existingChannels.some((ch: any) => ch.topic === `realtime:${channelName}` || ch.topic === channelName);
-            if (!alreadySubscribed) {
-              supabase.channel(channelName)
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions', filter: `device_id=eq.${deviceId}` }, async (payload) => {
-                  if (payload.eventType === 'DELETE' || (payload.eventType === 'UPDATE' && payload.new.status === 'revoked')) {
-                    localStorage.removeItem('cached_is_authenticated');
-                    localStorage.removeItem('cached_user_session');
-                    try { await supabase.auth.signOut(); } catch(e) {}
-                    localStorage.clear();
-                    window.location.reload();
-                  } else if (payload.eventType === 'UPDATE' && payload.new.permission) {
-                    localStorage.setItem('device_permission', payload.new.permission);
-                    window.dispatchEvent(new Event('settingsChange'));
-                  }
-                }).subscribe();
+            if (deviceId) {
+              // Setup realtime listener for this specific device to auto-logout if kicked
+              const channelName = `device_${deviceId}`;
+              const existingChannels = supabase.getChannels();
+              const alreadySubscribed = existingChannels.some((ch: any) => ch.topic === `realtime:${channelName}` || ch.topic === channelName);
+              if (!alreadySubscribed) {
+                supabase.channel(channelName)
+                  .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions', filter: `device_id=eq.${deviceId}` }, async (payload) => {
+                    if (payload.eventType === 'DELETE' || (payload.eventType === 'UPDATE' && payload.new.status === 'revoked')) {
+                      localStorage.removeItem('cached_is_authenticated');
+                      localStorage.removeItem('cached_user_session');
+                      localStorage.removeItem('device_permission');
+                      try { await supabase.auth.signOut(); } catch(e) {}
+                      localStorage.clear();
+                      window.location.reload();
+                    } else if (payload.eventType === 'UPDATE' && payload.new.permission) {
+                      localStorage.setItem('device_permission', payload.new.permission);
+                      window.dispatchEvent(new Event('settingsChange'));
+                    }
+                  }).subscribe();
+              }
             }
 
             // Periodic heartbeat every 10 seconds & on tab focus

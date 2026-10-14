@@ -65,6 +65,21 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
     }
   };
 
+  const handleKickOutAllOthers = async () => {
+    if (!currentDeviceId) return;
+    if (window.confirm("আপনি কি এই ডিভাইস ছাড়া অন্য সকল ডিভাইস অবিলম্বে লগআউট করতে চান?")) {
+      const otherSessions = sessions.filter(s => s.device_id !== currentDeviceId);
+      for (const s of otherSessions) {
+        await supabase
+          .from('active_sessions')
+          .update({ status: 'revoked' })
+          .eq('device_id', s.device_id);
+        broadcastDeviceKickout(s.device_id);
+      }
+      fetchSessions();
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%' }}>
@@ -88,7 +103,8 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
             {sessions.length === 0 ? (
               <p>No active sessions found.</p>
             ) : (
-              sessions.map(session => (
+              <>
+                {sessions.map(session => (
                 <div key={session.id} style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '8px',
@@ -150,7 +166,30 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
                     )}
                   </div>
                 </div>
-              ))
+              ))}
+            {sessions.filter(s => s.device_id !== currentDeviceId).length > 0 && (
+              <button 
+                onClick={handleKickOutAllOthers}
+                style={{
+                  marginTop: '1rem',
+                  padding: '0.8rem',
+                  background: 'rgba(255, 82, 82, 0.15)',
+                  border: '1px solid #ff5252',
+                  borderRadius: '8px',
+                  color: '#ff5252',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  width: '100%'
+                }}
+              >
+                <Trash2 size={16} /> অন্যান্য সকল ডিভাইস লগআউট করুন
+              </button>
+            )}
+              </>
             )}
           </div>
         )}
