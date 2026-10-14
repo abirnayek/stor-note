@@ -21,6 +21,8 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
   const [grandWithdrawnTotal, setGrandWithdrawnTotal] = useState<number>(0);
   const [latestDate, setLatestDate] = useState<string>('');
   const { t, language } = useLanguage();
+  const devicePermission = localStorage.getItem('device_permission');
+  const hasEditPermission = devicePermission === 'admin';
 
   const loadInvestors = () => {
     const saved = localStorage.getItem('investor_list');
@@ -141,6 +143,10 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
   }, [language]);
 
   const handleAddInvestor = () => {
+    if (!hasEditPermission) {
+      alert(language === 'bn' ? 'শুধুমাত্র অ্যাডমিন নতুন বিনিয়োগকারী ফোল্ডার তৈরি করতে পারবেন।' : 'Only Admin can add new investor folders.');
+      return;
+    }
     const id = `investor_${Date.now()}`;
     const name = prompt(t('investorNamePrompt'));
     if (!name) return;
@@ -287,9 +293,11 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
                         {t('clickToViewFolder')}
                       </div>
                     </div>
-                    <button className="btn-icon delete-btn" onClick={(e) => handleDelete(id, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
-                      <Trash2 size={16} />
-                    </button>
+                    {hasEditPermission && (
+                      <button className="btn-icon delete-btn" onClick={(e) => handleDelete(id, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -338,10 +346,12 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
           );
         })}
 
-        <div className="lot-card empty-card" onClick={handleAddInvestor}>
-          <Plus size={48} className="card-icon" style={{ opacity: 0.3 }} />
-          <h3 style={{ opacity: 0.5 }}>{t('newInvestorFolder')}</h3>
-        </div>
+        {hasEditPermission && (
+          <div className="lot-card empty-card" onClick={handleAddInvestor}>
+            <Plus size={48} className="card-icon" style={{ opacity: 0.3 }} />
+            <h3 style={{ opacity: 0.5 }}>{t('newInvestorFolder')}</h3>
+          </div>
+        )}
       </div>
     </div>
   );

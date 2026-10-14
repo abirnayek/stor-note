@@ -52,7 +52,7 @@ export const translations = {
     // Password Screen
     purchaseLogin: 'ক্রয় হিসাব প্রবেশ',
     enterPasswordMsg: 'দয়া করে পাসওয়ার্ড দিন',
-    passwordPlaceholder: 'পাসওয়ার্ড (Password: 1234)',
+    passwordPlaceholder: 'পাসওয়ার্ড লিখুন...',
     incorrectPassword: 'পাসওয়ার্ড ভুল হয়েছে',
     enterBtn: 'প্রবেশ করুন',
     forgotPassword: 'পাসওয়ার্ড ভুলে গেছেন?',

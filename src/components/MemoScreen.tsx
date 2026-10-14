@@ -340,11 +340,16 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   const mainPrice = Number(memoState.totalPriceMain || 0);
   const isPriceMatched = tableTotalPrice > 0 && tableTotalPrice >= mainPrice;
 
+  const devicePermission = localStorage.getItem('device_permission');
+  const hasEditPermission = devicePermission === 'admin';
+
   const updateMemoState = (field: keyof MemoState, value: any) => {
+    if (!hasEditPermission) return;
     setMemoState(prev => ({ ...prev, [field]: value }));
   };
 
   const updateEntry = (id: string, field: keyof FishEntry, value: any) => {
+    if (!hasEditPermission) return;
     setMemoState(prev => ({
       ...prev,
       entries: prev.entries.map(e => e.id === id ? { ...e, [field]: value } : e)
@@ -352,6 +357,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   };
 
   const handleAddRow = () => {
+    if (!hasEditPermission) return;
     setMemoState(prev => ({
       ...prev,
       entries: [...prev.entries, { id: Date.now().toString(), name: '', totalKg: '', totalPrice: '', profitPercent: '' }]
@@ -360,6 +366,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   };
 
   const handleDeleteRow = (id: string) => {
+    if (!hasEditPermission) return;
     setMemoState(prev => ({
       ...prev,
       entries: prev.entries.filter(e => e.id !== id)
@@ -901,9 +908,11 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '1rem', padding: '0 2rem' }}>
-            <button className="add-row-dark-btn" onClick={handleAddRow} data-html2canvas-ignore style={{ margin: 0 }}>
-              <Plus size={16} /> {t('addNewRow')}
-            </button>
+            {hasEditPermission && (
+              <button className="add-row-dark-btn" onClick={handleAddRow} data-html2canvas-ignore style={{ margin: 0 }}>
+                <Plus size={16} /> {t('addNewRow')}
+              </button>
+            )}
             <div style={{
               fontSize: '1.2rem',
               fontWeight: 'bold',

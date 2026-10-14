@@ -33,7 +33,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
   const [newLotPassword, setNewLotPassword] = useState('');
   const { t, language } = useLanguage();
   const devicePermission = localStorage.getItem('device_permission');
-  const hasEditPermission = devicePermission === 'edit' || devicePermission === 'admin';
+  const hasEditPermission = devicePermission === 'admin';
   
   const today = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
     month: 'short',

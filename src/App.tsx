@@ -30,7 +30,7 @@ import { LotPasswordManager } from './components/LotPasswordManager';
 
 import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow } from './utils/syncEngine';
 
-export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock' | 'sales-month-memos' | 'reseller' | 'aratdar';
+export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock' | 'sales-month-memos' | 'reseller-password' | 'reseller' | 'aratdar';
 
 export interface NavSnapshot {
   screen: Screen;
@@ -102,6 +102,7 @@ const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
       return { screen: 'investor-list', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'investor-list':
     case 'investor-password':
+    case 'reseller-password':
     case 'trash':
     case 'stock':
     default:
@@ -495,6 +496,20 @@ function App() {
   ) => {
     const currentTop = navStackRef.current[navStackRef.current.length - 1];
     if (nextScreen === currentTop?.screen && !params && !replace) return;
+
+    // Prevent viewer from accessing restricted sections
+    const currentPerm = localStorage.getItem('device_permission') || 'admin';
+    if (currentPerm === 'view') {
+      const viewerBlocked: Screen[] = [
+        'reseller', 'reseller-password',
+        'investor-password', 'investor-list', 'investor-memos-list', 'investor-memo',
+        'password', 'lots', 'memo'
+      ];
+      if (viewerBlocked.includes(nextScreen)) {
+        alert(language === 'bn' ? 'ভিউয়ার (Viewer) পারমিশনে এই হিসাবটি দেখার অনুমতি নেই।' : 'Viewer permission does not have access to view this section.');
+        return;
+      }
+    }
 
     // Prevent rapid double back / duplicate navigation triggers within 350ms
     const now = Date.now();
@@ -913,7 +928,7 @@ function App() {
       <div className="main-layout">
         {/* Sidebar */}
         <aside className="sidebar">
-          {currentScreen !== 'dashboard' && currentScreen !== 'password' ? (
+          {currentScreen !== 'dashboard' && currentScreen !== 'password' && currentScreen !== 'investor-password' && currentScreen !== 'reseller-password' ? (
             <div className="sidebar-top-nav">
               <button 
                 className="sidebar-nav-item"
@@ -938,7 +953,7 @@ function App() {
               </button>
               <button 
                 className={`sidebar-nav-item ${currentScreen === 'reseller' ? 'active' : ''}`}
-                onClick={() => handleNavigate('reseller')}
+                onClick={() => handleNavigate('reseller-password')}
                 title={t('reseller') || 'রিসেলার'}
               >
                 <Users size={24} />
@@ -959,7 +974,7 @@ function App() {
               </button>
               <button 
                 className={`sidebar-nav-item ${currentScreen === 'lots' || currentScreen === 'memo' ? 'active' : ''}`}
-                onClick={() => handleNavigate('lots')}
+                onClick={() => handleNavigate('password')}
                 title={t('purchaseAccount')}
               >
                 <ShoppingBag size={24} />
@@ -993,6 +1008,8 @@ function App() {
             <PasswordScreen 
               onSuccess={handlePasswordSuccess} 
               onBack={() => handleNavigate('dashboard')} 
+              pinKey="kenaHisabPin"
+              title={t('purchaseAccount') || 'ক্রয় হিসাব'}
             />
           )}
           {currentScreen === 'lots' && (
@@ -1142,6 +1159,14 @@ function App() {
               lotNumber={currentSalesLot} 
               memoId={currentSalesMemoId}
               onLotChange={(lot) => setCurrentSalesLot(lot)}
+            />
+          )}
+          {currentScreen === 'reseller-password' && (
+            <PasswordScreen
+              onSuccess={() => navigateTo('reseller', undefined, true)}
+              onBack={() => handleNavigate('dashboard')}
+              pinKey="resellerPin"
+              title={t('resellerAccount') || 'রিসেলার হিসাব'}
             />
           )}
           {currentScreen === 'reseller' && (

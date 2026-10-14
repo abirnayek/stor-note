@@ -49,6 +49,8 @@ const ResellerScreen: React.FC<ResellerScreenProps> = ({ onNavigate, onSelectMem
   const [dropSuccessMsg, setDropSuccessMsg] = useState<string | null>(null);
 
   const { language } = useLanguage();
+  const devicePermission = localStorage.getItem('device_permission');
+  const hasEditPermission = devicePermission === 'admin';
 
   const loadFolders = () => {
     try {
@@ -395,7 +397,7 @@ const ResellerScreen: React.FC<ResellerScreenProps> = ({ onNavigate, onSelectMem
           </div>
 
           {/* New Folder Button */}
-          {!selectedFolderId && (
+          {!selectedFolderId && hasEditPermission && (
             <button
               onClick={() => { setNewFolderName(''); setNewFolderPassword(''); setShowCreateModal(true); }}
               className="btn-primary"
@@ -419,30 +421,32 @@ const ResellerScreen: React.FC<ResellerScreenProps> = ({ onNavigate, onSelectMem
           )}
 
           {/* Add New Memo Button */}
-          <button
-            onClick={() => handleAddMemo(selectedFolderId)}
-            className="btn-primary"
-            style={{
-              background: 'linear-gradient(135deg, #1976d2, #2196f3)',
-              color: '#ffffff',
-              fontWeight: 'bold',
-              border: 'none',
-              padding: '0.55rem 1.1rem',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(33, 150, 243, 0.3)'
-            }}
-          >
-            <Plus size={18} />
-            <span>
-              {selectedFolderId 
-                ? (language === 'bn' ? '+ এই ফোল্ডারে মেমো' : '+ Memo In Folder')
-                : (language === 'bn' ? '+ নতুন মেমো' : '+ New Memo')}
-            </span>
-          </button>
+          {hasEditPermission && (
+            <button
+              onClick={() => handleAddMemo(selectedFolderId)}
+              className="btn-primary"
+              style={{
+                background: 'linear-gradient(135deg, #1976d2, #2196f3)',
+                color: '#ffffff',
+                fontWeight: 'bold',
+                border: 'none',
+                padding: '0.55rem 1.1rem',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(33, 150, 243, 0.3)'
+              }}
+            >
+              <Plus size={18} />
+              <span>
+                {selectedFolderId 
+                  ? (language === 'bn' ? '+ এই ফোল্ডারে মেমো' : '+ Memo In Folder')
+                  : (language === 'bn' ? '+ নতুন মেমো' : '+ New Memo')}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -823,31 +827,35 @@ const ResellerScreen: React.FC<ResellerScreenProps> = ({ onNavigate, onSelectMem
                         {/* Top Actions: Lock & Rename & Delete */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} onClick={e => e.stopPropagation()}>
                           <MemoLockIcon passwordKey={folderPwdKey} />
-                          <button
-                            className="btn-icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingFolder(folder);
-                              setEditFolderName(folder.name);
-                            }}
-                            title={language === 'bn' ? 'ফোল্ডারের নাম পরিবর্তন' : 'Rename Folder'}
-                            style={{ padding: '4px', color: '#64b5f6' }}
-                          >
-                            <Edit3 size={15} />
-                          </button>
-                          <button
-                            className="btn-icon delete-btn"
-                            onClick={(e) => handleDeleteFolder(folder, e)}
-                            title={language === 'bn' ? 'ফোল্ডার মুছুন' : 'Delete Folder'}
-                            style={{
-                              padding: '4px',
-                              color: '#ff5252',
-                              background: 'transparent',
-                              border: 'none'
-                            }}
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {hasEditPermission && (
+                            <>
+                              <button
+                                className="btn-icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingFolder(folder);
+                                  setEditFolderName(folder.name);
+                                }}
+                                title={language === 'bn' ? 'ফোল্ডারের নাম পরিবর্তন' : 'Rename Folder'}
+                                style={{ padding: '4px', color: '#64b5f6' }}
+                              >
+                                <Edit3 size={15} />
+                              </button>
+                              <button
+                                className="btn-icon delete-btn"
+                                onClick={(e) => handleDeleteFolder(folder, e)}
+                                title={language === 'bn' ? 'ফোল্ডার মুছুন' : 'Delete Folder'}
+                                style={{
+                                  padding: '4px',
+                                  color: '#ff5252',
+                                  background: 'transparent',
+                                  border: 'none'
+                                }}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
 
