@@ -1,5 +1,6 @@
 import { parseMemoMonthYear } from './dateUtils';
 import { moveToTrash } from './trashUtils';
+import { markMemoDeleted, isMemoDeleted } from './syncEngine';
 
 export interface NormalizedDueMemo {
   id: string;
@@ -86,13 +87,24 @@ export const calculateMemoTotals = (memoData: any): { totalBill: number; paidAmo
     totalBill = Math.max(0, totalBill - totalDeductions);
   }
 
-  // Subtract commission if present
-  const commVal = Number(memo.commissionValue !== undefined ? memo.commissionValue : memoData.commissionValue) || 0;
+  // Commission handling (subtract or add)
+  let rawCommVal = memo.commissionValue !== undefined ? memo.commissionValue : memoData.commissionValue;
+  if (typeof rawCommVal === 'object' && rawCommVal !== null) {
+    rawCommVal = rawCommVal.target?.value ?? rawCommVal.value ?? rawCommVal.amount ?? '';
+  }
+  const commVal = typeof rawCommVal === 'string' 
+    ? (Number(rawCommVal.replace(/[০-৯]/g, (d: string) => (d.charCodeAt(0) - 0x09e6).toString())) || 0) 
+    : (Number(rawCommVal) || 0);
   const commType = memo.commissionType || memoData.commissionType || 'percent';
+  const commOp = memo.commissionOperation || memoData.commissionOperation || 'subtract';
   if (commVal > 0) {
     const commAmt = commType === 'flat' ? commVal : Math.round((grossTotal * commVal / 100) * 100) / 100;
     if (commAmt > 0) {
-      totalBill = Math.max(0, totalBill - commAmt);
+      if (commOp === 'add') {
+        totalBill = Math.round((totalBill + commAmt) * 100) / 100;
+      } else {
+        totalBill = Math.max(0, Math.round((totalBill - commAmt) * 100) / 100);
+      }
     }
   }
 
@@ -229,7 +241,7 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
     lotNumber,
     customerType,
     status,
-    dateStr: dateStr || innerMemo.createdAt || primary.date || '',
+    dateStr: (innerMemo.isOriginalDate === false && innerMemo.customDate) ? innerMemo.customDate : (dateStr || innerMemo.createdAt || primary.date || ''),
     timeStr: timeStr || innerMemo.createdAtTime || '',
     totalBill,
     paidAmount,
@@ -331,6 +343,12 @@ export const syncAllDueAccounts = (): {
   const paidResellerDuesMap = new Map<string, number>();
 
   allCandidateIds.forEach(id => {
+    if (isMemoDeleted(id)) {
+      localStorage.removeItem(`due_memo_${id}`);
+      localStorage.removeItem(`sales_memo_${id}`);
+      return;
+    }
+
     const memo = getNormalizedMemo(id);
 
     // If completely empty draft with no entries, no name and 0 total, check if it was in user's active dues
@@ -526,9 +544,124 @@ export const changeDueCustomerType = (dueId: string, newType: 'regular' | 'perma
 };
 
 /**
+ * Fully deletes a sales memo from all storage keys, lot lists, dues lists,
+ * and moves a backup to the Trash bin. Dispatches storage event.
+ */
+export const deleteSalesMemoCompletely = (
+  memoId: string,
+  metadata?: { name?: string; lotNumber?: number | null }
+) => {
+  if (!memoId) return;
+
+  const canonicalKey = `sales_memo_${memoId}`;
+  let memoData: any = null;
+  const canonicalStr = localStorage.getItem(canonicalKey);
+  if (canonicalStr) {
+    try { memoData = JSON.parse(canonicalStr); } catch (e) {}
+  }
+  if (!memoData) {
+    const dueStr = localStorage.getItem(`due_memo_${memoId}`);
+    if (dueStr) {
+      try { memoData = JSON.parse(dueStr); } catch (e) {}
+    }
+  }
+  if (!memoData) {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('sales_memo_lot_') && k.endsWith(`_memo_${memoId}`)) {
+        try {
+          memoData = JSON.parse(localStorage.getItem(k) || '');
+          break;
+        } catch (e) {}
+      }
+    }
+  }
+
+  const memoName = metadata?.name || memoData?.customerName || memoData?.name || `Memo #${memoId}`;
+  const lotInfo = metadata?.lotNumber !== undefined
+    ? metadata.lotNumber
+    : (memoData?.lotNumber || memoData?.memoState?.lotNumberInput);
+
+  moveToTrash({
+    id: canonicalKey,
+    type: 'sales_lot',
+    title: `Sales Memo${lotInfo ? ` (Lot: ${lotInfo})` : ''} - ${memoName}`,
+    data: memoData || {}
+  });
+
+  // 1. Mark memo tombstone across entire system first
+  markMemoDeleted(memoId);
+
+  // 2. Remove canonical & due keys
+  localStorage.removeItem(canonicalKey);
+  localStorage.removeItem(`due_memo_${memoId}`);
+  localStorage.removeItem(`due_memo_regular_${memoId}`);
+  localStorage.removeItem(`due_memo_permanent_${memoId}`);
+  localStorage.removeItem(`due_memo_reseller_${memoId}`);
+  localStorage.removeItem(`due_memo_purchase_${memoId}`);
+  localStorage.removeItem(`sales_memo_lot_unassigned_memo_${memoId}`);
+  localStorage.removeItem(`memo_password_sales_memo_${memoId}`);
+  localStorage.removeItem(`memo_password_due_memo_${memoId}`);
+
+  // 3. Scan and remove all lot-specific memo keys & passwords (sales_memo_lot_*_memo_${memoId})
+  for (let l = 1; l <= 100; l++) {
+    localStorage.removeItem(`sales_memo_lot_${l}_memo_${memoId}`);
+    localStorage.removeItem(`memo_password_sales_memo_lot_${l}_memo_${memoId}`);
+  }
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && (k.endsWith(`_memo_${memoId}`) || k.includes(`_${memoId}_`) || k.endsWith(`_${memoId}`))) {
+      keysToRemove.push(k);
+    }
+  }
+  keysToRemove.forEach(k => localStorage.removeItem(k));
+
+  // 4. Clean up from all sales_memo_list_* keys
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('sales_memo_list_')) {
+      try {
+        const listStr = localStorage.getItem(k);
+        if (listStr) {
+          const list: string[] = JSON.parse(listStr);
+          if (list.includes(memoId)) {
+            localStorage.setItem(k, JSON.stringify(list.filter(id => id !== memoId)));
+          }
+        }
+      } catch (e) {}
+    }
+  }
+
+  // 5. Clean up from all due lists
+  const dueLists = [
+    'dues_regular', 'dues_permanent', 'dues_purchase', 'dues_reseller',
+    'paid_dues_regular', 'paid_dues_permanent', 'paid_dues_purchase', 'paid_dues_reseller'
+  ];
+  dueLists.forEach(listKey => {
+    try {
+      const str = localStorage.getItem(listKey);
+      if (str) {
+        const list: string[] = JSON.parse(str);
+        if (list.includes(memoId)) {
+          localStorage.setItem(listKey, JSON.stringify(list.filter(id => id !== memoId)));
+        }
+      }
+    } catch (e) {}
+  });
+
+  // 6. Resync dues to ensure clean state
+  syncAllDueAccounts();
+
+  window.dispatchEvent(new Event('storage'));
+  window.dispatchEvent(new Event('settingsChange'));
+};
+
+/**
  * Removes a due memo from all due lists, sales keys (if applicable), and archives to trash.
  */
-export const deleteDueMemo = (dueId: string, _dueType?: 'regular' | 'permanent' | 'purchase' | 'reseller', isPaid: boolean = false) => {
+export const deleteDueMemo = (dueId: string, dueType?: 'regular' | 'permanent' | 'purchase' | 'reseller', isPaid: boolean = false) => {
+  if (!dueId) return;
   const memoData = getNormalizedMemo(dueId);
 
   moveToTrash({
@@ -537,6 +670,9 @@ export const deleteDueMemo = (dueId: string, _dueType?: 'regular' | 'permanent' 
     title: `${isPaid ? 'Paid' : 'Due'} Memo (${memoData.name || 'Unknown'})`,
     data: memoData.raw
   });
+
+  // 1. Mark memo tombstone across entire system
+  markMemoDeleted(dueId);
 
   const cleanList = (key: string) => {
     try {
@@ -558,9 +694,61 @@ export const deleteDueMemo = (dueId: string, _dueType?: 'regular' | 'permanent' 
   cleanList('paid_dues_purchase');
   cleanList('paid_dues_reseller');
 
+  // Remove due memo key
   localStorage.removeItem(`due_memo_${dueId}`);
+  localStorage.removeItem(`due_memo_regular_${dueId}`);
+  localStorage.removeItem(`due_memo_permanent_${dueId}`);
+  localStorage.removeItem(`due_memo_reseller_${dueId}`);
+  localStorage.removeItem(`due_memo_purchase_${dueId}`);
 
+  // ALSO remove canonical sales memo and lot keys so syncAllDueAccounts does not recreate it!
+  localStorage.removeItem(`sales_memo_${dueId}`);
+  localStorage.removeItem(`sales_memo_lot_unassigned_memo_${dueId}`);
+  for (let l = 1; l <= 100; l++) {
+    localStorage.removeItem(`sales_memo_lot_${l}_memo_${dueId}`);
+    localStorage.removeItem(`memo_password_sales_memo_lot_${l}_memo_${dueId}`);
+  }
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && (k.endsWith(`_memo_${dueId}`) || k.includes(`_${dueId}_`) || k.endsWith(`_${dueId}`))) {
+      keysToRemove.push(k);
+    }
+  }
+  keysToRemove.forEach(k => localStorage.removeItem(k));
+
+  // If purchase memo, also remove purchase lot key
+  if (dueType === 'purchase') {
+    localStorage.removeItem(`memo_lot_${dueId}`);
+    try {
+      const pListStr = localStorage.getItem('purchase_lots_list');
+      if (pListStr) {
+        const pList: any[] = JSON.parse(pListStr);
+        const filtered = pList.filter(id => String(id) !== String(dueId));
+        localStorage.setItem('purchase_lots_list', JSON.stringify(filtered));
+      }
+    } catch (e) {}
+  }
+
+  // Also clean from all sales_memo_list_*
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('sales_memo_list_')) {
+      try {
+        const listStr = localStorage.getItem(k);
+        if (listStr) {
+          const list: string[] = JSON.parse(listStr);
+          if (list.includes(dueId)) {
+            localStorage.setItem(k, JSON.stringify(list.filter(id => id !== dueId)));
+          }
+        }
+      } catch (e) {}
+    }
+  }
+
+  syncAllDueAccounts();
   window.dispatchEvent(new Event('storage'));
+  window.dispatchEvent(new Event('settingsChange'));
 };
 
 export const isInvalidMemoId = (id: string): boolean => {
@@ -599,6 +787,8 @@ export interface SalesMemoGlobalItem {
   sourceKey: string;
   month?: number;
   year?: number;
+  folderId?: string;
+  folderName?: string;
 }
 
 export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
@@ -608,12 +798,34 @@ export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
     if (tsRaw) localTimestamps = JSON.parse(tsRaw);
   } catch (e) {}
 
+  let purchaseDueIds: Set<string> = new Set();
+  try {
+    const dp = localStorage.getItem('dues_purchase');
+    if (dp) JSON.parse(dp).forEach((x: string) => purchaseDueIds.add(String(x)));
+    const pdp = localStorage.getItem('paid_dues_purchase');
+    if (pdp) JSON.parse(pdp).forEach((x: string) => purchaseDueIds.add(String(x)));
+  } catch (e) {}
+
   const allMemosMap = new Map<string, SalesMemoGlobalItem>();
 
   const processMemo = (memoId: string, lotKey: number | null, memoObj: any, sourceKey: string) => {
-    if (isInvalidMemoId(memoId) || !memoObj) return;
+    if (isInvalidMemoId(memoId) || isMemoDeleted(memoId) || !memoObj) return;
 
     const inner = memoObj.memoState || memoObj;
+
+    // Strict exclusion of purchase memos: Global Sales Memos are exclusively for sales
+    const isPurchase =
+      purchaseDueIds.has(String(memoId)) ||
+      memoObj.type === 'purchase' ||
+      inner.type === 'purchase' ||
+      memoObj.customerType === 'purchase' ||
+      inner.customerType === 'purchase' ||
+      memoId.startsWith('purchase_') ||
+      (sourceKey && sourceKey.startsWith('due_memo_purchase_')) ||
+      (inner.totalPriceMain !== undefined && inner.totalCostMain !== undefined && !inner.customerName) ||
+      (Boolean(inner.supplierName) && !inner.customerName && memoObj.type !== 'regular' && memoObj.type !== 'permanent' && memoObj.type !== 'reseller');
+
+    if (isPurchase) return;
     const rawLot = (inner.lotNumberInput !== undefined && inner.lotNumberInput !== '')
       ? inner.lotNumberInput
       : (inner.lotNumber !== undefined && inner.lotNumber !== '' ? inner.lotNumber : lotKey);
@@ -703,12 +915,14 @@ export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
       totalAmount: totalBill,
       paidAmount,
       dueAmount,
-      dateStr: dateStr || inner.createdAt || '',
+      dateStr: (inner.isOriginalDate === false && inner.customDate) ? inner.customDate : (dateStr || inner.createdAt || ''),
       timeStr: timeStr || inner.createdAtTime || '',
       customerType: inner.customerType || memoObj.type || '',
       sourceKey,
       month: mIdx,
-      year: mYear
+      year: mYear,
+      folderId: inner.folderId || memoObj.folderId || '',
+      folderName: inner.folderName || memoObj.folderName || ''
     });
   };
 
@@ -718,6 +932,7 @@ export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
     if (!key) continue;
     if (key.startsWith('sales_memo_') && !key.startsWith('sales_memo_lot_') && !key.startsWith('sales_memo_list_')) {
       const id = key.replace('sales_memo_', '');
+      if (isMemoDeleted(id)) continue;
       try {
         const obj = JSON.parse(localStorage.getItem(key) || '{}');
         processMemo(id, null, obj, key);
@@ -732,6 +947,7 @@ export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
       const parts = key.split('_memo_');
       if (parts.length === 2) {
         const id = parts[1];
+        if (isMemoDeleted(id)) continue;
         try {
           const obj = JSON.parse(localStorage.getItem(key) || '{}');
           let lotNum: number | null = null;
@@ -761,7 +977,7 @@ export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
           }
 
           memoIds.forEach(memoId => {
-            if (isInvalidMemoId(memoId) || allMemosMap.has(memoId)) return;
+            if (isInvalidMemoId(memoId) || isMemoDeleted(memoId) || allMemosMap.has(memoId)) return;
             const canonical = localStorage.getItem(`sales_memo_${memoId}`);
             if (canonical) {
               try { processMemo(memoId, lotKeyNum, JSON.parse(canonical), `sales_memo_${memoId}`); } catch (e) {}
@@ -777,15 +993,24 @@ export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
     }
   }
 
-  // 4. Scan due_memo_* keys (sales only, not purchase)
+  // 4. Scan due_memo_* keys (strictly sales only, not purchase)
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (key && key.startsWith('due_memo_') && !key.startsWith('due_memo_purchase_')) {
       const memoId = key.replace('due_memo_', '');
-      if (isInvalidMemoId(memoId) || allMemosMap.has(memoId)) continue;
+      if (isInvalidMemoId(memoId) || isMemoDeleted(memoId) || allMemosMap.has(memoId) || purchaseDueIds.has(memoId)) continue;
       try {
         const obj = JSON.parse(localStorage.getItem(key) || '{}');
-        if (obj.type === 'regular' || obj.type === 'permanent' || obj.customerName || (obj.name && obj.type !== 'purchase')) {
+        const inner = obj.memoState || obj;
+        const isPurchase =
+          obj.type === 'purchase' ||
+          inner.type === 'purchase' ||
+          obj.customerType === 'purchase' ||
+          inner.customerType === 'purchase' ||
+          (inner.supplierName && !inner.customerName && inner.customerType !== 'regular' && inner.customerType !== 'permanent' && inner.customerType !== 'reseller') ||
+          (inner.totalPriceMain !== undefined && inner.totalCostMain !== undefined && !inner.customerName);
+
+        if (!isPurchase && (obj.type === 'regular' || obj.type === 'permanent' || obj.type === 'reseller' || obj.customerType === 'reseller' || obj.customerName || inner.customerName || (obj.name && obj.type !== 'purchase'))) {
           let lotNum: number | null = null;
           if (obj.lotNumber && !isNaN(Number(obj.lotNumber))) {
             lotNum = Number(obj.lotNumber);

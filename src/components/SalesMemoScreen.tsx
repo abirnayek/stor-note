@@ -8,7 +8,8 @@ import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
-import { getLotStock, type LotStockSummary } from '../utils/stockUtils';
+import { getLotStock, getLotPurchaseItems, getAllPurchaseItems, type LotStockSummary, type LotPurchaseFishItem } from '../utils/stockUtils';
+import { parseMemoMonthYear } from '../utils/dateUtils';
 
 
 interface SalesMemoScreenProps {
@@ -68,6 +69,9 @@ interface MemoState {
   note?: string;
   commissionValue?: number | '';
   commissionType?: 'percent' | 'flat';
+  commissionOperation?: 'subtract' | 'add';
+  folderId?: string;
+  folderName?: string;
 }
 
 const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber, memoId, onLotChange, onBack, defaultCustomerType }) => {
@@ -221,8 +225,17 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         entries: entriesToSet,
         deductions: rawDeductions,
         note: src.note || dueData?.note || '',
-        commissionValue: src.commissionValue !== undefined ? src.commissionValue : (dueData?.commissionValue !== undefined ? dueData.commissionValue : ''),
-        commissionType: src.commissionType || dueData?.commissionType || 'percent'
+        commissionValue: (() => {
+          let raw = src.commissionValue !== undefined ? src.commissionValue : (dueData?.commissionValue !== undefined ? dueData.commissionValue : '');
+          if (typeof raw === 'object' && raw !== null) {
+            raw = (raw as any).target?.value ?? (raw as any).value ?? (raw as any).amount ?? '';
+          }
+          return raw === '' ? '' : (Number(raw) || '');
+        })(),
+        commissionType: (src.commissionType || dueData?.commissionType || 'percent') as 'percent' | 'flat',
+        commissionOperation: (src.commissionOperation || dueData?.commissionOperation || 'subtract') as 'subtract' | 'add',
+        folderId: src.folderId || dueData?.folderId || '',
+        folderName: src.folderName || dueData?.folderName || ''
       };
     }
 
@@ -243,7 +256,10 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       deductions: [],
       note: '',
       commissionValue: '',
-      commissionType: 'percent'
+      commissionType: 'percent',
+      commissionOperation: 'subtract',
+      folderId: '',
+      folderName: ''
     };
   };
 
@@ -288,6 +304,52 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     }
   }, [memoState.lotNumberInput, lotNumber]);
 
+  const [activeSuggestRowId, setActiveSuggestRowId] = useState<string | null>(null);
+
+  const lotPurchaseItems = React.useMemo(() => {
+    const rawLot = memoState.lotNumberInput ? parseInt(memoState.lotNumberInput, 10) : lotNumber;
+    if (rawLot && !isNaN(rawLot) && rawLot > 0) {
+      return getLotPurchaseItems(rawLot);
+    }
+    return getAllPurchaseItems();
+  }, [memoState.lotNumberInput, lotNumber]);
+
+  const findLotItemByName = (name: string): LotPurchaseFishItem | null => {
+    if (!name || !name.trim()) return null;
+    const trimmed = name.trim().toLowerCase();
+    return lotPurchaseItems.find(it => it.name.trim().toLowerCase() === trimmed) || null;
+  };
+
+  const handleSelectFishSuggestion = (entryId: string, item: LotPurchaseFishItem) => {
+    setMemoState(prev => {
+      const updated: FishEntry[] = prev.entries.map(e => {
+        if (e.id !== entryId) return e;
+        return {
+          ...e,
+          name: item.name,
+          buyRate: item.effectiveCostRate,
+          manualSaleRate: item.suggestedSaleRate > 0 ? item.suggestedSaleRate : item.effectiveCostRate,
+          profitPercent: (item.profitPercent > 0 ? item.profitPercent : (typeof e.profitPercent === 'number' ? e.profitPercent : '')) as (number | '')
+        };
+      });
+      return { ...prev, entries: updated };
+    });
+    setActiveSuggestRowId(null);
+  };
+
+  useEffect(() => {
+    const handleSuggestOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.fish-autocomplete-dropdown') && !target.closest('.fish-name-input-container')) {
+        setActiveSuggestRowId(null);
+      }
+    };
+    if (activeSuggestRowId) {
+      document.addEventListener('mousedown', handleSuggestOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleSuggestOutside);
+  }, [activeSuggestRowId]);
+
   const [activeColorPickerId, setActiveColorPickerId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -302,6 +364,21 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     }
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [activeColorPickerId]);
+
+  const [showLossPopover, setShowLossPopover] = useState(false);
+
+  useEffect(() => {
+    const handleOutsideLoss = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.loss-details-popover') && !target.closest('.metric-box-loss')) {
+        setShowLossPopover(false);
+      }
+    };
+    if (showLossPopover) {
+      document.addEventListener('mousedown', handleOutsideLoss);
+    }
+    return () => document.removeEventListener('mousedown', handleOutsideLoss);
+  }, [showLossPopover]);
 
   const handleAddDeduction = (defaultTitle: string = '') => {
     setMemoState(prev => ({
@@ -386,16 +463,25 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       const destKey = `sales_memo_lot_${validLot === null ? 'unassigned' : validLot}_memo_${memoId}`;
       localStorage.setItem(destKey, JSON.stringify(stateToSave));
 
-      // Preserve stable local timestamp for canonical and dest keys so sorting in Global List never jumps
+      // Preserve stable local timestamp for canonical and dest keys so sorting in Global List & Month folders is exact
       try {
         const tsRaw = localStorage.getItem('local_timestamps');
         let tsMap: Record<string, number> = tsRaw ? JSON.parse(tsRaw) : {};
-        let memoTimestamp = tsMap[canonicalKey]
-          || tsMap[destKey]
-          || tsMap[`sales_memo_lot_${lotNumber ?? 'unassigned'}_memo_${memoId}`]
-          || tsMap[`due_memo_${memoId}`]
-          || (stateToSave.createdAt ? Date.parse(stateToSave.createdAt) : 0)
-          || (!isNaN(Number(memoId)) && Number(memoId) > 1000000000 ? Number(memoId) : 0);
+        
+        let memoTimestamp = 0;
+        if (stateToSave.isOriginalDate === false && stateToSave.customDate) {
+          const { month: parsedM, year: parsedY } = parseMemoMonthYear(stateToSave);
+          const dayMatch = stateToSave.customDate.match(/(?:^|[^\d])([1-9]|[12]\d|3[01])(?:[^\d]|$)/);
+          const day = dayMatch ? parseInt(dayMatch[1], 10) : 15;
+          memoTimestamp = new Date(parsedY, parsedM - 1, day, 12, 0, 0).getTime();
+        } else {
+          memoTimestamp = tsMap[canonicalKey]
+            || tsMap[destKey]
+            || tsMap[`sales_memo_lot_${lotNumber ?? 'unassigned'}_memo_${memoId}`]
+            || tsMap[`due_memo_${memoId}`]
+            || (stateToSave.createdAt ? Date.parse(stateToSave.createdAt) : 0)
+            || (!isNaN(Number(memoId)) && Number(memoId) > 1000000000 ? Number(memoId) : 0);
+        }
 
         if (!memoTimestamp || isNaN(memoTimestamp)) {
           memoTimestamp = Date.now();
@@ -543,8 +629,15 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     });
 
     const totalDeductions = (memoState.deductions || []).reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
-    const commVal = Number(memoState.commissionValue) || 0;
+    let rawCommVal = memoState.commissionValue;
+    if (typeof rawCommVal === 'object' && rawCommVal !== null) {
+      rawCommVal = (rawCommVal as any).target?.value ?? (rawCommVal as any).value ?? (rawCommVal as any).amount ?? '';
+    }
+    const commVal = typeof rawCommVal === 'string'
+      ? (Number(rawCommVal.replace(/[০-৯]/g, (d: string) => (d.charCodeAt(0) - 0x09e6).toString())) || 0)
+      : (Number(rawCommVal) || 0);
     const commType = memoState.commissionType || 'percent';
+    const commOp = memoState.commissionOperation || 'subtract';
     let commissionAmount = 0;
     if (commVal > 0) {
       if (commType === 'flat') {
@@ -553,7 +646,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         commissionAmount = Math.round((fishTotal * commVal / 100) * 100) / 100;
       }
     }
-    const grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions - commissionAmount) * 100) / 100);
+    let grandTotal = 0;
+    if (commOp === 'subtract') {
+      grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions - commissionAmount) * 100) / 100);
+    } else {
+      grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions + commissionAmount) * 100) / 100);
+    }
     const dueAmount = Math.max(0, Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100);
     let currentStatus = memoState.status || 'draft';
 
@@ -585,11 +683,16 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         if (dStr) existingDueObj = JSON.parse(dStr);
       } catch (e) {}
 
+      const effectiveDateStr = (memoState.isOriginalDate === false && memoState.customDate)
+        ? memoState.customDate
+        : (memoState.createdAt || today);
+
       const newDueData = {
         ...existingDueObj,
         id: memoId,
-        memoState: memoState,
-        date: memoState.createdAt || today,
+        memoState: { ...memoState, date: effectiveDateStr, customDate: memoState.customDate },
+        date: effectiveDateStr,
+        createdAt: effectiveDateStr,
         name: memoState.customerName,
         customerName: memoState.customerName,
         address: memoState.address,
@@ -601,8 +704,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         status: currentStatus,
         autoMessage: existingDueObj.autoMessage,
         deductions: memoState.deductions || [],
-        commissionValue: memoState.commissionValue !== undefined ? memoState.commissionValue : '',
-        commissionType: memoState.commissionType || 'percent',
+        commissionValue: (typeof rawCommVal === 'number' || typeof rawCommVal === 'string') ? rawCommVal : '',
+        commissionType: commType,
+        commissionOperation: commOp,
         commissionAmount: commissionAmount,
         entries: memoState.entries.map((e, i) => ({
           id: e.id,
@@ -687,13 +791,19 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
 
   const updateMemoState = (field: keyof MemoState, value: any) => {
+    let cleanVal = value;
+    if (field === 'commissionValue') {
+      if (value && typeof value === 'object' && value.target) {
+        cleanVal = value.target.value;
+      }
+    }
     setMemoState(prev => {
-      const newState = { ...prev, [field]: value };
+      const newState = { ...prev, [field]: cleanVal };
       if (field === 'lotNumberInput') {
-        if (!value) {
+        if (!cleanVal) {
           newState.entries = newState.entries.map(e => ({ ...e, buyRate: 0 }));
         }
-        syncMemoToLot(value, newState);
+        syncMemoToLot(cleanVal, newState);
       }
       return newState;
     });
@@ -702,54 +812,27 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const updateEntry = (id: string, field: keyof FishEntry, value: any) => {
     setMemoState(prev => {
       let updatedEntries = prev.entries.map(e => e.id === id ? { ...e, [field]: value } : e);
-      
-      // Auto-fill logic by name
-      if (field === 'name' && prev.lotNumberInput) {
-        const lotMemoStr = localStorage.getItem(`memo_lot_${prev.lotNumberInput}`);
-        if (lotMemoStr) {
-          try {
-            const lotMemo = JSON.parse(lotMemoStr);
-            const foundIndex = lotMemo.entries.findIndex((e: any) => e.name === value);
-            if (foundIndex !== -1) {
-               const foundEntry = lotMemo.entries[foundIndex];
-               if (foundEntry.totalKg && foundEntry.totalPrice) {
-                 const autoRate = foundEntry.totalPrice / foundEntry.totalKg;
-                 let costPercent = 0;
-                 if (lotMemo.totalPriceMain && lotMemo.totalCostMain) {
-                     costPercent = (Number(lotMemo.totalCostMain) / Number(lotMemo.totalPriceMain)) * 100;
-                 }
-                 const investmentRate = autoRate + (autoRate * costPercent / 100);
-                 updatedEntries = updatedEntries.map(e => e.id === id ? { ...e, buyRate: Number(investmentRate.toFixed(2)), serialNo: (foundIndex + 1).toString() } : e);
-               }
-            }
-          } catch (err) {}
-        }
-      }
-      
-      // Auto-fill logic by serialNo
-      if (field === 'serialNo') {
-        if (prev.lotNumberInput && value) {
-          const lotMemoStr = localStorage.getItem(`memo_lot_${prev.lotNumberInput}`);
-          if (lotMemoStr) {
-            try {
-              const lotMemo = JSON.parse(lotMemoStr);
-              const index = Number(value) - 1;
-              if (index >= 0 && index < lotMemo.entries.length) {
-                 const foundEntry = lotMemo.entries[index];
-                 if (foundEntry.totalKg && foundEntry.totalPrice) {
-                   const autoRate = foundEntry.totalPrice / foundEntry.totalKg;
-                   let costPercent = 0;
-                   if (lotMemo.totalPriceMain && lotMemo.totalCostMain) {
-                       costPercent = (Number(lotMemo.totalCostMain) / Number(lotMemo.totalPriceMain)) * 100;
-                   }
-                   const investmentRate = autoRate + (autoRate * costPercent / 100);
-                   updatedEntries = updatedEntries.map(e => e.id === id ? { ...e, buyRate: Number(investmentRate.toFixed(2)), name: foundEntry.name } : e);
-                 }
-              }
-            } catch (err) {}
+
+      // Auto-fill cost & suggested sale price when fish name matches lot purchase memo
+      if (field === 'name') {
+        const valStr = String(value || '').trim().toLowerCase();
+        if (valStr) {
+          const matched = lotPurchaseItems.find(it => it.name.trim().toLowerCase() === valStr);
+          if (matched) {
+            updatedEntries = updatedEntries.map(e => {
+              if (e.id !== id) return e;
+              return {
+                ...e,
+                buyRate: matched.effectiveCostRate,
+                manualSaleRate: (e.manualSaleRate !== undefined && e.manualSaleRate !== '')
+                  ? e.manualSaleRate
+                  : (matched.suggestedSaleRate > 0 ? matched.suggestedSaleRate : matched.effectiveCostRate),
+                profitPercent: (e.profitPercent !== undefined && e.profitPercent !== '')
+                  ? e.profitPercent
+                  : (matched.profitPercent > 0 ? matched.profitPercent : '')
+              };
+            });
           }
-        } else if (!value) {
-          updatedEntries = updatedEntries.map(e => e.id === id ? { ...e, buyRate: 0 } : e);
         }
       }
 
@@ -763,16 +846,36 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const handleAddRow = () => {
     setMemoState(prev => ({
       ...prev,
-      entries: [...prev.entries, { id: Date.now().toString(), name: '', totalKg: '', profitPercent: '' }]
+      entries: [
+        ...prev.entries,
+        {
+          id: `entry_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          serialNo: (prev.entries.length + 1).toString(),
+          name: '',
+          totalKg: '',
+          weightUnit: 'kg',
+          profitPercent: '',
+          manualSaleRate: ''
+        }
+      ]
     }));
     focusNewTableRow();
   };
 
   const handleDeleteRow = (id: string) => {
-    setMemoState(prev => ({
-      ...prev,
-      entries: prev.entries.filter(e => e.id !== id)
-    }));
+    setMemoState(prev => {
+      if (prev.entries.length <= 1) {
+        return {
+          ...prev,
+          entries: [{ id: Date.now().toString(), serialNo: '1', name: '', totalKg: '', weightUnit: 'kg', profitPercent: '', manualSaleRate: '' }]
+        };
+      }
+      const filtered = prev.entries.filter(e => e.id !== id);
+      return {
+        ...prev,
+        entries: filtered.map((e, idx) => ({ ...e, serialNo: (idx + 1).toString() }))
+      };
+    });
   };
 
   const handleDownload = async () => {
@@ -797,26 +900,28 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
 
   let fishTotal = 0;
-  let totalProfitAmount = 0;
-  let totalLossAmount = 0;
+  let grossProfit = 0;
+  let grossLoss = 0;
+  const lossItems: { name: string; weightInKg: number; saleRate: number; costRate: number; loss: number }[] = [];
 
   memoState.entries.forEach(entry => {
     let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
-    let buyRateNum = Number(entry.buyRate) || 0;
     
-    let calculatedSaleRate = 0;
-    if (buyRateNum > 0) {
-      calculatedSaleRate = buyRateNum + (buyRateNum * currentProfitPercent / 100);
-    }
-    
+    const matchedItem = findLotItemByName(entry.name);
+    const isExtra = !matchedItem && (entry.name || '').trim() !== '';
+
     let saleRate = 0;
     if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-      let manualRateNum = Number(entry.manualSaleRate);
+      let manualRateNum = Number(entry.manualSaleRate) || 0;
       saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
-    } else {
-      saleRate = calculatedSaleRate;
+    } else if (matchedItem) {
+      let base = matchedItem.suggestedSaleRate > 0 ? matchedItem.suggestedSaleRate : matchedItem.effectiveCostRate;
+      saleRate = base + (base * currentProfitPercent / 100);
+    } else if (entry.buyRate && Number(entry.buyRate) > 0) {
+      let base = Number(entry.buyRate);
+      saleRate = base + (base * currentProfitPercent / 100);
     }
-    
+
     let weightInKg = 0;
     let totalKgNum = Number(entry.totalKg) || 0;
     if (totalKgNum > 0) {
@@ -827,17 +932,30 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       const itemSale = weightInKg * saleRate;
       fishTotal += itemSale;
 
-      if (buyRateNum > 0) {
-        const itemCost = weightInKg * buyRateNum;
+      // Extra products are completely EXCLUDED from profit and loss
+      let costRate = 0;
+      if (!isExtra && matchedItem && matchedItem.effectiveCostRate > 0) {
+        costRate = matchedItem.effectiveCostRate;
+      } else if (!isExtra && Number(entry.buyRate) > 0) {
+        costRate = Number(entry.buyRate);
+      }
+
+      if (costRate > 0) {
+        const itemCost = weightInKg * costRate;
         const diff = itemSale - itemCost;
         if (diff > 0) {
-          totalProfitAmount += diff;
+          grossProfit += diff;
         } else if (diff < 0) {
-          totalLossAmount += Math.abs(diff);
+          const lAmt = Math.abs(diff);
+          grossLoss += lAmt;
+          lossItems.push({
+            name: entry.name || (language === 'bn' ? 'বেনামী মাছ' : 'Unnamed Item'),
+            weightInKg,
+            saleRate,
+            costRate,
+            loss: lAmt
+          });
         }
-      } else if (currentProfitPercent > 0) {
-        const itemProfit = (itemSale * currentProfitPercent) / (100 + currentProfitPercent);
-        totalProfitAmount += itemProfit;
       }
     }
   });
@@ -845,8 +963,15 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const deductionsList = memoState.deductions || [];
   const totalDeductions = deductionsList.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
 
-  const commVal = Number(memoState.commissionValue) || 0;
+  let rawCommVal = memoState.commissionValue;
+  if (typeof rawCommVal === 'object' && rawCommVal !== null) {
+    rawCommVal = (rawCommVal as any).target?.value ?? (rawCommVal as any).value ?? (rawCommVal as any).amount ?? '';
+  }
+  const commVal = typeof rawCommVal === 'string'
+    ? (Number(rawCommVal.replace(/[০-৯]/g, (d: string) => (d.charCodeAt(0) - 0x09e6).toString())) || 0)
+    : (Number(rawCommVal) || 0);
   const commType = memoState.commissionType || 'percent';
+  const commOp = memoState.commissionOperation || 'subtract';
   let commissionAmount = 0;
   if (commVal > 0) {
     if (commType === 'flat') {
@@ -856,7 +981,35 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     }
   }
 
-  const grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions - commissionAmount) * 100) / 100);
+  // Net Profit & Loss after Commission
+  let totalProfitAmount = 0;
+  let totalLossAmount = 0;
+
+  if (commOp === 'subtract') {
+    const netProfit = grossProfit - commissionAmount;
+    if (netProfit >= 0) {
+      totalProfitAmount = Math.round(netProfit * 100) / 100;
+      totalLossAmount = Math.round(grossLoss * 100) / 100;
+    } else {
+      // Commission exceeds profit: difference becomes a real loss!
+      totalProfitAmount = 0;
+      totalLossAmount = Math.round((grossLoss + Math.abs(netProfit)) * 100) / 100;
+    }
+  } else {
+    // Commission is added: increases profit
+    totalProfitAmount = Math.round((grossProfit + commissionAmount) * 100) / 100;
+    totalLossAmount = Math.round(grossLoss * 100) / 100;
+  }
+
+  // Net Profit (মোট লাভ - মোট লস)
+  const netProfitOrLoss = Math.round((totalProfitAmount - totalLossAmount) * 100) / 100;
+
+  let grandTotal = 0;
+  if (commOp === 'subtract') {
+    grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions - commissionAmount) * 100) / 100);
+  } else {
+    grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions + commissionAmount) * 100) / 100);
+  }
   const dueAmount = Math.max(0, Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100);
 
   const totalKgSum = memoState.entries.reduce((sum, entry) => {
@@ -987,27 +1140,135 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 </span>
               </div>
 
-              {/* Box 3: মোট লস */}
+              {/* Box 3: মোট লস (Clickable to see why loss occurred) */}
+              <div 
+                className="metric-box-loss"
+                onClick={() => totalLossAmount > 0 && setShowLossPopover(prev => !prev)}
+                style={{
+                  position: 'relative',
+                  background: 'linear-gradient(145deg, rgba(127, 29, 29, 0.35) 0%, rgba(69, 10, 10, 0.8) 100%)',
+                  border: totalLossAmount > 0 ? '1.5px solid rgba(248, 113, 113, 0.7)' : '1.5px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: '8px',
+                  padding: '4px 10px',
+                  minWidth: '90px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+                  cursor: totalLossAmount > 0 ? 'pointer' : 'default'
+                }}
+                title={totalLossAmount > 0 ? (language === 'bn' ? 'লসের বিস্তারিত দেখতে ক্লিক করুন' : 'Click to see loss breakdown') : undefined}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '0.72rem', color: totalLossAmount > 0 ? '#fca5a5' : '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {language === 'bn' ? 'মোট লস' : 'Total Loss'}
+                  </span>
+                  {totalLossAmount > 0 && (
+                    <span style={{ fontSize: '0.65rem', background: 'rgba(239,68,68,0.4)', borderRadius: '50%', width: '13px', height: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>ℹ</span>
+                  )}
+                </div>
+                <span style={{ fontSize: '0.96rem', color: totalLossAmount > 0 ? '#f87171' : '#94a3b8', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  {totalLossAmount > 0 ? `- ৳ ${totalLossAmount.toFixed(2)}` : '৳ 0.00'}
+                </span>
+
+                {/* Loss Details Popover */}
+                {showLossPopover && totalLossAmount > 0 && (
+                  <div 
+                    className="loss-details-popover"
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      position: 'absolute',
+                      top: '110%',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      background: '#181216',
+                      border: '1.5px solid rgba(239, 68, 68, 0.6)',
+                      borderRadius: '10px',
+                      padding: '10px 12px',
+                      minWidth: '240px',
+                      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.65)',
+                      zIndex: 1000,
+                      textAlign: 'left'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(239, 68, 68, 0.3)', paddingBottom: '5px', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#fca5a5' }}>
+                        {language === 'bn' ? '📋 লস হওয়ার কারণ ও বিবরণ:' : 'Loss Breakdown:'}
+                      </span>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowLossPopover(false)}
+                        style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: '0.85rem' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '160px', overflowY: 'auto' }}>
+                      {lossItems.map((item, idx) => (
+                        <div key={idx} style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '5px 8px', borderRadius: '6px', fontSize: '0.75rem' }}>
+                          <div style={{ fontWeight: 'bold', color: '#fff', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>{item.name}</span>
+                            <span style={{ color: '#f87171' }}>- ৳ {item.loss.toFixed(2)}</span>
+                          </div>
+                          <div style={{ color: '#cbd5e1', fontSize: '0.7rem', marginTop: '2px' }}>
+                            বিক্রয় দর: ৳{item.saleRate.toFixed(2)} &lt; ক্রয় দর: ৳{item.costRate.toFixed(2)}
+                          </div>
+                          <div style={{ color: '#94a3b8', fontSize: '0.68rem' }}>
+                            বিক্রি: {item.weightInKg >= 1 ? `${item.weightInKg.toFixed(2)} kg` : `${(item.weightInKg * 1000).toFixed(0)} g`}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ marginTop: '8px', fontSize: '0.68rem', color: '#94a3b8', lineHeight: 1.3, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '5px' }}>
+                      {language === 'bn' 
+                        ? '*লটের ক্রয় ও খরচ হওয়া দরের চেয়ে বিক্রয় দর কম রাখলে এ ক্ষতি হয়।' 
+                        : '*Occurs when sale rate is lower than purchase+cost rate.'}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Box 4: নিট লাভ (মোট লাভ - মোট লস) */}
               <div style={{
-                background: 'linear-gradient(145deg, rgba(127, 29, 29, 0.35) 0%, rgba(69, 10, 10, 0.8) 100%)',
-                border: totalLossAmount > 0 ? '1.5px solid rgba(248, 113, 113, 0.7)' : '1.5px solid rgba(255, 255, 255, 0.15)',
+                background: netProfitOrLoss >= 0 
+                  ? 'linear-gradient(145deg, rgba(20, 83, 45, 0.6) 0%, rgba(6, 46, 24, 0.9) 100%)'
+                  : 'linear-gradient(145deg, rgba(127, 29, 29, 0.45) 0%, rgba(69, 10, 10, 0.9) 100%)',
+                border: netProfitOrLoss >= 0 
+                  ? '1.5px solid rgba(74, 222, 128, 0.7)' 
+                  : '1.5px solid rgba(248, 113, 113, 0.8)',
                 borderRadius: '8px',
                 padding: '4px 10px',
-                minWidth: '90px',
+                minWidth: '95px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
               }}>
-                <span style={{ fontSize: '0.72rem', color: totalLossAmount > 0 ? '#fca5a5' : '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  {language === 'bn' ? 'মোট লস' : 'Total Loss'}
+                <span style={{ 
+                  fontSize: '0.72rem', 
+                  color: netProfitOrLoss >= 0 ? '#86efac' : '#fca5a5', 
+                  fontWeight: 600, 
+                  whiteSpace: 'nowrap' 
+                }}>
+                  {language === 'bn' 
+                    ? (netProfitOrLoss >= 0 ? 'নিট লাভ' : 'নিট লস') 
+                    : (netProfitOrLoss >= 0 ? 'Net Profit' : 'Net Loss')}
                 </span>
-                <span style={{ fontSize: '0.96rem', color: totalLossAmount > 0 ? '#f87171' : '#94a3b8', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                  {totalLossAmount > 0 ? `- ৳ ${totalLossAmount.toFixed(2)}` : '৳ 0.00'}
+                <span style={{ 
+                  fontSize: '0.96rem', 
+                  color: netProfitOrLoss >= 0 ? '#4ade80' : '#f87171', 
+                  fontWeight: 700, 
+                  whiteSpace: 'nowrap' 
+                }}>
+                  {netProfitOrLoss >= 0 
+                    ? `+ ৳ ${netProfitOrLoss.toFixed(2)}` 
+                    : `- ৳ ${Math.abs(netProfitOrLoss).toFixed(2)}`}
                 </span>
               </div>
 
-              {/* Box 4: কমিশন (% / ৳ toggle & input) */}
+              {/* Box 5: কমিশন (+/- , %/৳ toggle & input) */}
               <div style={{
                 background: 'linear-gradient(145deg, rgba(16, 44, 28, 0.95) 0%, rgba(8, 26, 16, 0.95) 100%)',
                 border: '1.5px solid rgba(234, 179, 8, 0.7)',
@@ -1015,57 +1276,103 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 padding: '3px 8px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '2px',
-                minWidth: '135px',
+                gap: '3px',
+                minWidth: '155px',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
                   <span style={{ fontSize: '0.72rem', color: '#fde047', fontWeight: 700, whiteSpace: 'nowrap' }}>
                     {language === 'bn' ? 'কমিশন' : 'Commission'}
                   </span>
-                  <div style={{
-                    display: 'inline-flex',
-                    borderRadius: '4px',
-                    overflow: 'hidden',
-                    border: '1px solid rgba(234, 179, 8, 0.5)',
-                    background: 'rgba(0, 0, 0, 0.4)'
-                  }}>
-                    <button
-                      type="button"
-                      onClick={() => updateMemoState('commissionType', 'percent')}
-                      style={{
-                        padding: '1px 6px',
-                        fontSize: '0.72rem',
-                        fontWeight: 'bold',
-                        background: (memoState.commissionType || 'percent') === 'percent' ? '#eab308' : 'transparent',
-                        color: (memoState.commissionType || 'percent') === 'percent' ? '#000000' : '#cbd5e1',
-                        border: 'none',
-                        cursor: 'pointer'
-                      }}
-                      title="Percentage (%)"
-                    >
-                      %
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updateMemoState('commissionType', 'flat')}
-                      style={{
-                        padding: '1px 6px',
-                        fontSize: '0.72rem',
-                        fontWeight: 'bold',
-                        background: memoState.commissionType === 'flat' ? '#eab308' : 'transparent',
-                        color: memoState.commissionType === 'flat' ? '#000000' : '#cbd5e1',
-                        border: 'none',
-                        cursor: 'pointer'
-                      }}
-                      title="Flat Amount (৳)"
-                    >
-                      ৳
-                    </button>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {/* Add / Subtract toggle */}
+                    <div style={{
+                      display: 'inline-flex',
+                      borderRadius: '4px',
+                      overflow: 'hidden',
+                      border: '1px solid rgba(234, 179, 8, 0.5)',
+                      background: 'rgba(0, 0, 0, 0.4)'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => updateMemoState('commissionOperation', 'subtract')}
+                        style={{
+                          padding: '1px 5px',
+                          fontSize: '0.72rem',
+                          fontWeight: 'bold',
+                          background: (memoState.commissionOperation || 'subtract') === 'subtract' ? '#ef4444' : 'transparent',
+                          color: (memoState.commissionOperation || 'subtract') === 'subtract' ? '#ffffff' : '#cbd5e1',
+                          border: 'none',
+                          cursor: 'pointer'
+                        }}
+                        title={language === 'bn' ? 'কমিশন মাইনাস' : 'Subtract Commission'}
+                      >
+                        [-]
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateMemoState('commissionOperation', 'add')}
+                        style={{
+                          padding: '1px 5px',
+                          fontSize: '0.72rem',
+                          fontWeight: 'bold',
+                          background: memoState.commissionOperation === 'add' ? '#22c55e' : 'transparent',
+                          color: memoState.commissionOperation === 'add' ? '#ffffff' : '#cbd5e1',
+                          border: 'none',
+                          cursor: 'pointer'
+                        }}
+                        title={language === 'bn' ? 'কমিশন যোগ' : 'Add Commission'}
+                      >
+                        [+]
+                      </button>
+                    </div>
+
+                    {/* % / ৳ toggle */}
+                    <div style={{
+                      display: 'inline-flex',
+                      borderRadius: '4px',
+                      overflow: 'hidden',
+                      border: '1px solid rgba(234, 179, 8, 0.5)',
+                      background: 'rgba(0, 0, 0, 0.4)'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => updateMemoState('commissionType', 'percent')}
+                        style={{
+                          padding: '1px 5px',
+                          fontSize: '0.72rem',
+                          fontWeight: 'bold',
+                          background: (memoState.commissionType || 'percent') === 'percent' ? '#eab308' : 'transparent',
+                          color: (memoState.commissionType || 'percent') === 'percent' ? '#000000' : '#cbd5e1',
+                          border: 'none',
+                          cursor: 'pointer'
+                        }}
+                        title="Percentage (%)"
+                      >
+                        %
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateMemoState('commissionType', 'flat')}
+                        style={{
+                          padding: '1px 5px',
+                          fontSize: '0.72rem',
+                          fontWeight: 'bold',
+                          background: memoState.commissionType === 'flat' ? '#eab308' : 'transparent',
+                          color: memoState.commissionType === 'flat' ? '#000000' : '#cbd5e1',
+                          border: 'none',
+                          cursor: 'pointer'
+                        }}
+                        title="Flat Amount (৳)"
+                      >
+                        ৳
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
                   <MathInput
                     style={{
                       width: '65px',
@@ -1080,12 +1387,20 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                       textAlign: 'right'
                     }}
                     placeholder="0"
-                    value={memoState.commissionValue ?? ''}
-                    onChange={(val: any) => updateMemoState('commissionValue', val)}
+                    value={(typeof memoState.commissionValue === 'number' || typeof memoState.commissionValue === 'string') ? memoState.commissionValue : ''}
+                    onChange={(e: any) => {
+                      const v = e && typeof e === 'object' && e.target ? e.target.value : e;
+                      updateMemoState('commissionValue', v);
+                    }}
                   />
                   {commissionAmount > 0 && (
-                    <span style={{ fontSize: '0.74rem', color: '#fca5a5', fontWeight: 700, whiteSpace: 'nowrap' }} title="Deducted commission">
-                      -৳{commissionAmount.toFixed(0)}
+                    <span style={{
+                      fontSize: '0.76rem',
+                      color: (memoState.commissionOperation || 'subtract') === 'add' ? '#86efac' : '#fca5a5',
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {(memoState.commissionOperation || 'subtract') === 'add' ? '+' : '-'}৳{commissionAmount.toFixed(0)}
                     </span>
                   )}
                 </div>
@@ -1250,6 +1565,51 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   <option value="reseller" style={{ color: '#000', background: '#fff' }}>{t('reseller') || 'রিসেলার'}</option>
                 </select>
               </div>
+
+              {(memoState.customerType === 'permanent' || memoState.customerType === 'reseller') && (() => {
+                let foldersList: any[] = [];
+                try {
+                  const key = memoState.customerType === 'permanent' ? 'aratdar_folders' : 'reseller_folders';
+                  const raw = localStorage.getItem(key);
+                  if (raw) foldersList = JSON.parse(raw);
+                } catch (e) {}
+
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="memo-label-dark" style={{ fontSize: '0.9rem' }}>{language === 'bn' ? 'ফোল্ডার:' : 'Folder:'}</span>
+                    <select
+                      style={{
+                        maxWidth: '160px',
+                        padding: '0.35rem 0.5rem',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        color: '#ffffff',
+                        background: 'rgba(255,255,255,0.1)',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '6px',
+                        outline: 'none'
+                      }}
+                      value={memoState.folderId || ''}
+                      onChange={e => {
+                        const selId = e.target.value;
+                        const matched = foldersList.find((f: any) => f.id === selId);
+                        setMemoState(prev => ({
+                          ...prev,
+                          folderId: selId,
+                          folderName: matched ? matched.name : ''
+                        }));
+                      }}
+                    >
+                      <option value="" style={{ color: '#000', background: '#fff' }}>{language === 'bn' ? '-- ফোল্ডারহীন --' : '-- No Folder --'}</option>
+                      {foldersList.map((f: any) => (
+                        <option key={f.id} value={f.id} style={{ color: '#000', background: '#fff' }}>
+                          📁 {f.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -1307,65 +1667,260 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                         transition: 'background-color 0.2s'
                       }}
                     >
-                      <td data-label="Sl No.">
-                        <DebouncedInput 
-                          placeholder="Sl"
-                          value={entry.serialNo || ''}
-                          onChange={e => updateEntry(entry.id, 'serialNo', e.target.value)}
-                          onAddRow={handleAddRow}
-                          isLastRow={isLastRow}
-                          style={{ width: '50px', textAlign: 'center' }}
-                        />
+                      <td data-label="Sl No." style={{ width: '50px', textAlign: 'center', fontWeight: 'bold', color: '#94a3b8' }}>
+                        {index + 1}
                       </td>
-                      <td data-label={t('fishName')}>
-                        <DebouncedInput 
-                          placeholder={t('writeHere')}
-                          value={entry.name}
-                          onChange={e => updateEntry(entry.id, 'name', e.target.value)}
-                          onAddRow={handleAddRow}
-                          isLastRow={isLastRow}
-                        />
-                        {currentLotStock && (() => {
-                          const sItem = currentLotStock.items.find(
-                            it => (entry.serialNo && it.serialNo === Number(entry.serialNo)) || 
-                                  (entry.name && it.name.trim().toLowerCase() === entry.name.trim().toLowerCase())
-                          );
-                          if (sItem) {
-                            const isAvailable = sItem.remainingKg > 0;
-                            const isLow = isAvailable && sItem.purchasedKg > 0 && (sItem.remainingKg / sItem.purchasedKg) < 0.25;
-                            const badgeColor = !isAvailable ? '#ff5252' : isLow ? '#ffb300' : '#72be44';
-                            const badgeBg = !isAvailable ? 'rgba(255, 82, 82, 0.12)' : isLow ? 'rgba(255, 179, 0, 0.12)' : 'rgba(114, 190, 68, 0.12)';
-                            const badgeBorder = !isAvailable ? 'rgba(255, 82, 82, 0.3)' : isLow ? 'rgba(255, 179, 0, 0.3)' : 'rgba(114, 190, 68, 0.3)';
+                      <td data-label={t('fishName')} style={{ position: 'relative' }}>
+                        {(() => {
+                          const matchedLotItem = findLotItemByName(entry.name);
+                          const isExtra = !matchedLotItem && (entry.name || '').trim() !== '';
+                          const inputVal = (entry.name || '').trim().toLowerCase();
+                          const filteredSuggestions = inputVal
+                            ? lotPurchaseItems.filter(it => it.name.toLowerCase().includes(inputVal))
+                            : lotPurchaseItems;
 
-                            return (
+                          return (
+                            <div className="fish-name-input-container" style={{ position: 'relative' }}>
                               <div style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px',
-                                fontSize: '0.73rem',
-                                color: badgeColor,
-                                background: badgeBg,
-                                border: `1px solid ${badgeBorder}`,
-                                padding: '2px 8px',
-                                borderRadius: '20px',
-                                marginTop: '4px',
-                                fontWeight: 600,
-                                letterSpacing: '0.01em',
-                                whiteSpace: 'nowrap'
+                                borderRadius: '6px',
+                                border: isExtra ? '1.5px solid #ef4444' : undefined,
+                                backgroundColor: isExtra ? 'rgba(239, 68, 68, 0.12)' : undefined,
+                                padding: isExtra ? '1px' : undefined
                               }}>
-                                <span style={{
-                                  width: '6px',
-                                  height: '6px',
-                                  borderRadius: '50%',
-                                  backgroundColor: badgeColor,
-                                  boxShadow: `0 0 6px ${badgeColor}`,
-                                  display: 'inline-block'
-                                }} />
-                                <span>স্টক: {sItem.remainingKg} kg {sItem.remainingKg <= 0 ? '(শেষ)' : ''}</span>
+                                <DebouncedInput 
+                                  placeholder={t('writeHere')}
+                                  value={entry.name}
+                                  onFocus={() => setActiveSuggestRowId(entry.id)}
+                                  onChange={e => {
+                                    updateEntry(entry.id, 'name', e.target.value);
+                                    setActiveSuggestRowId(entry.id);
+                                  }}
+                                  onAddRow={handleAddRow}
+                                  isLastRow={isLastRow}
+                                />
                               </div>
-                            );
-                          }
-                          return null;
+
+                              {/* Autocomplete Dropdown */}
+                              {activeSuggestRowId === entry.id && filteredSuggestions.length > 0 && (
+                                <div
+                                  className="fish-autocomplete-dropdown"
+                                  style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    left: 0,
+                                    right: 0,
+                                    minWidth: '270px',
+                                    maxHeight: '220px',
+                                    overflowY: 'auto',
+                                    backgroundColor: '#0d2818',
+                                    border: '1.5px solid #22c55e',
+                                    borderRadius: '8px',
+                                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.8)',
+                                    zIndex: 250,
+                                    marginTop: '4px',
+                                    padding: '4px 0'
+                                  }}
+                                >
+                                  <div style={{
+                                    padding: '4px 8px',
+                                    fontSize: '0.72rem',
+                                    color: '#86efac',
+                                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                                    fontWeight: 600
+                                  }}>
+                                    {language === 'bn' ? 'ক্রয় মেমো থেকে নির্বাচন করুন:' : 'Select fish from purchase memo:'}
+                                  </div>
+                                  {filteredSuggestions.map((item, sIdx) => (
+                                    <div
+                                      key={`${item.name}_${sIdx}`}
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        handleSelectFishSuggestion(entry.id, item);
+                                      }}
+                                      style={{
+                                        padding: '6px 10px',
+                                        cursor: 'pointer',
+                                        borderBottom: sIdx !== filteredSuggestions.length - 1 ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        transition: 'background-color 0.15s'
+                                      }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.25)')}
+                                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                    >
+                                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.86rem' }}>{item.name}</span>
+                                        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                                          ক্রয়+খরচ: ৳{item.effectiveCostRate}/kg
+                                        </span>
+                                      </div>
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                                        <span style={{
+                                          fontSize: '0.72rem',
+                                          color: item.remainingKg > 0 ? '#4ade80' : '#f87171',
+                                          fontWeight: 600
+                                        }}>
+                                          স্টক: {item.remainingKg} kg
+                                        </span>
+                                        <span style={{
+                                          fontSize: '0.75rem',
+                                          color: '#facc15',
+                                          fontWeight: 700
+                                        }}>
+                                          বিক্রয়: ৳{item.suggestedSaleRate || item.effectiveCostRate}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Extra product badge */}
+                              {isExtra && (
+                                <div style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '0.73rem',
+                                  color: '#f87171',
+                                  background: 'rgba(239, 68, 68, 0.16)',
+                                  border: '1px solid rgba(239, 68, 68, 0.45)',
+                                  padding: '2px 8px',
+                                  borderRadius: '20px',
+                                  marginTop: '4px',
+                                  fontWeight: 600,
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  <AlertCircle size={12} />
+                                  <span>{language === 'bn' ? 'অতিরিক্ত পণ্য' : 'Extra Product'}</span>
+                                </div>
+                              )}
+
+                              {/* Stock and Purchase Cost badges for matched items */}
+                              {!isExtra && (() => {
+                                const sItem = currentLotStock?.items.find(
+                                  it => it.name.trim().toLowerCase() === (entry.name || '').trim().toLowerCase()
+                                );
+                                const remKg = sItem ? sItem.remainingKg : matchedLotItem?.remainingKg;
+                                if (remKg !== undefined) {
+                                  const isAvailable = remKg > 0;
+                                  const isLow = isAvailable && remKg < 5;
+                                  const badgeColor = !isAvailable ? '#ff5252' : isLow ? '#ffb300' : '#72be44';
+                                  const badgeBg = !isAvailable ? 'rgba(255, 82, 82, 0.12)' : isLow ? 'rgba(255, 179, 0, 0.12)' : 'rgba(114, 190, 68, 0.12)';
+                                  const badgeBorder = !isAvailable ? 'rgba(255, 82, 82, 0.3)' : isLow ? 'rgba(255, 179, 0, 0.3)' : 'rgba(114, 190, 68, 0.3)';
+
+                                  return (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                                      <div style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        fontSize: '0.73rem',
+                                        color: badgeColor,
+                                        background: badgeBg,
+                                        border: `1px solid ${badgeBorder}`,
+                                        padding: '2px 8px',
+                                        borderRadius: '20px',
+                                        fontWeight: 600,
+                                        letterSpacing: '0.01em',
+                                        whiteSpace: 'nowrap'
+                                      }}>
+                                        <span style={{
+                                          width: '6px',
+                                          height: '6px',
+                                          borderRadius: '50%',
+                                          backgroundColor: badgeColor,
+                                          boxShadow: `0 0 6px ${badgeColor}`,
+                                          display: 'inline-block'
+                                        }} />
+                                        <span>স্টক: {remKg} kg {remKg <= 0 ? '(শেষ)' : ''}</span>
+                                      </div>
+                                      {matchedLotItem && matchedLotItem.effectiveCostRate > 0 && (
+                                        <div style={{
+                                          fontSize: '0.7rem',
+                                          color: '#93c5fd',
+                                          background: 'rgba(59, 130, 246, 0.15)',
+                                          border: '1px solid rgba(59, 130, 246, 0.3)',
+                                          padding: '2px 6px',
+                                          borderRadius: '20px',
+                                          fontWeight: 500,
+                                          whiteSpace: 'nowrap'
+                                        }}>
+                                          ক্রয়+খরচ: ৳{matchedLotItem.effectiveCostRate}
+                                        </div>
+                                      )}
+                                      {(() => {
+                                        const effectiveCost = matchedLotItem && matchedLotItem.effectiveCostRate > 0
+                                          ? matchedLotItem.effectiveCostRate
+                                          : (Number(entry.buyRate) > 0 ? Number(entry.buyRate) : 0);
+
+                                        if (!effectiveCost || saleRate <= 0) return null;
+
+                                        if (saleRate < effectiveCost) {
+                                          const perKgLoss = effectiveCost - saleRate;
+                                          const totalRowLoss = weightInKg > 0 ? Math.round(weightInKg * perKgLoss * 100) / 100 : perKgLoss;
+                                          return (
+                                            <div
+                                              style={{
+                                                fontSize: '0.72rem',
+                                                color: '#fca5a5',
+                                                background: 'rgba(239, 68, 68, 0.22)',
+                                                border: '1px solid rgba(239, 68, 68, 0.55)',
+                                                padding: '2px 7px',
+                                                borderRadius: '20px',
+                                                fontWeight: 700,
+                                                whiteSpace: 'nowrap',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                boxShadow: '0 1px 4px rgba(239, 68, 68, 0.2)'
+                                              }}
+                                              title={language === 'bn'
+                                                ? `ক্রয়+খরচ দর ৳${effectiveCost.toFixed(2)} এর চেয়ে বিক্রয় দর ৳${saleRate.toFixed(2)} কম হওয়ায় প্রতি কেজিতে ৳${perKgLoss.toFixed(2)} লস হয়েছে`
+                                                : `Sale rate ৳${saleRate.toFixed(2)} is less than cost ৳${effectiveCost.toFixed(2)} (loss: ৳${perKgLoss.toFixed(2)}/kg)`}
+                                            >
+                                              <span>🔻 {language === 'bn' ? 'লস:' : 'Loss:'} - ৳ {totalRowLoss.toFixed(2)}</span>
+                                              <span style={{ fontSize: '0.66rem', opacity: 0.85 }}>
+                                                ({language === 'bn' ? 'বিক্রয়' : 'Sale'} ৳{saleRate.toFixed(2)} &lt; {language === 'bn' ? 'ক্রয়' : 'Cost'} ৳{effectiveCost.toFixed(2)})
+                                              </span>
+                                            </div>
+                                          );
+                                        } else if (saleRate > effectiveCost && weightInKg > 0) {
+                                          const perKgProfit = saleRate - effectiveCost;
+                                          const totalRowProfit = Math.round(weightInKg * perKgProfit * 100) / 100;
+                                          return (
+                                            <div
+                                              style={{
+                                                fontSize: '0.7rem',
+                                                color: '#86efac',
+                                                background: 'rgba(34, 197, 94, 0.16)',
+                                                border: '1px solid rgba(34, 197, 94, 0.35)',
+                                                padding: '2px 6px',
+                                                borderRadius: '20px',
+                                                fontWeight: 600,
+                                                whiteSpace: 'nowrap',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '3px'
+                                              }}
+                                              title={language === 'bn'
+                                                ? `ক্রয়+খরচ দর ৳${effectiveCost.toFixed(2)} এর চেয়ে বিক্রয় দর ৳${saleRate.toFixed(2)} বেশি হওয়ায় লাভ`
+                                                : `Profit: ৳${totalRowProfit.toFixed(2)}`}
+                                            >
+                                              <span>{language === 'bn' ? 'লাভ:' : 'Profit:'} + ৳ {totalRowProfit.toFixed(2)}</span>
+                                            </div>
+                                          );
+                                        }
+                                        return null;
+                                      })()}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </div>
+                          );
                         })()}
                       </td>
                       <td data-label={t('weightKg')}>
@@ -1840,26 +2395,138 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 </span>
               </div>
 
-              {/* Commission Deduction */}
-              {commissionAmount > 0 && (
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  color: '#fde047',
-                  fontSize: '0.84rem',
-                  paddingLeft: '8px',
-                  borderLeft: '2px solid rgba(234, 179, 8, 0.7)'
-                }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
-                    [-] {language === 'bn' ? 'কমিশন কর্তন' : 'Commission'}{' '}
-                    <span style={{ fontSize: '0.75rem', color: '#fef08a' }}>
-                      ({memoState.commissionType === 'flat' ? '৳' : `${memoState.commissionValue}%`}):
-                    </span>
+              {/* Dedicated Commission Section */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+                background: 'rgba(0, 0, 0, 0.25)',
+                border: '1px solid rgba(234, 179, 8, 0.35)',
+                borderRadius: '8px',
+                padding: '6px 10px',
+                marginTop: '2px',
+                marginBottom: '2px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.86rem', color: '#fde047', fontWeight: 600 }}>
+                    {language === 'bn' ? 'কমিশন:' : 'Commission:'}
                   </span>
-                  <span style={{ fontWeight: 600, color: '#fef08a' }}>- ৳ {commissionAmount.toFixed(2)}</span>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    {/* Operation toggle */}
+                    <div style={{ display: 'inline-flex', borderRadius: '4px', overflow: 'hidden', border: '1px solid rgba(234, 179, 8, 0.4)' }}>
+                      <button
+                        type="button"
+                        onClick={() => updateMemoState('commissionOperation', 'subtract')}
+                        style={{
+                          padding: '2px 7px',
+                          fontSize: '0.74rem',
+                          fontWeight: 'bold',
+                          background: (memoState.commissionOperation || 'subtract') === 'subtract' ? '#ef4444' : 'transparent',
+                          color: (memoState.commissionOperation || 'subtract') === 'subtract' ? '#ffffff' : '#cbd5e1',
+                          border: 'none',
+                          cursor: 'pointer'
+                        }}
+                        title={language === 'bn' ? 'কমিশন মাইনাস (ছাড়)' : 'Subtract Commission'}
+                      >
+                        [-]
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateMemoState('commissionOperation', 'add')}
+                        style={{
+                          padding: '2px 7px',
+                          fontSize: '0.74rem',
+                          fontWeight: 'bold',
+                          background: memoState.commissionOperation === 'add' ? '#22c55e' : 'transparent',
+                          color: memoState.commissionOperation === 'add' ? '#ffffff' : '#cbd5e1',
+                          border: 'none',
+                          cursor: 'pointer'
+                        }}
+                        title={language === 'bn' ? 'কমিশন যোগ' : 'Add Commission'}
+                      >
+                        [+]
+                      </button>
+                    </div>
+
+                    {/* Unit toggle */}
+                    <div style={{ display: 'inline-flex', borderRadius: '4px', overflow: 'hidden', border: '1px solid rgba(234, 179, 8, 0.4)' }}>
+                      <button
+                        type="button"
+                        onClick={() => updateMemoState('commissionType', 'percent')}
+                        style={{
+                          padding: '2px 6px',
+                          fontSize: '0.74rem',
+                          fontWeight: 'bold',
+                          background: (memoState.commissionType || 'percent') === 'percent' ? '#eab308' : 'transparent',
+                          color: (memoState.commissionType || 'percent') === 'percent' ? '#000000' : '#cbd5e1',
+                          border: 'none',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        %
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateMemoState('commissionType', 'flat')}
+                        style={{
+                          padding: '2px 6px',
+                          fontSize: '0.74rem',
+                          fontWeight: 'bold',
+                          background: memoState.commissionType === 'flat' ? '#eab308' : 'transparent',
+                          color: memoState.commissionType === 'flat' ? '#000000' : '#cbd5e1',
+                          border: 'none',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ৳
+                      </button>
+                    </div>
+
+                    {/* Input */}
+                    <MathInput
+                      style={{
+                        width: '60px',
+                        height: '24px',
+                        padding: '1px 5px',
+                        fontSize: '0.85rem',
+                        fontWeight: 'bold',
+                        background: 'rgba(0, 0, 0, 0.5)',
+                        border: '1px solid rgba(234, 179, 8, 0.45)',
+                        borderRadius: '4px',
+                        color: '#ffffff',
+                        textAlign: 'right'
+                      }}
+                      placeholder="0"
+                      value={(typeof memoState.commissionValue === 'number' || typeof memoState.commissionValue === 'string') ? memoState.commissionValue : ''}
+                      onChange={(e: any) => {
+                        const v = e && typeof e === 'object' && e.target ? e.target.value : e;
+                        updateMemoState('commissionValue', v);
+                      }}
+                    />
+                  </div>
                 </div>
-              )}
+
+                {commissionAmount > 0 && (
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: '0.82rem',
+                    color: (memoState.commissionOperation || 'subtract') === 'add' ? '#86efac' : '#fca5a5',
+                    borderTop: '1px dashed rgba(255, 255, 255, 0.1)',
+                    paddingTop: '4px'
+                  }}>
+                    <span>
+                      {(memoState.commissionOperation || 'subtract') === 'add' ? '[+]' : '[-]'} {language === 'bn' ? 'কমিশন' : 'Commission'}{' '}
+                      ({memoState.commissionType === 'flat' ? `৳${commVal}` : `${commVal}%`}):
+                    </span>
+                    <span style={{ fontWeight: 'bold' }}>
+                      {(memoState.commissionOperation || 'subtract') === 'add' ? `+ ৳ ${commissionAmount.toFixed(2)}` : `- ৳ ${commissionAmount.toFixed(2)}`}
+                    </span>
+                  </div>
+                )}
+              </div>
 
               {/* Render each deduction item */}
               {deductionsList.map(d => {

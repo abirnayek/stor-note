@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Search, Package, CheckCircle2, AlertTriangle, XCircle, ArrowRight, Layers, LayoutGrid, Table, Calendar } from 'lucide-react';
+import { ChevronLeft, Search, Package, CheckCircle2, AlertTriangle, XCircle, ArrowRight, Layers, LayoutGrid, Table, Calendar, ArrowUpDown } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getAllLotsStock, type LotStockSummary, type FishStockItem } from '../utils/stockUtils';
 
@@ -15,6 +15,7 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
   const [selectedLot, setSelectedLot] = useState<number | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all');
+  const [sortBy, setSortBy] = useState<'running_out' | 'lot_serial' | 'remaining_asc' | 'remaining_desc'>('running_out');
   const [lotsStock, setLotsStock] = useState<LotStockSummary[]>([]);
 
   const loadStockData = () => {
@@ -73,6 +74,71 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
 
     return matchesSearch && matchesStatus;
   });
+
+  // RESTOCK PRIORITY SORTING: Items that are running out / low stock appear AT THE TOP!
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    if (sortBy === 'lot_serial') {
+      if (a.lotNumber !== b.lotNumber) return a.lotNumber - b.lotNumber;
+      return a.serialNo - b.serialNo;
+    }
+
+    if (sortBy === 'remaining_asc') {
+      if (a.remainingKg !== b.remainingKg) return a.remainingKg - b.remainingKg;
+      return a.name.localeCompare(b.name);
+    }
+
+    if (sortBy === 'remaining_desc') {
+      if (b.remainingKg !== a.remainingKg) return b.remainingKg - a.remainingKg;
+      return a.name.localeCompare(b.name);
+    }
+
+    // Default: 'running_out' (স্টক শেষ হতে চলেছে এমনগুলো সবার উপরে অগ্রাধিকার পাবে)
+    const getPriority = (item: DisplayItem) => {
+      // 1. কম স্টক (শেষের মাথায় / শেষ হতে চলেছে)
+      if (item.status === 'low_stock') return 1;
+      // 2. স্টক শেষ (০ কেজি বাকি)
+      if (item.status === 'out_of_stock') return 2;
+      // 3. বিক্রি হচ্ছে এমন স্টক (বেশি বিক্রি হওয়া আগে আসবে)
+      if (item.soldKg > 0) return 3;
+      // 4. অক্ষত স্টক (০% বিক্রি)
+      return 4;
+    };
+
+    const pA = getPriority(a);
+    const pB = getPriority(b);
+
+    if (pA !== pB) {
+      return pA - pB;
+    }
+
+    // কম স্টকের ভেতরে: যার শতকরা অবশিষ্ট সবচেয়ে কম সে আগে আসবে
+    if (pA === 1) {
+      const remPctA = a.purchasedKg > 0 ? (a.remainingKg / a.purchasedKg) : 0;
+      const remPctB = b.purchasedKg > 0 ? (b.remainingKg / b.purchasedKg) : 0;
+      if (remPctA !== remPctB) return remPctA - remPctB;
+      return a.remainingKg - b.remainingKg;
+    }
+
+    // স্টক শেষ হওয়াদের ভেতরে: বেশি বিক্রয়কৃত আগে
+    if (pA === 2) {
+      return b.soldKg - a.soldKg;
+    }
+
+    // বিক্রি চলমান পণ্যের ভেতরে: বেশি শতকরা বিক্রি হওয়া আগে আসবে (শেষের কাছাকাছি)
+    if (pA === 3) {
+      const soldPctA = a.purchasedKg > 0 ? (a.soldKg / a.purchasedKg) : 0;
+      const soldPctB = b.purchasedKg > 0 ? (b.soldKg / b.purchasedKg) : 0;
+      if (soldPctA !== soldPctB) return soldPctB - soldPctA;
+      return a.remainingKg - b.remainingKg;
+    }
+
+    // অক্ষত পণ্যের ভেতরে: লট ও সিরিয়াল অনুযায়ী
+    if (a.lotNumber !== b.lotNumber) return a.lotNumber - b.lotNumber;
+    return a.serialNo - b.serialNo;
+  });
+
+  const lowStockCount = allDisplayItems.filter(it => it.status === 'low_stock').length;
+  const outOfStockCount = allDisplayItems.filter(it => it.status === 'out_of_stock').length;
 
   const handleCardClick = (lotNumber: number | 'all') => {
     setSelectedLot(lotNumber);
@@ -480,9 +546,48 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
             );
           })()}
 
-          {/* Search and Status Filters */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
-            <div style={{ position: 'relative', flex: '1 1 250px', maxWidth: '400px' }}>
+          {/* Restock Urgency Notification Banner */}
+          {(lowStockCount > 0 || outOfStockCount > 0) && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'linear-gradient(135deg, rgba(255, 152, 0, 0.16) 0%, rgba(239, 68, 68, 0.12) 100%)',
+              border: '1px solid rgba(255, 152, 0, 0.45)',
+              borderRadius: '10px',
+              padding: '0.65rem 1rem',
+              marginBottom: '1rem',
+              gap: '0.8rem',
+              flexWrap: 'wrap',
+              boxShadow: '0 4px 14px rgba(255, 152, 0, 0.1)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={18} style={{ color: '#ffb74d', flexShrink: 0 }} />
+                <span style={{ fontSize: '0.88rem', color: '#fff', fontWeight: 600 }}>
+                  {language === 'bn' 
+                    ? `সতর্কতা: ${lowStockCount > 0 ? `${lowStockCount}টি মাছের স্টক শেষ হতে চলেছে` : ''}${lowStockCount > 0 && outOfStockCount > 0 ? ' এবং ' : ''}${outOfStockCount > 0 ? `${outOfStockCount}টি মাছের স্টক শেষ হয়েছে` : ''} — দ্রুত নতুন ক্রয় করার পরামর্শ দেওয়া হচ্ছে।`
+                    : `Notice: ${lowStockCount} items running low, ${outOfStockCount} out of stock — repurchasing recommended.`}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{
+                  fontSize: '0.78rem',
+                  color: '#ffb74d',
+                  background: 'rgba(0,0,0,0.3)',
+                  border: '1px solid rgba(255, 152, 0, 0.35)',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  fontWeight: 'bold'
+                }}>
+                  {language === 'bn' ? '⚡ শেষ হতে চলা পণ্য উপরে প্রদর্শিত হচ্ছে' : '⚡ Ending items prioritized on top'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Search, Status Filters, and Restock Priority Sort Selector */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.8rem', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
+            <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: '340px' }}>
               <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#aaa' }} />
               <input
                 type="text"
@@ -491,74 +596,111 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                 placeholder="মাছের নাম বা লট দিয়ে খুঁজুন..."
                 style={{
                   width: '100%',
-                  padding: '10px 12px 10px 38px',
+                  padding: '8px 12px 8px 36px',
                   borderRadius: '8px',
                   border: '1px solid rgba(255,255,255,0.15)',
                   background: 'rgba(255,255,255,0.05)',
                   color: '#fff',
-                  fontSize: '0.9rem',
+                  fontSize: '0.88rem',
                   outline: 'none'
                 }}
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button
-                onClick={() => setStatusFilter('all')}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  fontSize: '0.85rem',
-                  border: statusFilter === 'all' ? '1px solid #fff' : '1px solid rgba(255,255,255,0.1)',
-                  background: statusFilter === 'all' ? 'rgba(255,255,255,0.15)' : 'transparent',
-                  color: '#fff',
-                  cursor: 'pointer'
-                }}
-              >
-                সকল অবস্থা
-              </button>
-              <button
-                onClick={() => setStatusFilter('in_stock')}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  fontSize: '0.85rem',
-                  border: statusFilter === 'in_stock' ? '1px solid #72be44' : '1px solid rgba(114, 190, 68, 0.2)',
-                  background: statusFilter === 'in_stock' ? 'rgba(114, 190, 68, 0.2)' : 'transparent',
-                  color: '#72be44',
-                  cursor: 'pointer'
-                }}
-              >
-                স্টকে আছে
-              </button>
-              <button
-                onClick={() => setStatusFilter('low_stock')}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  fontSize: '0.85rem',
-                  border: statusFilter === 'low_stock' ? '1px solid #ff9800' : '1px solid rgba(255, 152, 0, 0.2)',
-                  background: statusFilter === 'low_stock' ? 'rgba(255, 152, 0, 0.2)' : 'transparent',
-                  color: '#ff9800',
-                  cursor: 'pointer'
-                }}
-              >
-                কম স্টক
-              </button>
-              <button
-                onClick={() => setStatusFilter('out_of_stock')}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  fontSize: '0.85rem',
-                  border: statusFilter === 'out_of_stock' ? '1px solid #ff5252' : '1px solid rgba(255, 82, 82, 0.2)',
-                  background: statusFilter === 'out_of_stock' ? 'rgba(255, 82, 82, 0.2)' : 'transparent',
-                  color: '#ff5252',
-                  cursor: 'pointer'
-                }}
-              >
-                স্টক শেষ
-              </button>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.82rem',
+                    border: statusFilter === 'all' ? '1px solid #fff' : '1px solid rgba(255,255,255,0.1)',
+                    background: statusFilter === 'all' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    color: '#fff',
+                    cursor: 'pointer'
+                  }}
+                >
+                  সকল অবস্থা
+                </button>
+                <button
+                  onClick={() => setStatusFilter('in_stock')}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.82rem',
+                    border: statusFilter === 'in_stock' ? '1px solid #72be44' : '1px solid rgba(114, 190, 68, 0.2)',
+                    background: statusFilter === 'in_stock' ? 'rgba(114, 190, 68, 0.2)' : 'transparent',
+                    color: '#72be44',
+                    cursor: 'pointer'
+                  }}
+                >
+                  স্টকে আছে
+                </button>
+                <button
+                  onClick={() => setStatusFilter('low_stock')}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.82rem',
+                    border: statusFilter === 'low_stock' ? '1.5px solid #ff9800' : '1px solid rgba(255, 152, 0, 0.3)',
+                    background: statusFilter === 'low_stock' ? 'rgba(255, 152, 0, 0.25)' : 'rgba(255, 152, 0, 0.08)',
+                    color: '#ffb74d',
+                    fontWeight: statusFilter === 'low_stock' ? 'bold' : 'normal',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ⚠️ কম স্টক {lowStockCount > 0 ? `(${lowStockCount})` : ''}
+                </button>
+                <button
+                  onClick={() => setStatusFilter('out_of_stock')}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.82rem',
+                    border: statusFilter === 'out_of_stock' ? '1.5px solid #ff5252' : '1px solid rgba(255, 82, 82, 0.3)',
+                    background: statusFilter === 'out_of_stock' ? 'rgba(255, 82, 82, 0.25)' : 'rgba(255, 82, 82, 0.08)',
+                    color: '#ff5252',
+                    fontWeight: statusFilter === 'out_of_stock' ? 'bold' : 'normal',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ❌ স্টক শেষ {outOfStockCount > 0 ? `(${outOfStockCount})` : ''}
+                </button>
+              </div>
+
+              {/* Sort selector dropdown */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginLeft: 'auto', background: 'rgba(0,0,0,0.3)', padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <ArrowUpDown size={14} style={{ color: '#ffb74d' }} />
+                <span style={{ fontSize: '0.78rem', color: '#aaa' }}>{language === 'bn' ? 'সর্ট:' : 'Sort:'}</span>
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value as any)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#fff',
+                    fontSize: '0.82rem',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    outline: 'none',
+                    padding: '2px 0'
+                  }}
+                >
+                  <option value="running_out" style={{ color: '#000', background: '#fff' }}>
+                    {language === 'bn' ? '⚡ শেষ হতে চলেছে আগে (ডিফল্ট)' : '⚡ Running Out First'}
+                  </option>
+                  <option value="remaining_asc" style={{ color: '#000', background: '#fff' }}>
+                    {language === 'bn' ? 'অবশিষ্ট স্টক (কম থেকে বেশি)' : 'Remaining: Low to High'}
+                  </option>
+                  <option value="remaining_desc" style={{ color: '#000', background: '#fff' }}>
+                    {language === 'bn' ? 'অবশিষ্ট স্টক (বেশি থেকে কম)' : 'Remaining: High to Low'}
+                  </option>
+                  <option value="lot_serial" style={{ color: '#000', background: '#fff' }}>
+                    {language === 'bn' ? 'লট ও ক্রমিক অনুযায়ী' : 'By Lot & Serial'}
+                  </option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -579,7 +721,7 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredItems.length === 0 ? (
+                  {sortedItems.length === 0 ? (
                     <tr>
                       <td colSpan={8} style={{ textAlign: 'center', padding: '3rem 1rem', color: '#888' }}>
                         <Package size={48} style={{ opacity: 0.3, marginBottom: '0.5rem' }} />
@@ -590,34 +732,82 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                       </td>
                     </tr>
                   ) : (
-                    filteredItems.map(item => {
+                    sortedItems.map((item, index) => {
                       const soldPercent = item.purchasedKg > 0 ? Math.min(100, Math.round((item.soldKg / item.purchasedKg) * 100)) : 0;
                       const remainingPercent = Math.max(0, 100 - soldPercent);
+                      const isLow = item.status === 'low_stock';
+                      const isOut = item.status === 'out_of_stock';
 
                       let statusBadgeColor = '#72be44';
                       let statusBadgeBg = 'rgba(114, 190, 68, 0.15)';
                       let statusText = 'স্টকে আছে';
                       let StatusIcon = CheckCircle2;
 
-                      if (item.status === 'out_of_stock') {
+                      if (isOut) {
                         statusBadgeColor = '#ff5252';
-                        statusBadgeBg = 'rgba(255, 82, 82, 0.15)';
+                        statusBadgeBg = 'rgba(255, 82, 82, 0.18)';
                         statusText = 'স্টক শেষ';
                         StatusIcon = XCircle;
-                      } else if (item.status === 'low_stock') {
+                      } else if (isLow) {
                         statusBadgeColor = '#ff9800';
-                        statusBadgeBg = 'rgba(255, 152, 0, 0.15)';
-                        statusText = 'কম স্টক';
+                        statusBadgeBg = 'rgba(255, 152, 0, 0.18)';
+                        statusText = 'কম স্টক (শেষের পথে)';
                         StatusIcon = AlertTriangle;
                       }
 
                       return (
-                        <tr key={`${item.lotNumber}-${item.id}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                          <td data-label="#" style={{ textAlign: 'center', opacity: 0.7 }}>{item.serialNo}</td>
+                        <tr
+                          key={`${item.lotNumber}-${item.id}`}
+                          style={{
+                            borderBottom: '1px solid rgba(255,255,255,0.06)',
+                            background: isLow 
+                              ? 'rgba(255, 152, 0, 0.09)' 
+                              : (isOut ? 'rgba(239, 68, 68, 0.07)' : undefined),
+                            boxShadow: isLow 
+                              ? 'inset 4px 0 0 #ff9800' 
+                              : (isOut ? 'inset 4px 0 0 #ef4444' : undefined),
+                            transition: 'background-color 0.2s'
+                          }}
+                        >
+                          <td data-label="#" style={{ textAlign: 'center', opacity: 0.85, fontWeight: 'bold' }}>{index + 1}</td>
                           <td data-label="মাছের নাম">
-                            <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#fff' }}>{item.name}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 'bold', fontSize: '1rem', color: '#fff' }}>{item.name}</span>
+                              {isLow && (
+                                <span style={{
+                                  fontSize: '0.7rem',
+                                  color: '#ffb74d',
+                                  background: 'rgba(255, 152, 0, 0.25)',
+                                  border: '1px solid rgba(255, 152, 0, 0.5)',
+                                  padding: '1px 6px',
+                                  borderRadius: '10px',
+                                  fontWeight: 'bold',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px'
+                                }}>
+                                  ⚠️ শেষ হতে চলেছে (নতুন ক্রয় প্রয়োজন)
+                                </span>
+                              )}
+                              {isOut && (
+                                <span style={{
+                                  fontSize: '0.7rem',
+                                  color: '#f87171',
+                                  background: 'rgba(239, 68, 68, 0.25)',
+                                  border: '1px solid rgba(239, 68, 68, 0.5)',
+                                  padding: '1px 6px',
+                                  borderRadius: '10px',
+                                  fontWeight: 'bold',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px'
+                                }}>
+                                  ❌ স্টক শেষ (পুনরায় ক্রয় করুন)
+                                </span>
+                              )}
+                            </div>
                             {item.supplierName && (
-                              <div style={{ fontSize: '0.75rem', color: '#888' }}>আড়ত: {item.supplierName}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '2px' }}>আড়ত: {item.supplierName}</div>
                             )}
                           </td>
                           <td data-label="লট নং" style={{ textAlign: 'center' }}>

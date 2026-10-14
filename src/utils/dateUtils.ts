@@ -23,7 +23,7 @@ export const MONTHS: MonthDef[] = [
 
 export const bnToEnDigits = (str: string): string => {
   const bnDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
-  let s = str;
+  let s = String(str);
   bnDigits.forEach((d, i) => {
     s = s.split(d).join(i.toString());
   });
@@ -43,17 +43,48 @@ export const parseMemoMonthYear = (
   let month = now.getMonth() + 1;
   let year = now.getFullYear();
   let dateStr = '';
-  let timeStr = memo?.createdAtTime || '';
+  let timeStr = '';
 
-  const rawDate = memo?.createdAt || memo?.date || '';
+  let rawDate = '';
+  if (memo) {
+    if (typeof memo === 'string') {
+      rawDate = memo;
+    } else {
+      timeStr = memo.createdAtTime || memo.timeStr || memo.memoState?.createdAtTime || '';
+      const inner = memo.memoState || memo;
+
+      // Always prioritize customDate if original date was toggled off or customDate is specified
+      if (inner.isOriginalDate === false && inner.customDate) {
+        rawDate = String(inner.customDate).trim();
+      } else if (memo.isOriginalDate === false && memo.customDate) {
+        rawDate = String(memo.customDate).trim();
+      } else if (inner.customDate && inner.customDate !== inner.createdAt) {
+        rawDate = String(inner.customDate).trim();
+      } else if (memo.customDate && memo.customDate !== memo.createdAt) {
+        rawDate = String(memo.customDate).trim();
+      } else {
+        rawDate = String(
+          inner.customDate ||
+          inner.createdAt ||
+          inner.date ||
+          memo.customDate ||
+          memo.createdAt ||
+          memo.date ||
+          memo.dateStr ||
+          ''
+        ).trim();
+      }
+    }
+  }
+
   if (rawDate) {
-    dateStr = String(rawDate);
-    const converted = bnToEnDigits(dateStr).toLowerCase();
+    dateStr = rawDate;
+    const converted = bnToEnDigits(rawDate).toLowerCase();
 
-    // Check month keywords in Bengali and English
+    // 1. Check Bengali and English month keywords
     const monthPatterns: [RegExp, number][] = [
-      [/জানু|জানুয়ারি|jan/i, 1],
-      [/ফেব|ফেব্রুয়ারি|feb/i, 2],
+      [/জানু|জানুয়ারি|জানুয়ারি|jan/i, 1],
+      [/ফেব|ফেব্রুয়ারি|ফেব্রুয়ারি|feb/i, 2],
       [/মার্চ|mar/i, 3],
       [/এপ্রি|এপ্রিল|apr/i, 4],
       [/মে|may/i, 5],
@@ -68,7 +99,7 @@ export const parseMemoMonthYear = (
 
     let foundKeyword = false;
     for (const [regex, mIdx] of monthPatterns) {
-      if (regex.test(dateStr) || regex.test(converted)) {
+      if (regex.test(rawDate) || regex.test(converted)) {
         month = mIdx;
         foundKeyword = true;
         break;
@@ -76,20 +107,43 @@ export const parseMemoMonthYear = (
     }
 
     if (!foundKeyword) {
-      // Check numeric format like DD/MM/YYYY or YYYY-MM-DD
-      const slashMatch = converted.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-      if (slashMatch) {
-        const p2 = parseInt(slashMatch[2], 10);
-        const p3 = parseInt(slashMatch[3], 10);
-        if (p3 >= 2000) {
-          year = p3;
-          if (p2 >= 1 && p2 <= 12) month = p2;
-        }
+      // 2. Check ISO format: YYYY-MM-DD or YYYY/MM/DD
+      const isoMatch = converted.match(/(?:^|[^\d])(20\d{2})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})(?:[^\d]|$)/);
+      if (isoMatch) {
+        const y = parseInt(isoMatch[1], 10);
+        const m = parseInt(isoMatch[2], 10);
+        if (y >= 2000) year = y;
+        if (m >= 1 && m <= 12) month = m;
+        foundKeyword = true;
       }
     }
 
-    // Extract 4 digit year
-    const yearMatch = converted.match(/\b(20\d{2})\b/);
+    if (!foundKeyword) {
+      // 3. Check DD/MM/YYYY or DD-MM-YYYY format
+      const dmyMatch = converted.match(/(?:^|[^\d])(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})(?:[^\d]|$)/);
+      if (dmyMatch) {
+        const p2 = parseInt(dmyMatch[2], 10);
+        const p3 = parseInt(dmyMatch[3], 10);
+        if (p3 >= 2000) year = p3;
+        if (p2 >= 1 && p2 <= 12) month = p2;
+        foundKeyword = true;
+      }
+    }
+
+    if (!foundKeyword) {
+      // 4. Check MM/YYYY format
+      const myMatch = converted.match(/(?:^|[^\d])(\d{1,2})[\/\-\.](\d{4})(?:[^\d]|$)/);
+      if (myMatch) {
+        const m = parseInt(myMatch[1], 10);
+        const y = parseInt(myMatch[2], 10);
+        if (y >= 2000) year = y;
+        if (m >= 1 && m <= 12) month = m;
+        foundKeyword = true;
+      }
+    }
+
+    // Extract 4 digit year anywhere in string
+    const yearMatch = converted.match(/(?:^|[^\d])(20\d{2})(?:[^\d]|$)/);
     if (yearMatch) {
       year = parseInt(yearMatch[1], 10);
     }

@@ -25,6 +25,7 @@ const TrashScreen: React.FC<TrashScreenProps> = ({ onNavigate }) => {
     if (window.confirm(`Are you sure you want to restore "${item.title}"?`)) {
       restoreFromTrash(item);
       setItems(getTrashItems());
+      window.dispatchEvent(new Event('storage'));
     }
   };
 
@@ -32,6 +33,7 @@ const TrashScreen: React.FC<TrashScreenProps> = ({ onNavigate }) => {
     if (window.confirm('Are you sure you want to PERMANENTLY delete this? This cannot be undone.')) {
       permanentlyDeleteFromTrash(id);
       setItems(getTrashItems());
+      window.dispatchEvent(new Event('storage'));
     }
   };
 

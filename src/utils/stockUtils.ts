@@ -125,8 +125,7 @@ export const getLotStock = (lotNumber: number): LotStockSummary => {
     }
   }
 
-  // 3. Aggregate Sales by fish name & serialNo
-  const soldBySerial = new Map<number, number>();
+  // 3. Aggregate Sales by fish name
   const soldByName = new Map<string, number>();
 
   salesMemosMap.forEach(memo => {
@@ -138,12 +137,7 @@ export const getLotStock = (lotNumber: number): LotStockSummary => {
       }
       if (weight <= 0) return;
 
-      const serialNo = Number(entry.serialNo);
       const name = (entry.name || '').trim().toLowerCase();
-
-      if (!isNaN(serialNo) && serialNo > 0) {
-        soldBySerial.set(serialNo, (soldBySerial.get(serialNo) || 0) + weight);
-      }
       if (name) {
         soldByName.set(name, (soldByName.get(name) || 0) + weight);
       }
@@ -165,11 +159,9 @@ export const getLotStock = (lotNumber: number): LotStockSummary => {
       purchasedKg = purchasedKg / 1000;
     }
 
-    // Determine sold amount: check match by serialNo first, then by name
+    // Determine sold amount: match strictly by fish name
     let soldKg = 0;
-    if (soldBySerial.has(serialNo)) {
-      soldKg = soldBySerial.get(serialNo) || 0;
-    } else if (nameKey && soldByName.has(nameKey)) {
+    if (nameKey && soldByName.has(nameKey)) {
       soldKg = soldByName.get(nameKey) || 0;
     }
 
@@ -185,7 +177,7 @@ export const getLotStock = (lotNumber: number): LotStockSummary => {
     let status: 'in_stock' | 'low_stock' | 'out_of_stock' = 'in_stock';
     if (remainingKg <= 0.001) {
       status = 'out_of_stock';
-    } else if (remainingKg <= purchasedKg * 0.25) {
+    } else if (remainingKg <= purchasedKg * 0.25 || (purchasedKg >= 10 && remainingKg <= 5) || (remainingKg <= 3 && purchasedKg > 3)) {
       status = 'low_stock';
     }
 
@@ -251,4 +243,93 @@ export const getAllLotsStock = (): LotStockSummary[] => {
 
   const sortedLots = Array.from(lotNumbersSet).sort((a, b) => a - b);
   return sortedLots.map(lotNum => getLotStock(lotNum));
+};
+
+export interface LotPurchaseFishItem {
+  id: string;
+  serialNo: number;
+  lotNumber: number;
+  name: string;
+  purchasedKg: number;
+  remainingKg: number;
+  baseBuyRate: number;
+  costPercent: number;
+  effectiveCostRate: number; // ক্রয় এবং খরচ হওয়া মোট দাম
+  suggestedSaleRate: number;
+  profitPercent: number;
+}
+
+/**
+ * Fetches purchased fish items for a lot with effective cost and suggested sale rate
+ */
+export const getLotPurchaseItems = (lotNumber: number | null): LotPurchaseFishItem[] => {
+  const normLot = normalizeLotNumber(lotNumber);
+  if (!normLot) return [];
+
+  const stockSummary = getLotStock(normLot);
+
+  let purchaseData: any = null;
+  const rawPurchase = localStorage.getItem(`memo_lot_${normLot}`) || localStorage.getItem(`memo_lot_${String(normLot).padStart(2, '0')}`);
+  if (rawPurchase) {
+    try { purchaseData = JSON.parse(rawPurchase); } catch (e) {}
+  }
+  if (!purchaseData) {
+    const duePurchase = localStorage.getItem(`due_memo_purchase_lot_${normLot}`);
+    if (duePurchase) {
+      try {
+        const parsed = JSON.parse(duePurchase);
+        purchaseData = parsed.memoState || parsed;
+      } catch (e) {}
+    }
+  }
+
+  const purchaseEntries: any[] = Array.isArray(purchaseData?.entries) ? purchaseData.entries : [];
+  const totalPriceMain = Number(purchaseData?.totalPriceMain) || 0;
+  const totalCostMain = Number(purchaseData?.totalCostMain) || 0;
+  const costPercent = (totalPriceMain > 0 && totalCostMain > 0) ? (totalCostMain / totalPriceMain) * 100 : 0;
+  const globalProfitPercent = Number(purchaseData?.globalProfitPercent) || 0;
+
+  return purchaseEntries.map((entry, index) => {
+    const serialNo = index + 1;
+    const name = (entry.name || '').trim();
+    let purchasedKg = Number(entry.totalKg) || 0;
+    if (entry.weightUnit === 'g') {
+      purchasedKg = purchasedKg / 1000;
+    }
+    const buyPrice = Number(entry.totalPrice) || 0;
+    const baseBuyRate = purchasedKg > 0 ? (buyPrice / purchasedKg) : 0;
+    const effectiveCostRate = Math.round((baseBuyRate + (baseBuyRate * costPercent / 100)) * 100) / 100;
+    const profitPercent = Number(entry.profitPercent !== undefined && entry.profitPercent !== '' ? entry.profitPercent : globalProfitPercent) || 0;
+    const suggestedSaleRate = Math.round((effectiveCostRate + (effectiveCostRate * profitPercent / 100)) * 100) / 100;
+
+    const stockItem = stockSummary.items.find(it => it.name.trim().toLowerCase() === name.toLowerCase());
+    const remainingKg = stockItem ? stockItem.remainingKg : Math.max(0, purchasedKg);
+
+    return {
+      id: entry.id || String(serialNo),
+      serialNo,
+      lotNumber: normLot,
+      name,
+      purchasedKg,
+      remainingKg,
+      baseBuyRate: Math.round(baseBuyRate * 100) / 100,
+      costPercent: Math.round(costPercent * 100) / 100,
+      effectiveCostRate,
+      suggestedSaleRate,
+      profitPercent
+    };
+  }).filter(item => Boolean(item.name));
+};
+
+/**
+ * Combines purchase items across all lots
+ */
+export const getAllPurchaseItems = (): LotPurchaseFishItem[] => {
+  const allSummaries = getAllLotsStock();
+  const items: LotPurchaseFishItem[] = [];
+  allSummaries.forEach(summary => {
+    const lotItems = getLotPurchaseItems(summary.lotNumber);
+    items.push(...lotItems);
+  });
+  return items;
 };

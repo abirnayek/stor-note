@@ -4,7 +4,8 @@ import { ChevronLeft, Calendar, FileText, Trash2, Search, Filter, TrendingUp, Tr
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { MONTHS, parseMemoMonthYear, enToBnDigits } from '../utils/dateUtils';
-import { moveToTrash } from '../utils/trashUtils';
+import { deleteSalesMemoCompletely } from '../utils/dueSyncUtils';
+import { getLotPurchaseItems, getAllPurchaseItems } from '../utils/stockUtils';
 
 interface MonthlySalesScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -57,9 +58,34 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
       if (tsRaw) localTimestamps = JSON.parse(tsRaw);
     } catch (e) {}
 
+    let purchaseDueIds: Set<string> = new Set();
+    try {
+      const dp = localStorage.getItem('dues_purchase');
+      if (dp) JSON.parse(dp).forEach((x: string) => purchaseDueIds.add(String(x)));
+      const pdp = localStorage.getItem('paid_dues_purchase');
+      if (pdp) JSON.parse(pdp).forEach((x: string) => purchaseDueIds.add(String(x)));
+    } catch (e) {}
+
     const processItem = (id: string, rawData: any, sourceKey?: string) => {
       if (!id || !rawData) return;
       const memo = rawData.memoState || rawData;
+
+      // STRICT FILTER: Monthly Sales Screen is strictly for SALES memos.
+      // Purchase memos belong strictly to purchase lots and dues_purchase, NEVER sales.
+      const isPurchase =
+        purchaseDueIds.has(String(id)) ||
+        rawData.type === 'purchase' ||
+        memo.type === 'purchase' ||
+        rawData.customerType === 'purchase' ||
+        memo.customerType === 'purchase' ||
+        (sourceKey && sourceKey.startsWith('due_memo_purchase_')) ||
+        id.startsWith('purchase_') ||
+        (memo.totalPriceMain !== undefined && memo.totalCostMain !== undefined && !memo.customerName) ||
+        (Boolean(memo.supplierName) && !memo.customerName && rawData.type !== 'regular' && rawData.type !== 'permanent' && rawData.type !== 'reseller');
+
+      if (isPurchase) {
+        return;
+      }
 
       let ts = sourceKey && localTimestamps[sourceKey] ? Number(localTimestamps[sourceKey]) : 0;
       if (!ts && localTimestamps[`sales_memo_${id}`]) {
@@ -92,67 +118,54 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
       let memoProfit = 0;
       let memoLoss = 0;
 
-      let lotPurchaseMemo: any = null;
-      if (effectiveLot) {
-        const rawLotStr = localStorage.getItem(`memo_lot_${effectiveLot}`) || localStorage.getItem(`memo_lot_${String(effectiveLot).padStart(2, '0')}`);
-        if (rawLotStr) {
-          try { lotPurchaseMemo = JSON.parse(rawLotStr); } catch(e) {}
-        }
-      }
+      const lotPurchaseItems = effectiveLot ? getLotPurchaseItems(effectiveLot) : getAllPurchaseItems();
 
       if (memo.entries && Array.isArray(memo.entries)) {
         memo.entries.forEach((entry: any) => {
-          let buyRate = Number(entry.buyRate) || 0;
-          if (buyRate === 0 && lotPurchaseMemo && Array.isArray(lotPurchaseMemo.entries)) {
-            let found = null;
-            if (entry.serialNo) {
-              const sNum = parseInt(String(entry.serialNo), 10);
-              if (!isNaN(sNum) && lotPurchaseMemo.entries[sNum - 1]) {
-                found = lotPurchaseMemo.entries[sNum - 1];
-              }
-            }
-            if (!found && entry.name) {
-              found = lotPurchaseMemo.entries.find((e: any) => e.name && e.name.trim().toLowerCase() === entry.name.trim().toLowerCase());
-            }
-            if (found && found.totalKg && found.totalPrice) {
-              const autoRate = Number(found.totalPrice) / Number(found.totalKg);
-              let costPercent = 0;
-              if (lotPurchaseMemo.totalPriceMain && lotPurchaseMemo.totalCostMain) {
-                costPercent = (Number(lotPurchaseMemo.totalCostMain) / Number(lotPurchaseMemo.totalPriceMain)) * 100;
-              }
-              buyRate = autoRate + (autoRate * costPercent / 100);
-            }
-          }
-
-          let baseRate = 0;
-          if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-            baseRate = Number(entry.manualSaleRate);
-          } else {
-            baseRate = buyRate;
-          }
           let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
-          let finalRate = baseRate + (baseRate * currentProfitPercent / 100);
-          let totalKgNum = Number(entry.totalKg) || 0;
-          let weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
 
-          if (weightInKg > 0 && finalRate > 0) {
-            const entrySaleAmount = weightInKg * finalRate;
+          const matchedItem = (entry.name && entry.name.trim() !== '')
+            ? lotPurchaseItems.find(it => it.name.trim().toLowerCase() === entry.name.trim().toLowerCase())
+            : null;
+          // Extra products are those not found in lot purchase items
+          const isExtra = !matchedItem && (entry.name || '').trim() !== '';
+
+          let saleRate = 0;
+          if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+            let manualRateNum = Number(entry.manualSaleRate) || 0;
+            saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+          } else if (matchedItem) {
+            let base = matchedItem.suggestedSaleRate > 0 ? matchedItem.suggestedSaleRate : matchedItem.effectiveCostRate;
+            saleRate = base + (base * currentProfitPercent / 100);
+          } else if (entry.buyRate && Number(entry.buyRate) > 0) {
+            let base = Number(entry.buyRate);
+            saleRate = base + (base * currentProfitPercent / 100);
+          }
+
+          let weightInKg = 0;
+          let totalKgNum = Number(entry.totalKg) || 0;
+          if (totalKgNum > 0) {
+            weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
+          }
+
+          if (weightInKg > 0 && saleRate > 0) {
+            const entrySaleAmount = weightInKg * saleRate;
             totalBill += entrySaleAmount;
 
-            if (buyRate > 0) {
-              const entryCostAmount = weightInKg * buyRate;
+            // Extra products are strictly and completely EXCLUDED from profit and loss
+            let costRate = 0;
+            if (!isExtra && matchedItem && matchedItem.effectiveCostRate > 0) {
+              costRate = matchedItem.effectiveCostRate;
+            }
+
+            if (costRate > 0) {
+              const entryCostAmount = weightInKg * costRate;
               const diff = entrySaleAmount - entryCostAmount;
               if (diff >= 0) {
                 memoProfit += diff;
               } else {
                 memoLoss += Math.abs(diff);
               }
-            } else if (currentProfitPercent > 0) {
-              const diff = weightInKg * (baseRate * currentProfitPercent / 100);
-              memoProfit += diff;
-            } else if (currentProfitPercent < 0) {
-              const diff = weightInKg * (baseRate * Math.abs(currentProfitPercent) / 100);
-              memoLoss += diff;
             }
           }
         });
@@ -169,6 +182,32 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
       if (totalDeductions > 0) {
         totalBill = Math.max(0, totalBill - totalDeductions);
         memoProfit = Math.max(0, memoProfit - totalDeductions);
+      }
+
+      // Commission handling
+      let rawCommVal = memo.commissionValue !== undefined ? memo.commissionValue : rawData.commissionValue;
+      if (typeof rawCommVal === 'object' && rawCommVal !== null) {
+        rawCommVal = rawCommVal.value ?? rawCommVal.amount ?? '';
+      }
+      const commVal = Number(rawCommVal) || 0;
+      const commType = memo.commissionType || rawData.commissionType || 'percent';
+      const commOp = memo.commissionOperation || rawData.commissionOperation || 'subtract';
+      if (commVal > 0) {
+        const commAmt = commType === 'flat' ? commVal : Math.round((totalBill * commVal / 100) * 100) / 100;
+        if (commAmt > 0) {
+          if (commOp === 'add') {
+            totalBill = Math.round((totalBill + commAmt) * 100) / 100;
+            memoProfit = Math.round((memoProfit + commAmt) * 100) / 100;
+          } else {
+            totalBill = Math.max(0, Math.round((totalBill - commAmt) * 100) / 100);
+            if (commAmt > memoProfit) {
+              memoLoss = Math.round((memoLoss + (commAmt - memoProfit)) * 100) / 100;
+              memoProfit = 0;
+            } else {
+              memoProfit = Math.round((memoProfit - commAmt) * 100) / 100;
+            }
+          }
+        }
       }
 
       const rawPaid = (memo.paidAmount !== undefined && memo.paidAmount !== '')
@@ -277,13 +316,18 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
       }
     }
 
-    // 3. Scan due_memo_*
+    // 3. Scan due_memo_* (strictly sales only, never purchase)
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith('due_memo_')) {
+      if (key && key.startsWith('due_memo_') && !key.startsWith('due_memo_purchase_')) {
         const id = key.replace('due_memo_', '');
+        if (purchaseDueIds.has(id)) continue;
         try {
           const raw = JSON.parse(localStorage.getItem(key) || '{}');
+          const inner = raw.memoState || raw;
+          if (raw.type === 'purchase' || inner.type === 'purchase' || raw.customerType === 'purchase' || inner.customerType === 'purchase') {
+            continue;
+          }
           processItem(id, raw, key);
         } catch (e) {}
       }
@@ -360,52 +404,12 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
   const handleDeleteMemo = (memo: MonthlyMemo, e: React.MouseEvent) => {
     e.stopPropagation();
     const confirmMsg = language === 'bn'
-      ? `আপনি কি "${memo.name}" মেমোটি মুছে ট্র্যাশ বিনে সরাতে চান?`
-      : `Are you sure you want to delete memo "${memo.name}"?`;
+      ? `আপনি কি "${memo.name || 'মেমো #' + memo.id}" মেমোটি মুছে ট্র্যাশ বিনে সরাতে চান?`
+      : `Are you sure you want to delete memo "${memo.name || '#' + memo.id}"?`;
 
     if (window.confirm(confirmMsg)) {
-      const canonicalKey = `sales_memo_${memo.id}`;
-      const memoDataStr = localStorage.getItem(canonicalKey)
-        || localStorage.getItem(`sales_memo_lot_${memo.lotNumber ?? 'unassigned'}_memo_${memo.id}`)
-        || localStorage.getItem(`due_memo_${memo.id}`);
-
-      if (memoDataStr) {
-        moveToTrash({
-          id: canonicalKey,
-          type: 'sales_lot',
-          title: `Sales Memo (${monthName} ${year}) - ${memo.name}`,
-          data: JSON.parse(memoDataStr)
-        });
-      }
-
-      // Clean up storage keys
-      localStorage.removeItem(canonicalKey);
-      localStorage.removeItem(`sales_memo_lot_${memo.lotNumber ?? 'unassigned'}_memo_${memo.id}`);
-      localStorage.removeItem(`sales_memo_lot_unassigned_memo_${memo.id}`);
-      for (let l = 1; l <= 50; l++) {
-        localStorage.removeItem(`sales_memo_lot_${l}_memo_${memo.id}`);
-      }
-      localStorage.removeItem(`due_memo_${memo.id}`);
-
-      // Clean up lists
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith('sales_memo_list_')) {
-          try {
-            const listStr = localStorage.getItem(k);
-            if (listStr) {
-              let list: string[] = JSON.parse(listStr);
-              if (list.includes(memo.id)) {
-                list = list.filter(id => id !== memo.id);
-                localStorage.setItem(k, JSON.stringify(list));
-              }
-            }
-          } catch (err) {}
-        }
-      }
-
+      deleteSalesMemoCompletely(memo.id, { name: memo.name, lotNumber: memo.lotNumber });
       setMemos(prev => prev.filter(m => m.id !== memo.id));
-      window.dispatchEvent(new Event('storage'));
     }
   };
 

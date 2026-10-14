@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, Unlock } from 'lucide-react';
+import { Lock, Unlock, Folder, FileText } from 'lucide-react';
 
 export const MemoLockIcon: React.FC<{ passwordKey: string }> = ({ passwordKey }) => {
     const [locked, setLocked] = useState(false);
@@ -65,13 +65,44 @@ export const MemoLockIcon: React.FC<{ passwordKey: string }> = ({ passwordKey })
     );
 };
 
-export const ProtectedMemoWrapper: React.FC<{ 
-   passwordKey: string, 
-   onAccessGranted: () => void,
-   children: React.ReactNode 
-}> = ({ passwordKey, onAccessGranted, children }) => {
+export interface ProtectedMemoWrapperProps {
+   passwordKey: string;
+   onAccessGranted: () => void;
+   name?: string;
+   type?: 'folder' | 'memo' | 'lot';
+   children: React.ReactNode;
+   draggable?: boolean;
+   onDragStart?: (e: React.DragEvent) => void;
+   onDragEnd?: (e: React.DragEvent) => void;
+   onDragOver?: (e: React.DragEvent) => void;
+   onDragEnter?: (e: React.DragEvent) => void;
+   onDragLeave?: (e: React.DragEvent) => void;
+   onDrop?: (e: React.DragEvent) => void;
+}
+
+export const ProtectedMemoWrapper: React.FC<ProtectedMemoWrapperProps> = ({ 
+   passwordKey, 
+   onAccessGranted, 
+   name,
+   type,
+   children,
+   draggable,
+   onDragStart,
+   onDragEnd,
+   onDragOver,
+   onDragEnter,
+   onDragLeave,
+   onDrop
+}) => {
     const [showPrompt, setShowPrompt] = useState(false);
     const [pwd, setPwd] = useState('');
+    const [isLocked, setIsLocked] = useState(false);
+
+    useEffect(() => {
+        const saved = localStorage.getItem(passwordKey);
+        const bypass = localStorage.getItem('disableLotPassword') === 'true';
+        setIsLocked(!!(saved && saved.trim() !== '' && !bypass));
+    }, [passwordKey]);
 
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -83,43 +114,155 @@ export const ProtectedMemoWrapper: React.FC<{
         } else {
             onAccessGranted();
         }
-    }
+    };
+
+    const handleUnlockSubmit = (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        const saved = localStorage.getItem(passwordKey);
+        if (pwd === saved) {
+            setShowPrompt(false);
+            onAccessGranted();
+        } else {
+            alert('ভুল পাসওয়ার্ড! আবার চেষ্টা করুন।');
+        }
+    };
 
     return (
-        <div onClick={handleClick} style={{ display: 'contents' }}>
-            {children}
+        <div 
+            style={{ position: 'relative', width: '100%', height: '100%', cursor: 'pointer' }}
+            onClick={handleClick}
+            draggable={draggable}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            onDragOver={onDragOver}
+            onDragEnter={onDragEnter}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+        >
+            <div 
+                style={{ 
+                    width: '100%',
+                    height: '100%',
+                    ...(isLocked ? {
+                        filter: 'blur(3.5px)',
+                        WebkitFilter: 'blur(3.5px)',
+                        userSelect: 'none' as const,
+                        opacity: 0.88,
+                    } : {}),
+                    transition: 'filter 0.2s ease, opacity 0.2s ease',
+                }}
+            >
+                {children}
+            </div>
+
+            {isLocked && (
+                <div 
+                    onClick={handleClick}
+                    onDragOver={onDragOver}
+                    onDragEnter={onDragEnter}
+                    onDragLeave={onDragLeave}
+                    onDrop={onDrop}
+                    title="লক করা রয়েছে, পাসওয়ার্ড দিয়ে খুলুন"
+                    style={{ 
+                        position: 'absolute',
+                        inset: 0,
+                        cursor: 'pointer',
+                        zIndex: 20,
+                        borderRadius: '14px',
+                        border: '1.5px solid rgba(255, 152, 0, 0.85)',
+                        boxShadow: '0 0 16px rgba(255, 152, 0, 0.25), inset 0 0 10px rgba(0, 0, 0, 0.4)',
+                        background: 'rgba(8, 20, 14, 0.78)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        padding: '1rem',
+                        transition: 'all 0.2s ease',
+                        boxSizing: 'border-box'
+                    }}
+                >
+                    {/* Display name clearly so user can see whose memo or folder this is */}
+                    {name && (
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            background: 'rgba(255, 255, 255, 0.12)',
+                            border: '1px solid rgba(255, 255, 255, 0.25)',
+                            padding: '6px 14px',
+                            borderRadius: '10px',
+                            maxWidth: '92%',
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+                            backdropFilter: 'blur(4px)'
+                        }}>
+                            {type === 'folder' ? (
+                                <Folder size={18} style={{ color: '#ce93d8', flexShrink: 0 }} />
+                            ) : (
+                                <FileText size={18} style={{ color: '#90caf9', flexShrink: 0 }} />
+                            )}
+                            <span style={{
+                                fontSize: '1.05rem',
+                                fontWeight: 'bold',
+                                color: '#ffffff',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }}>
+                                {name}
+                            </span>
+                        </div>
+                    )}
+
+                    <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: 'rgba(15, 23, 20, 0.95)',
+                        border: '1px solid rgba(255, 152, 0, 0.9)',
+                        padding: '5px 14px',
+                        borderRadius: '20px',
+                        color: '#ffb74d',
+                        boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
+                        backdropFilter: 'blur(2px)'
+                    }}>
+                        <Lock size={15} style={{ color: '#ff9800' }} />
+                        <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>লক করা (পাসওয়ার্ড দিন)</span>
+                    </div>
+                </div>
+            )}
+
             {showPrompt && (
                 <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setShowPrompt(false); }} style={{ zIndex: 10000 }}>
-                  <div className="modal-content" onClick={e => e.stopPropagation()} style={{ color: '#fff' }}>
-                    <div className="modal-header" style={{ marginBottom: '1rem' }}>
-                      <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Memo is Locked!</h2>
-                    </div>
-                    <div className="form-group">
-                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Enter Password</label>
-                      <input 
-                        type="text" 
-                        value={pwd}
-                        onChange={e => setPwd(e.target.value)}
-                        className="supplier-input"
-                        style={{ width: '100%', padding: '0.75rem', borderRadius: '6px' }}
-                        autoFocus
-                      />
-                    </div>
-                    <div className="modal-actions" style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-                      <button className="btn btn-secondary" onClick={() => setShowPrompt(false)} style={{ flex: 1 }}>
-                        Cancel
-                      </button>
-                      <button className="btn btn-primary" onClick={() => {
-                          if (pwd === localStorage.getItem(passwordKey)) {
-                              setShowPrompt(false);
-                              onAccessGranted();
-                          } else {
-                              alert('Incorrect password!');
-                          }
-                      }} style={{ flex: 1 }}>
-                        Open Memo
-                      </button>
-                    </div>
+                  <div className="modal-content" onClick={e => e.stopPropagation()} style={{ color: '#fff', maxWidth: '380px' }}>
+                    <form onSubmit={handleUnlockSubmit}>
+                      <div className="modal-header" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ background: 'rgba(255, 152, 0, 0.2)', padding: '6px', borderRadius: '8px', color: '#ff9800' }}>
+                          <Lock size={20} />
+                        </div>
+                        <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#fff' }}>পাসওয়ার্ড দিয়ে প্রবেশ করুন</h2>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: '1.2rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.88rem', color: '#ccc' }}>পাসওয়ার্ড দিন</label>
+                        <input 
+                          type="password" 
+                          value={pwd}
+                          onChange={e => setPwd(e.target.value)}
+                          placeholder="পাসওয়ার্ড লিখুন..."
+                          className="supplier-input"
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }}
+                          autoFocus
+                        />
+                      </div>
+                      <div className="modal-actions" style={{ display: 'flex', gap: '0.8rem' }}>
+                        <button type="button" className="btn btn-secondary" onClick={() => setShowPrompt(false)} style={{ flex: 1 }}>
+                          বাতিল
+                        </button>
+                        <button type="submit" className="btn btn-primary" style={{ flex: 1, background: 'linear-gradient(135deg, #ff9800, #f57c00)', border: 'none', color: '#fff', fontWeight: 'bold' }}>
+                          আনলক করুন
+                        </button>
+                      </div>
+                    </form>
                   </div>
                 </div>
             )}

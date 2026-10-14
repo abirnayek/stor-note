@@ -55,12 +55,174 @@ export const removePendingKey = (key: string) => {
   } catch {}
 };
 
+export const getDeletedTombstones = (): Record<string, number> => {
+  try {
+    const raw = localStorage.getItem('deleted_keys_tombstones');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+export const addDeletedTombstone = (key: string, ts: number = Date.now()) => {
+  try {
+    const originalGetItem = localStorage.getItem;
+    const originalSetItem = localStorage.setItem;
+    const raw = originalGetItem.call(localStorage, 'deleted_keys_tombstones');
+    const tombstones: Record<string, number> = raw ? JSON.parse(raw) : {};
+    tombstones[key] = ts;
+    const now = Date.now();
+    const ninetyDays = 90 * 24 * 60 * 60 * 1000;
+    Object.keys(tombstones).forEach(k => {
+      if (now - tombstones[k] > ninetyDays) {
+        delete tombstones[k];
+      }
+    });
+    originalSetItem.call(localStorage, 'deleted_keys_tombstones', JSON.stringify(tombstones));
+  } catch {}
+};
+
+export const removeDeletedTombstone = (key: string) => {
+  try {
+    const originalGetItem = localStorage.getItem;
+    const originalSetItem = localStorage.setItem;
+    const raw = originalGetItem.call(localStorage, 'deleted_keys_tombstones');
+    if (!raw) return;
+    const tombstones: Record<string, number> = JSON.parse(raw);
+    if (tombstones[key]) {
+      delete tombstones[key];
+      originalSetItem.call(localStorage, 'deleted_keys_tombstones', JSON.stringify(tombstones));
+    }
+  } catch {}
+};
+
+export const getDeletedMemoIds = (): Record<string, number> => {
+  try {
+    const raw = localStorage.getItem('deleted_memo_ids');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+export const markMemoDeleted = (memoId: string, ts: number = Date.now()) => {
+  if (!memoId) return;
+  try {
+    const originalGetItem = localStorage.getItem;
+    const originalSetItem = localStorage.setItem;
+
+    // 1. Record in deleted_memo_ids
+    const rawMemos = originalGetItem.call(localStorage, 'deleted_memo_ids');
+    const memoTombstones: Record<string, number> = rawMemos ? JSON.parse(rawMemos) : {};
+    memoTombstones[memoId] = ts;
+    const now = Date.now();
+    const ninetyDays = 90 * 24 * 60 * 60 * 1000;
+    Object.keys(memoTombstones).forEach(id => {
+      if (now - memoTombstones[id] > ninetyDays) delete memoTombstones[id];
+    });
+    originalSetItem.call(localStorage, 'deleted_memo_ids', JSON.stringify(memoTombstones));
+
+    // 2. Also register tombstones for all known key variants of this memo
+    const keysToTombstone = [
+      `sales_memo_${memoId}`,
+      `due_memo_${memoId}`,
+      `due_memo_regular_${memoId}`,
+      `due_memo_permanent_${memoId}`,
+      `due_memo_reseller_${memoId}`,
+      `due_memo_purchase_${memoId}`,
+      `sales_memo_lot_unassigned_memo_${memoId}`,
+      `memo_password_sales_memo_${memoId}`,
+      `memo_password_due_memo_${memoId}`
+    ];
+    for (let l = 1; l <= 100; l++) {
+      keysToTombstone.push(`sales_memo_lot_${l}_memo_${memoId}`);
+      keysToTombstone.push(`memo_password_sales_memo_lot_${l}_memo_${memoId}`);
+    }
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.endsWith(`_memo_${memoId}`) || k.includes(`_${memoId}_`) || k.endsWith(`_${memoId}`))) {
+        keysToTombstone.push(k);
+      }
+    }
+
+    keysToTombstone.forEach(k => {
+      addDeletedTombstone(k, ts);
+      markKeyPending(`__DELETE__:${k}`);
+    });
+
+    // 3. Immediately inform Supabase to delete these keys
+    const user = currentUser || getStoredUserCached();
+    if (user && navigator.onLine) {
+      keysToTombstone.forEach(k => {
+        supabase.from('user_backups').delete().match({
+          user_id: user.id,
+          key: k
+        }).then(() => {});
+      });
+    }
+  } catch (e) {}
+};
+
+export const isMemoDeleted = (memoId: string): boolean => {
+  if (!memoId) return false;
+  try {
+    const rawMemos = localStorage.getItem('deleted_memo_ids');
+    if (!rawMemos) return false;
+    const memoTombstones: Record<string, number> = JSON.parse(rawMemos);
+    return Boolean(memoTombstones[memoId]);
+  } catch {
+    return false;
+  }
+};
+
+export const unmarkMemoDeleted = (memoId: string) => {
+  if (!memoId) return;
+  try {
+    const originalGetItem = localStorage.getItem;
+    const originalSetItem = localStorage.setItem;
+    const rawMemos = originalGetItem.call(localStorage, 'deleted_memo_ids');
+    if (rawMemos) {
+      const memoTombstones: Record<string, number> = JSON.parse(rawMemos);
+      delete memoTombstones[memoId];
+      originalSetItem.call(localStorage, 'deleted_memo_ids', JSON.stringify(memoTombstones));
+    }
+    removeDeletedTombstone(`sales_memo_${memoId}`);
+    removeDeletedTombstone(`due_memo_${memoId}`);
+    removeDeletedTombstone(`sales_memo_lot_unassigned_memo_${memoId}`);
+    for (let l = 1; l <= 100; l++) {
+      removeDeletedTombstone(`sales_memo_lot_${l}_memo_${memoId}`);
+    }
+  } catch {}
+};
+
+export const isKeyDeleted = (key: string): boolean => {
+  if (!key) return false;
+  const tombstones = getDeletedTombstones();
+  if (tombstones[key]) return true;
+
+  let memoId: string | null = null;
+  if (key.startsWith('sales_memo_') && !key.startsWith('sales_memo_lot_') && !key.startsWith('sales_memo_list_')) {
+    memoId = key.replace('sales_memo_', '');
+  } else if (key.startsWith('due_memo_')) {
+    memoId = key.replace('due_memo_', '');
+  } else if (key.includes('_memo_')) {
+    const parts = key.split('_memo_');
+    if (parts[1]) memoId = parts[1];
+  }
+  if (memoId && isMemoDeleted(memoId)) {
+    return true;
+  }
+  return false;
+};
+
 export const syncFromCloud = async () => {
   if (!navigator.onLine) return false;
   const user = currentUser || getStoredUserCached();
   if (!user) return false;
-  const restored = await restoreFromCloud();
+  // Always push pending deletions and offline edits first so cloud is up to date
   await pushUnsyncedLocalData(false);
+  const restored = await restoreFromCloud();
   return restored;
 };
 
@@ -141,21 +303,37 @@ export const initSyncEngine = () => {
 
   localStorage.setItem = function(key: string, value: string) {
     const prevValue = originalGetItem.call(localStorage, key);
-    originalSetItem.apply(this, [key, value] as any);
     
     // Skip internal auth and queue keys
     if (
       key.startsWith('sb-') || 
       key === 'local_timestamps' || 
       key === 'pending_offline_sync_keys' || 
+      key === 'deleted_keys_tombstones' ||
+      key === 'deleted_memo_ids' ||
       key === 'cached_user_session' || 
       key === 'cached_is_authenticated' ||
       key === 'device_id' ||
       key === 'device_permission'
-    ) return;
+    ) {
+      originalSetItem.apply(this, [key, value] as any);
+      return;
+    }
+
+    // IF THIS KEY WAS MARKED AS DELETED:
+    // DO NOT allow background scripts/sync to silently recreate it!
+    if (isKeyDeleted(key)) {
+      return;
+    }
+
+    originalSetItem.apply(this, [key, value] as any);
 
     if (prevValue === value) return;
     
+    // If re-saving or creating a genuine key, clear any tombstone and pending delete marker
+    removeDeletedTombstone(key);
+    removePendingKey(`__DELETE__:${key}`);
+
     updateLocalTimestamp(key);
 
     if (!isRestoring) {
@@ -206,11 +384,22 @@ export const initSyncEngine = () => {
       key.startsWith('sb-') || 
       key === 'local_timestamps' || 
       key === 'pending_offline_sync_keys' || 
+      key === 'deleted_keys_tombstones' ||
+      key === 'deleted_memo_ids' ||
       key === 'cached_user_session' || 
       key === 'cached_is_authenticated' ||
       key === 'device_id' ||
       key === 'device_permission'
     ) return;
+
+    if (syncTimers[key]) {
+      clearTimeout(syncTimers[key]);
+      delete syncTimers[key];
+    }
+    removePendingKey(key);
+
+    const now = Date.now();
+    addDeletedTombstone(key, now);
 
     try {
       const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
@@ -241,7 +430,7 @@ export const initSyncEngine = () => {
             realtimeChannel.send({
               type: 'broadcast',
               event: 'storage_sync',
-              payload: { key, ts: Date.now(), action: 'DELETE' }
+              payload: { key, ts: now, action: 'DELETE' }
             });
           } catch(e) {}
         }
@@ -271,6 +460,7 @@ export const restoreFromCloud = async () => {
     
     if (data && data.length > 0) {
       const originalSetItem = localStorage.setItem;
+      const originalRemoveItem = localStorage.removeItem;
       const originalGetItem = localStorage.getItem;
       
       const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
@@ -282,23 +472,35 @@ export const restoreFromCloud = async () => {
       const pendingKeys = new Set(getPendingKeys());
       
       data.forEach(row => {
-        // If this key has an unsynced offline change, DO NOT overwrite it with older cloud data!
-        if (pendingKeys.has(row.key)) {
+        // A. If this key is deleted or value is __DELETED__, purge and NEVER restore!
+        if (row.value === '__DELETED__' || isKeyDeleted(row.key)) {
+          originalRemoveItem.call(localStorage, row.key);
+          if (currentUser && navigator.onLine) {
+            supabase.from('user_backups').delete().match({
+              user_id: currentUser.id,
+              key: row.key
+            }).then(() => {});
+          }
           return;
         }
 
-        const localTs = localTimestamps[row.key] || 0;
+        // B. If this key has an unsynced offline change or pending delete, DO NOT overwrite!
+        if (pendingKeys.has(row.key) || pendingKeys.has(`__DELETE__:${row.key}`)) {
+          return;
+        }
+
         const cloudTs = new Date(row.updated_at).getTime();
+        const localTs = localTimestamps[row.key] || 0;
+        const localValue = originalGetItem.call(localStorage, row.key);
         
         if (cloudTs >= localTs || localTs === 0) {
-          if (originalGetItem.call(localStorage, row.key) !== row.value) {
+          if (localValue !== row.value) {
              originalSetItem.call(localStorage, row.key, row.value);
              localTimestamps[row.key] = cloudTs;
              timestampsModified = true;
              hasDataChanged = true;
           }
         } else if (localTs > cloudTs && navigator.onLine) {
-          const localValue = originalGetItem.call(localStorage, row.key);
           if (localValue !== null) {
             supabase.from('user_backups').upsert({
               user_id: currentUser.id,
@@ -310,20 +512,28 @@ export const restoreFromCloud = async () => {
         }
       });
       
+      // Handle local keys not present in cloud
       Object.keys(localTimestamps).forEach(key => {
         if (!cloudKeys.has(key)) {
           const localValue = originalGetItem.call(localStorage, key);
-          if (localValue !== null && Date.now() - localTimestamps[key] < 86400000 && navigator.onLine) {
-            supabase.from('user_backups').upsert({
-              user_id: currentUser.id,
-              key: key,
-              value: localValue,
-              updated_at: new Date(localTimestamps[key]).toISOString()
-            }).then(() => {});
-          } else if (localValue === null) {
+          if (pendingKeys.has(key)) {
+            // Locally created/updated offline, push to cloud
+            if (localValue !== null && navigator.onLine) {
+              supabase.from('user_backups').upsert({
+                user_id: currentUser.id,
+                key: key,
+                value: localValue,
+                updated_at: new Date(localTimestamps[key]).toISOString()
+              }).then(() => {});
+            }
+          } else {
+            // Key was deleted in cloud on another device! Remove locally!
+            if (localValue !== null) {
+              originalRemoveItem.call(localStorage, key);
+              hasDataChanged = true;
+            }
             delete localTimestamps[key];
             timestampsModified = true;
-            hasDataChanged = true;
           }
         }
       });
@@ -370,20 +580,26 @@ export const setupRealtimeSync = () => {
   
   const handleIncomingData = (key: string, value: string | undefined, cloudTs: number, action: string) => {
     if (!key) return;
+    if (action === 'DELETE' || isKeyDeleted(key) || value === '__DELETED__') {
+      originalRemoveItem.call(localStorage, key);
+      const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
+      const ts = tsStr ? JSON.parse(tsStr) : {};
+      delete ts[key];
+      originalSetItem.call(localStorage, 'local_timestamps', JSON.stringify(ts));
+      window.dispatchEvent(new Event('storage'));
+      return;
+    }
+
     const pendingKeys = new Set(getPendingKeys());
-    // Don't overwrite if local device has pending offline edits on this key
-    if (pendingKeys.has(key)) return;
+    // Don't overwrite if local device has pending offline edits or deletes on this key
+    if (pendingKeys.has(key) || pendingKeys.has(`__DELETE__:${key}`)) return;
+
+    // Check tombstone
+    if (isKeyDeleted(key)) return;
 
     isRestoring = true;
     try {
-      if (action === 'DELETE') {
-        originalRemoveItem.call(localStorage, key);
-        const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
-        const ts = tsStr ? JSON.parse(tsStr) : {};
-        delete ts[key];
-        originalSetItem.call(localStorage, 'local_timestamps', JSON.stringify(ts));
-        window.dispatchEvent(new Event('storage'));
-      } else if (value !== undefined) {
+      if (value !== undefined) {
         if (originalGetItem.call(localStorage, key) !== value) {
           originalSetItem.call(localStorage, key, value);
           const tsStr = originalGetItem.call(localStorage, 'local_timestamps');
@@ -434,6 +650,7 @@ export const pushUnsyncedLocalData = async (forceAll: boolean = false) => {
     
     const pendingKeys = getPendingKeys();
     const pendingSet = new Set(pendingKeys);
+    const tombstones = getDeletedTombstones();
 
     // Process pending deletes first
     for (const pKey of pendingKeys) {
@@ -454,6 +671,8 @@ export const pushUnsyncedLocalData = async (forceAll: boolean = false) => {
       !k.startsWith('sb-') && 
       k !== 'local_timestamps' && 
       k !== 'pending_offline_sync_keys' && 
+      k !== 'deleted_keys_tombstones' &&
+      k !== 'deleted_memo_ids' &&
       k !== 'cached_user_session' && 
       k !== 'cached_is_authenticated' && 
       k !== 'device_id' && 
@@ -467,8 +686,13 @@ export const pushUnsyncedLocalData = async (forceAll: boolean = false) => {
     const syncedKeys: string[] = [];
 
     for (const key of keysToSync) {
+      // NEVER upload a key that is marked for deletion or tombstoned
+      if (pendingSet.has(`__DELETE__:${key}`) || tombstones[key] || isKeyDeleted(key)) {
+        continue;
+      }
+
       const value = originalGetItem.call(localStorage, key);
-      if (value) {
+      if (value !== null) {
         if (forceAll || pendingSet.has(key) || !ts[key]) {
           rowsToUpsert.push({
             user_id: user.id,
@@ -506,3 +730,4 @@ export const manualSyncNow = async () => {
   window.dispatchEvent(new Event('storage'));
   return { success: true, restored };
 };
+

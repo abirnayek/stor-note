@@ -30,11 +30,19 @@ const PasswordScreen: React.FC<PasswordScreenProps> = ({
   const [resetSuccess, setResetSuccess] = useState(false);
   const { t } = useLanguage();
 
-  const storedPin = localStorage.getItem(pinKey) || '1234';
+  const rawStoredPin = localStorage.getItem(pinKey);
+  const isPasswordSet = Boolean(rawStoredPin && rawStoredPin.trim() !== '');
+  const storedPin = isPasswordSet ? rawStoredPin!.trim() : '';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === storedPin) {
+    if (!isPasswordSet) {
+      setAttempts(0);
+      onSuccess();
+      return;
+    }
+
+    if (password.trim() === storedPin) {
       setAttempts(0);
       onSuccess();
     } else {
@@ -43,7 +51,7 @@ const PasswordScreen: React.FC<PasswordScreenProps> = ({
       if (newAttempts >= 3) {
         setError(t('wrongPassword3'));
       } else {
-        setError(`${t('wrongPasswordAttempt')} ${newAttempts}/3)`);
+        setError(`${t('wrongPasswordAttempt')} (${newAttempts}/3)`);
       }
       setPassword('');
     }
@@ -197,10 +205,12 @@ const PasswordScreen: React.FC<PasswordScreenProps> = ({
           />
           {error && <span className="error-text">{error}</span>}
           <div style={{ display: 'flex', gap: '10px', marginTop: '1rem', width: '100%' }}>
-            <button type="button" className="btn" style={{ flex: 1, backgroundColor: '#444', color: 'white', border: '1px solid #555' }} onClick={() => onSuccess()}>
-              {t('skipBtn') || 'Skip'}
-            </button>
-            <button type="submit" className="btn btn-primary submit-btn" style={{ flex: 2, marginTop: 0 }}>
+            {!isPasswordSet && (
+              <button type="button" className="btn" style={{ flex: 1, backgroundColor: '#444', color: 'white', border: '1px solid #555' }} onClick={() => onSuccess()}>
+                {t('skipBtn') || 'Skip'}
+              </button>
+            )}
+            <button type="submit" className="btn btn-primary submit-btn" style={{ flex: isPasswordSet ? 1 : 2, marginTop: 0 }}>
               {t('enterBtn')} <ArrowRight size={18} />
             </button>
           </div>

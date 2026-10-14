@@ -3,7 +3,7 @@ import { type Screen } from '../App';
 import { ChevronLeft, Plus, Trash2, Filter, Lock, FileText, Calendar } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
-import { getAllGlobalSalesMemos, type SalesMemoGlobalItem } from '../utils/dueSyncUtils';
+import { getAllGlobalSalesMemos, deleteSalesMemoCompletely, type SalesMemoGlobalItem } from '../utils/dueSyncUtils';
 
 interface SalesMemoListScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -95,83 +95,12 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
   const handleDeleteMemo = (memo: SalesMemoGlobalItem, e: React.MouseEvent) => {
     e.stopPropagation();
     const confirmMsg = language === 'bn'
-      ? `আপনি কি "${memo.name}" মেমোটি এই লট (${lotNumber}) থেকে সরাতে চান?\n\n(মেমোটির লট নম্বর মুছে যাবে এবং এটি গ্লোবাল মেমোতে সংরক্ষিত থাকবে)`
-      : `Do you want to remove memo "${memo.name}" from Lot ${lotNumber}?\n\n(The lot number will be cleared and it will remain in global memos)`;
+      ? `আপনি কি "${memo.name || 'মেমো #' + memo.id}" মেমোটি মুছে ট্র্যাশে পাঠাতে চান?`
+      : `Are you sure you want to delete memo "${memo.name || '#' + memo.id}" and move to Trash?`;
 
     if (window.confirm(confirmMsg)) {
-      const memoId = memo.id;
-      const oldKey = `sales_memo_lot_${lotNumber}_memo_${memoId}`;
-      const canonicalKey = `sales_memo_${memoId}`;
-
-      let memoData: any = null;
-      const canonicalStr = localStorage.getItem(canonicalKey);
-      if (canonicalStr) {
-        try { memoData = JSON.parse(canonicalStr); } catch (e) {}
-      }
-      if (!memoData) {
-        const oldStr = localStorage.getItem(oldKey);
-        if (oldStr) {
-          try { memoData = JSON.parse(oldStr); } catch (e) {}
-        }
-      }
-      if (!memoData) {
-        const dueStr = localStorage.getItem(`due_memo_${memoId}`);
-        if (dueStr) {
-          try { memoData = JSON.parse(dueStr); } catch (e) {}
-        }
-      }
-
-      // Clear lot number in memo data and save to canonical and unassigned keys
-      if (memoData) {
-        if (memoData.memoState) {
-          memoData.memoState.lotNumberInput = '';
-          memoData.memoState.lotNumber = '';
-        }
-        memoData.lotNumberInput = '';
-        memoData.lotNumber = '';
-      } else {
-        memoData = { lotNumberInput: '', lotNumber: '' };
-      }
-
-      const unassignedKey = `sales_memo_lot_unassigned_memo_${memoId}`;
-      localStorage.setItem(canonicalKey, JSON.stringify(memoData));
-      localStorage.setItem(unassignedKey, JSON.stringify(memoData));
-
-      // Preserve stable timestamp for global memos ordering
-      try {
-        const tsRaw = localStorage.getItem('local_timestamps');
-        let tsMap: Record<string, number> = tsRaw ? JSON.parse(tsRaw) : {};
-        if (tsMap[oldKey]) {
-          tsMap[canonicalKey] = tsMap[oldKey];
-          tsMap[unassignedKey] = tsMap[oldKey];
-        } else if (!tsMap[canonicalKey]) {
-          tsMap[canonicalKey] = Date.now();
-          tsMap[unassignedKey] = tsMap[canonicalKey];
-        }
-        delete tsMap[oldKey];
-        localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
-      } catch (e) {}
-
-      // Remove from current lot storage key
-      localStorage.removeItem(oldKey);
-
-      // Update due_memo_${memoId} if exists
-      const dueKey = `due_memo_${memoId}`;
-      const dueStr = localStorage.getItem(dueKey);
-      if (dueStr) {
-        try {
-          const dueData = JSON.parse(dueStr);
-          dueData.lotNumber = '';
-          if (dueData.memoState) {
-            dueData.memoState.lotNumberInput = '';
-            dueData.memoState.lotNumber = '';
-          }
-          localStorage.setItem(dueKey, JSON.stringify(dueData));
-        } catch (e) {}
-      }
-
-      // Trigger storage event so both this screen and global list refresh instantly
-      window.dispatchEvent(new Event('storage'));
+      deleteSalesMemoCompletely(memo.id, { name: memo.name, lotNumber });
+      setMemos(prev => prev.filter(m => m.id !== memo.id));
     }
   };
 

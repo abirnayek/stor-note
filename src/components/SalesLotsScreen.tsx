@@ -2,10 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { type Screen } from '../App';
 import { Plus, ChevronLeft, ChevronRight, Package, Calendar, Trash2, FileText, Folder, Store, Users, ArrowRight } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
-import { useLanguage } from '../i18n/LanguageContext';
-import { moveToTrash } from '../utils/trashUtils';
 import { MONTHS, enToBnDigits } from '../utils/dateUtils';
-import { getAllGlobalSalesMemos, type SalesMemoGlobalItem } from '../utils/dueSyncUtils';
+import { getAllGlobalSalesMemos, deleteSalesMemoCompletely, type SalesMemoGlobalItem } from '../utils/dueSyncUtils';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface SalesLotsScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -182,51 +181,12 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
   
   const handleDeleteMemo = (memo: GlobalMemo, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this memo?')) {
-      const lotKey = memo.lotNumber !== null ? memo.lotNumber : 'unassigned';
-      
-      // Clean up from all memo lists
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith('sales_memo_list_')) {
-          try {
-            const listStr = localStorage.getItem(k);
-            if (listStr) {
-              let list: string[] = JSON.parse(listStr);
-              if (list.includes(memo.id)) {
-                list = list.filter((id: string) => id !== memo.id);
-                localStorage.setItem(k, JSON.stringify(list));
-              }
-            }
-          } catch(e) {}
-        }
-      }
-      
-      const canonicalKey = `sales_memo_${memo.id}`;
-      const memoDataStr = localStorage.getItem(canonicalKey) 
-        || localStorage.getItem(`sales_memo_lot_${lotKey}_memo_${memo.id}`)
-        || localStorage.getItem(`due_memo_${memo.id}`);
-
-      if (memoDataStr) {
-        moveToTrash({
-          id: canonicalKey,
-          type: 'sales_lot',
-          title: `Sales Memo (Lot: ${lotKey}) - ${memo.name}`,
-          data: JSON.parse(memoDataStr)
-        });
-      }
-      
-      // Remove all storage keys for this memo
-      localStorage.removeItem(canonicalKey);
-      localStorage.removeItem(`sales_memo_lot_${lotKey}_memo_${memo.id}`);
-      localStorage.removeItem(`sales_memo_lot_unassigned_memo_${memo.id}`);
-      for (let l = 1; l <= 50; l++) {
-        localStorage.removeItem(`sales_memo_lot_${l}_memo_${memo.id}`);
-      }
-      localStorage.removeItem(`due_memo_${memo.id}`);
-      
+    const confirmMsg = language === 'bn'
+      ? `আপনি কি "${memo.name || 'মেমো #' + memo.id}" মেমোটি মুছে ট্র্যাশে পাঠাতে চান?`
+      : `Are you sure you want to delete memo "${memo.name || '#' + memo.id}" and move to Trash?`;
+    if (window.confirm(confirmMsg)) {
+      deleteSalesMemoCompletely(memo.id, { name: memo.name, lotNumber: memo.lotNumber });
       setGlobalMemos(prev => prev.filter(m => m.id !== memo.id));
-      window.dispatchEvent(new Event('storage'));
     }
   };
 

@@ -85,6 +85,22 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
       setLots(newLots);
       localStorage.setItem('purchase_lots_list', JSON.stringify(newLots));
       localStorage.removeItem(`memo_lot_${lot}`);
+      localStorage.removeItem(`due_memo_${lot}`);
+      localStorage.removeItem(`due_memo_purchase_${lot}`);
+
+      const cleanList = (k: string) => {
+        try {
+          const s = localStorage.getItem(k);
+          if (s) {
+            const arr: any[] = JSON.parse(s);
+            localStorage.setItem(k, JSON.stringify(arr.filter(id => String(id) !== String(lot))));
+          }
+        } catch(e) {}
+      };
+      cleanList('dues_purchase');
+      cleanList('paid_dues_purchase');
+
+      window.dispatchEvent(new Event('storage'));
     }
   };
 

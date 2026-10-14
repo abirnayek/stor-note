@@ -31,7 +31,7 @@ export const translations = {
     account: 'অ্যাকাউন্ট',
     email: 'ইমেইল',
     action: 'অ্যাকশন',
-    
+
     // Dashboard
     salesAccount: 'বিক্রয় হিসাব',
     dueAccount: 'বকেয়া হিসাব',
@@ -39,7 +39,7 @@ export const translations = {
     blank: 'ফাঁকা',
     purchaseAccount: 'ক্রয় হিসাব',
     stockAccount: 'স্টক',
-    
+
     // Due Account
     dueTypesTitle: 'বকেয়ার ধরণ',
     regularDue: 'সাধারণ বকেয়া (রেগুলার)',
@@ -190,7 +190,7 @@ export const translations = {
     account: 'Account',
     email: 'Email',
     action: 'Action',
-    
+
     // Dashboard
     salesAccount: 'Sales Account',
     dueAccount: 'Due Account',
@@ -198,7 +198,7 @@ export const translations = {
     blank: 'Blank',
     purchaseAccount: 'Purchase Account',
     stockAccount: 'Stock',
-    
+
     // Due Account
     dueTypesTitle: 'Due Types',
     regularDue: 'Regular Due (General)',
@@ -211,7 +211,7 @@ export const translations = {
     // Password Screen
     purchaseLogin: 'Purchase Account Login',
     enterPasswordMsg: 'Please enter password',
-    passwordPlaceholder: 'Password (1234)',
+    passwordPlaceholder: 'Enter Password',
     incorrectPassword: 'Incorrect Password',
     enterBtn: 'Enter',
     forgotPassword: 'Forgot password?',
