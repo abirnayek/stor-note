@@ -335,6 +335,20 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       return { ...prev, entries: updated };
     });
     setActiveSuggestRowId(null);
+
+    // Auto-focus next input (weight / totalKg) in the same row
+    setTimeout(() => {
+      try {
+        const activeContainer = document.querySelector(`[data-entry-id="${entryId}"]`) || document.querySelector('.fish-autocomplete-dropdown')?.closest('tr');
+        if (activeContainer) {
+          const rowInputs = Array.from(activeContainer.querySelectorAll('input:not([type="hidden"]):not([disabled])')) as HTMLInputElement[];
+          if (rowInputs.length > 1) {
+            rowInputs[1].focus();
+            rowInputs[1].select();
+          }
+        }
+      } catch (e) {}
+    }, 60);
   };
 
   useEffect(() => {
@@ -1825,6 +1839,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   return (
                     <tr 
                       key={entry.id}
+                      data-entry-id={entry.id}
                       style={{
                         backgroundColor: activePalette ? activePalette.bg : undefined,
                         boxShadow: activePalette ? `inset 4px 0 0 ${activePalette.border}` : undefined,
@@ -1899,6 +1914,17 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                                       key={`${item.name}_${sIdx}`}
                                       onMouseDown={(e) => {
                                         e.preventDefault();
+                                        e.stopPropagation();
+                                        handleSelectFishSuggestion(entry.id, item);
+                                      }}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleSelectFishSuggestion(entry.id, item);
+                                      }}
+                                      onTouchEnd={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
                                         handleSelectFishSuggestion(entry.id, item);
                                       }}
                                       style={{

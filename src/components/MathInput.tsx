@@ -106,6 +106,7 @@ export const MathInput: React.FC<MathInputProps> = ({
   const timerRef = useRef<any>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const lastEmittedValueRef = useRef<string>(value !== undefined && value !== null ? value.toString() : '');
 
   const lastClickTimeRef = useRef(0);
   const clickCountRef = useRef(0);
@@ -169,10 +170,18 @@ export const MathInput: React.FC<MathInputProps> = ({
     }
   };
 
-  // Sync with prop changes when NOT focused
+  // Sync with prop changes (both external updates and unfocused sync)
   useEffect(() => {
     const strVal = value !== undefined && value !== null ? value.toString() : '';
-    if (!isFocusedRef.current) {
+    if (strVal !== lastEmittedValueRef.current) {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      setLocalValue(strVal);
+      localValueRef.current = strVal;
+      lastEmittedValueRef.current = strVal;
+    } else if (!isFocusedRef.current) {
       setLocalValue(strVal);
       localValueRef.current = strVal;
     }
@@ -199,6 +208,7 @@ export const MathInput: React.FC<MathInputProps> = ({
   };
 
   const triggerChange = (val: string) => {
+    lastEmittedValueRef.current = val;
     if (onChangeRef.current) {
       const mockEvent = {
         target: { value: val, name: props.name || '' },
@@ -381,6 +391,7 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
   const timerRef = useRef<any>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const lastEmittedValueRef = useRef<string>(value !== undefined && value !== null ? value.toString() : '');
 
   const lastClickTimeRef = useRef(0);
   const clickCountRef = useRef(0);
@@ -446,13 +457,22 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
 
   useEffect(() => {
     const strVal = value !== undefined && value !== null ? value.toString() : '';
-    if (!isFocusedRef.current) {
+    if (strVal !== lastEmittedValueRef.current) {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      setLocalValue(strVal);
+      localValueRef.current = strVal;
+      lastEmittedValueRef.current = strVal;
+    } else if (!isFocusedRef.current) {
       setLocalValue(strVal);
       localValueRef.current = strVal;
     }
   }, [value]);
 
   const triggerChange = (val: string) => {
+    lastEmittedValueRef.current = val;
     if (onChangeRef.current) {
       const mockEvent = {
         target: { value: val, name: props.name || '' },
