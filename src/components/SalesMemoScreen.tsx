@@ -618,8 +618,6 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       if (onLotChange) {
         onLotChange(validLot);
       }
-
-      window.dispatchEvent(new Event('storage'));
     } catch(e) {}
   };
 
@@ -888,6 +886,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
               };
             });
           }
+        } else {
+          updatedEntries = updatedEntries.map(e => e.id === id ? { ...e, buyRate: 0 } : e);
         }
       }
 
@@ -1224,7 +1224,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <h2>{t('salesMemo')}</h2>
           <span style={{ fontSize: '0.8rem', color: saveStatus === 'Saved' ? '#72be44' : '#fff', transition: 'color 0.3s' }}>
-            {saveStatus === 'Saved' ? '✔ All changes saved' : 'Saving...'}
+            {saveStatus === 'Saved' ? (language === 'bn' ? '✔ সব পরিবর্তন সেভ হয়েছে' : '✔ All changes saved') : (language === 'bn' ? 'সেভ হচ্ছে...' : 'Saving...')}
           </span>
         </div>
         
@@ -1985,9 +1985,11 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                                 padding: isExtra ? '1px' : undefined
                               }}>
                                 <DebouncedInput 
+                                  debounceMs={0}
                                   placeholder={t('writeHere')}
                                   value={entry.name}
                                   onFocus={() => setActiveSuggestRowId(entry.id)}
+                                  onClick={() => setActiveSuggestRowId(entry.id)}
                                   onChange={e => {
                                     updateEntry(entry.id, 'name', e.target.value);
                                     setActiveSuggestRowId(entry.id);

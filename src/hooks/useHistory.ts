@@ -35,12 +35,15 @@ export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: 
     if (!storageKey) return;
     
     const handleStorage = (e: StorageEvent) => {
-      // Only reload if the event is for this exact storageKey from another tab/window
-      if (e.key && e.key !== storageKey) return;
+      // Only reload if the event is a genuine StorageEvent for this exact storageKey from another tab/window
+      if (!e.key || e.key !== storageKey) return;
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
+          if (JSON.stringify(parsed) === JSON.stringify(stateRef.current)) {
+            return;
+          }
           setState(parsed);
           stateRef.current = parsed;
         } catch(e) {}

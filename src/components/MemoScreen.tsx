@@ -363,7 +363,6 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
     }
 
     localStorage.setItem(`memo_lot_${lotNumber}`, JSON.stringify({ ...memoState, totalPriceMain: totalBill, status: currentStatus }));
-    window.dispatchEvent(new Event('storage'));
     setSaveStatus('Saving...');
     const timer = setTimeout(() => setSaveStatus('Saved'), 500);
     return () => clearTimeout(timer);

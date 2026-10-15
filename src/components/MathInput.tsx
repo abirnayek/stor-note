@@ -599,11 +599,16 @@ export const DebouncedInput: React.FC<DebouncedInputProps> = ({
 
         if (timerRef.current) {
           clearTimeout(timerRef.current);
+          timerRef.current = null;
         }
 
-        timerRef.current = setTimeout(() => {
+        if (debounceMs <= 0 || val === '') {
           triggerChange(val);
-        }, debounceMs);
+        } else {
+          timerRef.current = setTimeout(() => {
+            triggerChange(val);
+          }, debounceMs);
+        }
       }}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
