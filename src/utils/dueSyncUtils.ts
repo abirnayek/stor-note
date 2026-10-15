@@ -1,4 +1,4 @@
-import { parseMemoMonthYear } from './dateUtils';
+import { parseMemoMonthYear, getMemoExactTimestamp } from './dateUtils';
 import { moveToTrash } from './trashUtils';
 import { markMemoDeleted, isMemoDeleted } from './syncEngine';
 
@@ -874,34 +874,15 @@ export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
       ? Number(rawLot)
       : null;
 
-    let timestamp = 0;
-    if (sourceKey && localTimestamps[sourceKey]) {
-      timestamp = Number(localTimestamps[sourceKey]);
-    }
-    if (!timestamp && localTimestamps[`sales_memo_${memoId}`]) {
-      timestamp = Number(localTimestamps[`sales_memo_${memoId}`]);
-    }
-    if (!timestamp && effectiveLot !== null && localTimestamps[`sales_memo_lot_${effectiveLot}_memo_${memoId}`]) {
-      timestamp = Number(localTimestamps[`sales_memo_lot_${effectiveLot}_memo_${memoId}`]);
-    }
-    if (!timestamp && localTimestamps[`due_memo_${memoId}`]) {
-      timestamp = Number(localTimestamps[`due_memo_${memoId}`]);
-    }
-    if (!timestamp && inner.updatedAt) {
-      const p = Date.parse(inner.updatedAt);
-      if (!isNaN(p)) timestamp = p;
-    }
-    if (!timestamp && (inner.createdAt || inner.date)) {
-      const p = Date.parse(String(inner.createdAt || inner.date));
-      if (!isNaN(p)) timestamp = p;
-    }
-    if (!timestamp && !isNaN(Number(memoId)) && Number(memoId) > 1000000000) {
-      timestamp = Number(memoId);
-    }
-    if (!timestamp) {
-      const numId = Number(memoId);
-      timestamp = !isNaN(numId) ? numId : 0;
-    }
+    const fallbackLocalTs = (sourceKey && localTimestamps[sourceKey])
+      ? Number(localTimestamps[sourceKey])
+      : (localTimestamps[`sales_memo_${memoId}`]
+        ? Number(localTimestamps[`sales_memo_${memoId}`])
+        : (effectiveLot !== null && localTimestamps[`sales_memo_lot_${effectiveLot}_memo_${memoId}`]
+          ? Number(localTimestamps[`sales_memo_lot_${effectiveLot}_memo_${memoId}`])
+          : (localTimestamps[`due_memo_${memoId}`] ? Number(localTimestamps[`due_memo_${memoId}`]) : undefined)));
+
+    const timestamp = getMemoExactTimestamp(memoObj, fallbackLocalTs);
 
     if (allMemosMap.has(memoId)) {
       const existing = allMemosMap.get(memoId)!;
@@ -1124,9 +1105,11 @@ export const moveSalesMemoToFolder = (memoId: string, folderId: string, folderNa
       if (parsed.customerName) memoTitle = parsed.customerName;
       parsed.folderId = folderId;
       parsed.folderName = folderName;
+      parsed.lastModified = Date.now();
       if (parsed.memoState) {
         parsed.memoState.folderId = folderId;
         parsed.memoState.folderName = folderName;
+        parsed.memoState.lastModified = Date.now();
       }
       localStorage.setItem(memoKey, JSON.stringify(parsed));
     } catch (e) {}
@@ -1220,9 +1203,11 @@ export const moveSalesMemoToLot = (memoId: string, newLotNumber: number): { succ
       if (parsed.customerName) memoTitle = parsed.customerName;
       parsed.lotNumber = newLotNumber;
       parsed.lotNumberInput = String(newLotNumber);
+      parsed.lastModified = Date.now();
       if (parsed.memoState) {
         parsed.memoState.lotNumber = newLotNumber;
         parsed.memoState.lotNumberInput = String(newLotNumber);
+        parsed.memoState.lastModified = Date.now();
       }
       localStorage.setItem(memoKey, JSON.stringify(parsed));
     } catch (e) {}

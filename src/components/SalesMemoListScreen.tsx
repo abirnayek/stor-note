@@ -71,6 +71,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
       status: 'draft',
       createdAt: today,
       createdAtTime: currentTime,
+      lastModified: Date.now(),
       sellerSignature: localStorage.getItem('default_seller_signature') || '',
       entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', profitPercent: '' }]
     };

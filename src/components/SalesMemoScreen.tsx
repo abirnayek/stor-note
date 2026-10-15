@@ -9,7 +9,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
 import { getLotStock, getLotPurchaseItems, getAllPurchaseItems, type LotStockSummary, type LotPurchaseFishItem } from '../utils/stockUtils';
-import { parseMemoMonthYear, MONTHS, enToBnDigits, bnToEnDigits } from '../utils/dateUtils';
+import { parseMemoMonthYear, getMemoExactTimestamp, MONTHS, enToBnDigits, bnToEnDigits } from '../utils/dateUtils';
 
 // Helper to convert date strings to YYYY-MM-DD for native <input type="date">
 const getIsoDateForPicker = (dateStr?: string): string => {
@@ -97,6 +97,7 @@ interface MemoState {
   createdAtTime?: string;
   updatedAt?: string;
   updatedAtTime?: string;
+  lastModified?: number;
   isOriginalDate?: boolean;
   customDate?: string;
   receiverSignature?: string;
@@ -453,9 +454,11 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   };
 
   const isMounted = useRef(false);
+  const isDirtyRef = useRef(false);
 
   
   const handleSaveReceiverSig = (dataUrl: string) => {
+    isDirtyRef.current = true;
     const key = `sales_memo_lot_${lotNumber === null ? 'unassigned' : lotNumber}_memo_${memoId}`;
     setMemoState(prev => {
       const next = { ...prev, receiverSignature: dataUrl };
@@ -467,6 +470,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   };
 
   const handleSaveSellerSig = (dataUrl: string) => {
+    isDirtyRef.current = true;
     try {
       if (dataUrl) {
         localStorage.setItem('default_seller_signature', dataUrl);
@@ -510,6 +514,13 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         return;
       }
 
+      // Update lastModified if modified by user so it immediately jumps to the front of all lists
+      const nowTs = Date.now();
+      if (isDirtyRef.current) {
+        stateToSave.lastModified = nowTs;
+        stateToSave.updatedAt = new Date(nowTs).toISOString();
+      }
+
       // 1. Save to canonical storage key and destination storage key
       const canonicalKey = `sales_memo_${memoId}`;
       localStorage.setItem(canonicalKey, JSON.stringify(stateToSave));
@@ -517,30 +528,13 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       const destKey = `sales_memo_lot_${validLot === null ? 'unassigned' : validLot}_memo_${memoId}`;
       localStorage.setItem(destKey, JSON.stringify(stateToSave));
 
-      // Preserve stable local timestamp for canonical and dest keys so sorting in Global List & Month folders is exact
+      // Keep local_timestamps updated with the memo's true timestamp
       try {
         const tsRaw = localStorage.getItem('local_timestamps');
         let tsMap: Record<string, number> = tsRaw ? JSON.parse(tsRaw) : {};
-        
-        let memoTimestamp = 0;
-        if (stateToSave.isOriginalDate === false && stateToSave.customDate) {
-          const { month: parsedM, year: parsedY, day: parsedD } = parseMemoMonthYear(stateToSave);
-          const day = parsedD || 15;
-          memoTimestamp = new Date(parsedY, parsedM - 1, day, 12, 0, 0).getTime();
-        } else {
-          memoTimestamp = tsMap[canonicalKey]
-            || tsMap[destKey]
-            || tsMap[`sales_memo_lot_${lotNumber ?? 'unassigned'}_memo_${memoId}`]
-            || tsMap[`due_memo_${memoId}`]
-            || (stateToSave.createdAt ? Date.parse(stateToSave.createdAt) : 0)
-            || (!isNaN(Number(memoId)) && Number(memoId) > 1000000000 ? Number(memoId) : 0);
-        }
-
-        if (!memoTimestamp || isNaN(memoTimestamp)) {
-          memoTimestamp = Date.now();
-        }
-        tsMap[canonicalKey] = memoTimestamp;
-        tsMap[destKey] = memoTimestamp;
+        const effectiveTs = stateToSave.lastModified || getMemoExactTimestamp(stateToSave);
+        tsMap[canonicalKey] = effectiveTs;
+        tsMap[destKey] = effectiveTs;
         localStorage.setItem('local_timestamps', JSON.stringify(tsMap));
       } catch(e) {}
 
@@ -645,6 +639,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       isMounted.current = true;
       return;
     }
+
+    isDirtyRef.current = true;
 
     if (memoState.createdAt && memoState.createdAt !== today && memoState.updatedAt !== today) {
       const editTime = new Date().toLocaleTimeString(language === 'bn' ? 'bn-BD' : 'en-US', {

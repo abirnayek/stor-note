@@ -153,6 +153,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
       customerType: 'regular',
       status: 'draft',
       createdAt: today,
+      lastModified: Date.now(),
       sellerSignature: localStorage.getItem('default_seller_signature') || '',
       entries: [{ id: Date.now().toString(), name: '', totalKg: '', weightUnit: 'kg', profitPercent: '' }]
     };

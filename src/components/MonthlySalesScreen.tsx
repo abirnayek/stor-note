@@ -3,7 +3,7 @@ import { type Screen } from '../App';
 import { ChevronLeft, Calendar, FileText, Trash2, Search, Filter, TrendingUp, TrendingDown } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
-import { MONTHS, parseMemoMonthYear, enToBnDigits } from '../utils/dateUtils';
+import { MONTHS, parseMemoMonthYear, getMemoExactTimestamp, enToBnDigits } from '../utils/dateUtils';
 import { deleteSalesMemoCompletely } from '../utils/dueSyncUtils';
 import { getLotPurchaseItems, getAllPurchaseItems } from '../utils/stockUtils';
 
@@ -87,23 +87,12 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         return;
       }
 
-      let ts = sourceKey && localTimestamps[sourceKey] ? Number(localTimestamps[sourceKey]) : 0;
-      if (!ts && localTimestamps[`sales_memo_${id}`]) {
-        ts = Number(localTimestamps[`sales_memo_${id}`]);
-      }
-      if (!ts && memo.updatedAt) {
-        const p = Date.parse(memo.updatedAt);
-        if (!isNaN(p)) ts = p;
-      }
-      if (!ts && !isNaN(Number(id)) && Number(id) > 1000000000) {
-        ts = Number(id);
-      }
+      const fallbackLocalTs = (sourceKey && localTimestamps[sourceKey])
+        ? Number(localTimestamps[sourceKey])
+        : (localTimestamps[`sales_memo_${id}`] ? Number(localTimestamps[`sales_memo_${id}`]) : undefined);
 
-      const { month: mIdx, year: mYear, dateStr, timeStr, day } = parseMemoMonthYear(memo, ts);
-
-      if (memo.isOriginalDate === false && memo.customDate && day) {
-        ts = new Date(mYear, mIdx - 1, day, 12, 0, 0).getTime();
-      }
+      let ts = getMemoExactTimestamp(rawData, fallbackLocalTs);
+      const { month: mIdx, year: mYear, dateStr, timeStr } = parseMemoMonthYear(memo, ts);
 
       // Filter by this month & year
       if (mIdx !== monthIndex || mYear !== year) {

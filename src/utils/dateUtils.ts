@@ -186,3 +186,69 @@ export const parseMemoMonthYear = (
 
   return { month, year, dateStr, timeStr, day };
 };
+
+/**
+ * Calculates the exact timestamp of a memo for sorting purposes:
+ * 1. Prioritizes memo's own explicit user edit / modification timestamp (lastModified / updatedAtTimestamp)
+ * 2. Parses exact calendar date + time from the memo content (e.g. "13-9-26 10:50 PM" or "15 অক্টো, 2026 12:07 PM")
+ * 3. Falls back to valid ISO updatedAt string
+ * 4. Falls back to fallbackTs if valid
+ * 5. Falls back to numeric memo.id timestamp
+ */
+export const getMemoExactTimestamp = (memo: any, fallbackTs?: number): number => {
+  if (!memo) return fallbackTs || 0;
+  const inner = memo.memoState || memo;
+
+  // 1. Explicit recent user edit or creation timestamp
+  const explicitTs = Number(inner.lastModified || memo.lastModified || inner.updatedAtTimestamp || memo.updatedAtTimestamp);
+  if (!isNaN(explicitTs) && explicitTs > 0) {
+    return explicitTs;
+  }
+
+  // 2. Parse exact calendar date + time
+  const { year, month, day, timeStr } = parseMemoMonthYear(inner, fallbackTs);
+  if (year && month) {
+    let hours = 12;
+    let minutes = 0;
+    let seconds = 0;
+    if (timeStr) {
+      const cleanTime = bnToEnDigits(timeStr).trim();
+      const m = cleanTime.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?/i);
+      if (m) {
+        let h = parseInt(m[1], 10);
+        const min = parseInt(m[2], 10);
+        const sec = m[3] ? parseInt(m[3], 10) : 0;
+        const ampm = m[4] ? m[4].toLowerCase() : null;
+        if (ampm === 'pm' && h < 12) h += 12;
+        if (ampm === 'am' && h === 12) h = 0;
+        hours = h;
+        minutes = min;
+        seconds = sec;
+      }
+    }
+    const effectiveDay = (day && day >= 1 && day <= 31) ? day : 1;
+    const dateTs = new Date(year, month - 1, effectiveDay, hours, minutes, seconds).getTime();
+    if (!isNaN(dateTs) && dateTs > 0) {
+      return dateTs;
+    }
+  }
+
+  // 3. Fallback to valid ISO updatedAt string
+  if (inner.updatedAt) {
+    const p = Date.parse(inner.updatedAt);
+    if (!isNaN(p) && p > 0) return p;
+  }
+
+  // 4. Fallback to fallbackTs if provided and valid
+  if (fallbackTs && !isNaN(fallbackTs) && fallbackTs > 0) {
+    return fallbackTs;
+  }
+
+  // 5. Memo ID timestamp (if numeric millisecond timestamp)
+  const id = memo.id || inner.id;
+  if (id && !isNaN(Number(id)) && Number(id) > 1000000000) {
+    return Number(id);
+  }
+
+  return 0;
+};
