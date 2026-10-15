@@ -122,7 +122,16 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
 
   // Calculate total due across all purchase lots
   const totalPurchaseDue = lots.reduce((total, lot) => {
-    const memoDataStr = localStorage.getItem(`memo_lot_${lot}`);
+    let memoDataStr = localStorage.getItem(`memo_lot_${lot}`) || localStorage.getItem(`memo_lot_${String(lot).padStart(2, '0')}`);
+    if (!memoDataStr) {
+      const dueSaved = localStorage.getItem(`due_memo_purchase_lot_${lot}`) || localStorage.getItem(`due_memo_purchase_lot_${String(lot).padStart(2, '0')}`);
+      if (dueSaved) {
+        try {
+          const parsedDue = JSON.parse(dueSaved);
+          memoDataStr = parsedDue.memoState ? JSON.stringify(parsedDue.memoState) : dueSaved;
+        } catch(e) {}
+      }
+    }
     if (memoDataStr) {
       try {
         const memo = JSON.parse(memoDataStr);
@@ -184,7 +193,16 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
 
       <div className="lot-grid">
         {filteredLots.map((lot, idx) => {
-          const memoDataStr = localStorage.getItem(`memo_lot_${lot}`);
+          let memoDataStr = localStorage.getItem(`memo_lot_${lot}`) || localStorage.getItem(`memo_lot_${String(lot).padStart(2, '0')}`);
+          if (!memoDataStr) {
+            const dueSaved = localStorage.getItem(`due_memo_purchase_lot_${lot}`) || localStorage.getItem(`due_memo_purchase_lot_${String(lot).padStart(2, '0')}`);
+            if (dueSaved) {
+              try {
+                const parsedDue = JSON.parse(dueSaved);
+                memoDataStr = parsedDue.memoState ? JSON.stringify(parsedDue.memoState) : dueSaved;
+              } catch(e) {}
+            }
+          }
           let supplierName = '';
           let totalAmount = 0;
           let paidAmount = 0;
