@@ -1,3 +1,5 @@
+import { isMemoDeleted } from './syncEngine';
+
 export interface FishStockItem {
   id: string;
   serialNo: number;
@@ -29,6 +31,430 @@ export const normalizeLotNumber = (lot: any): number | null => {
   return !isNaN(num) && num > 0 ? num : null;
 };
 
+export const normalizeFishKey = (name: string): string => {
+  return (name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0980-\u09FF]/g, '');
+};
+
+/**
+ * Intelligent fish matching supporting aliases, Bengali transliterations, and seafood types
+ */
+export const matchesFish = (soldName: string, purchaseName: string): boolean => {
+  const s = (soldName || '').trim().toLowerCase();
+  const p = (purchaseName || '').trim().toLowerCase();
+  if (!s || !p) return false;
+
+  // 1. Exact string match
+  if (s === p) return true;
+
+  const sNorm = normalizeFishKey(s);
+  const pNorm = normalizeFishKey(p);
+  if (sNorm === pNorm) return true;
+
+  // 2. Specific seafood aliases & root synonyms
+  // Blue swimmer crab (blue swem / blur kakra / kakra blue / blue swimmer)
+  const isBlueCrabS = (sNorm.includes('blue') || sNorm.includes('blur')) && (sNorm.includes('kakra') || sNorm.includes('swem') || sNorm.includes('crab'));
+  const isBlueCrabP = (pNorm.includes('blue') || pNorm.includes('blur')) || (pNorm.includes('swem'));
+  if (isBlueCrabS && isBlueCrabP) return true;
+
+  // Bele / Bayla (বেলে / বায়লা)
+  const isBaylaS = sNorm.includes('bele') || sNorm.includes('bayla') || sNorm.includes('baela');
+  const isBaylaP = pNorm.includes('bele') || pNorm.includes('bayla') || pNorm.includes('baela');
+  if (isBaylaS && isBaylaP) return true;
+
+  // Rupchanda / Rupchada (রূপচাঁদা / rupchda)
+  const isRupS = sNorm.includes('rup') && (sNorm.includes('chad') || sNorm.includes('chd'));
+  const isRupP = pNorm.includes('rup') && (pNorm.includes('chad') || pNorm.includes('chd'));
+  if (isRupS && isRupP) return true;
+
+  // Kalo Chada (কালো চাঁদা)
+  const isKaloS = sNorm.includes('kalo') && (sNorm.includes('chad') || sNorm.includes('chd'));
+  const isKaloP = pNorm.includes('kalo') && (pNorm.includes('chad') || pNorm.includes('chd'));
+  if (isKaloS && isKaloP) return true;
+
+  // General Crab / Kakra (kakra, mad kakra, kakra boro, kakra choto, kakra mad, kakra kalo, redy cook kakra, redy cook)
+  const isKakraS = sNorm.includes('kakra') || sNorm.includes('cook');
+  const isKakraP = pNorm.includes('kakra') || pNorm.includes('cook');
+  if (isKakraS && isKakraP && !isBlueCrabS && !isBlueCrabP) return true;
+
+  // Koral: Koy Koral vs Datina Koral
+  if (sNorm.includes('koy') && sNorm.includes('koral') && pNorm.includes('koy') && pNorm.includes('koral')) return true;
+  if (sNorm.includes('datina') && sNorm.includes('koral') && pNorm.includes('datina') && pNorm.includes('koral')) return true;
+  if (sNorm.includes('koral') && !sNorm.includes('datina') && pNorm.includes('koy') && pNorm.includes('koral')) return true;
+
+  // Poya: Lal Poya Choto vs Lalpoya vs Poya / Sada Poya
+  const isLalPoyaS = (sNorm.includes('lal') && sNorm.includes('poya')) || sNorm.includes('lalpoya');
+  const isLalPoyaP = (pNorm.includes('lal') && pNorm.includes('poya')) || pNorm.includes('lalpoya');
+  if (isLalPoyaS && isLalPoyaP) return true;
+  const isGeneralPoyaS = sNorm.includes('poya') && !isLalPoyaS;
+  const isGeneralPoyaP = pNorm.includes('poya') && !isLalPoyaP;
+  if (isGeneralPoyaS && isGeneralPoyaP) return true;
+  if (sNorm.includes('poya') && pNorm.includes('poya')) return true;
+
+  // Chingri: Chingri Desi vs Chingri general (bagda, golda)
+  const isDesiS = sNorm.includes('desi') && sNorm.includes('chingri');
+  const isDesiP = pNorm.includes('desi') && pNorm.includes('chingri');
+  if (isDesiS && isDesiP) return true;
+  const isChingriS = sNorm.includes('chingri') || sNorm.includes('bagda') || sNorm.includes('golda');
+  const isChingriP = pNorm.includes('chingri') || pNorm.includes('bagda') || pNorm.includes('golda');
+  if (isChingriS && isChingriP) return true;
+
+  // Tuna
+  if (sNorm.includes('tuna') && pNorm.includes('tuna')) return true;
+
+  // Surma
+  if (sNorm.includes('surma') && pNorm.includes('surma')) return true;
+
+  // Loytta
+  if (sNorm.includes('loytta') && pNorm.includes('loytta')) return true;
+
+  // Octopus / Oqtopas
+  if ((sNorm.includes('octo') || sNorm.includes('oqto')) && (pNorm.includes('octo') || pNorm.includes('oqto'))) return true;
+
+  // Kapila / Kapila bayam
+  if (sNorm.includes('kapila') && pNorm.includes('kapila')) return true;
+
+  // Sada bata
+  if (sNorm.includes('bata') && pNorm.includes('bata')) return true;
+
+  // Chela
+  if (sNorm.includes('chela') && pNorm.includes('chela')) return true;
+
+  // Kata
+  if (sNorm.includes('kata') && pNorm.includes('kata')) return true;
+
+  // Mix
+  if (sNorm.includes('mix') && pNorm.includes('mix')) return true;
+
+  // Squid / Qatl
+  if ((sNorm.includes('squi') || sNorm.includes('qatl')) && (pNorm.includes('squi') || pNorm.includes('qatl'))) return true;
+
+  // Fallback: substring matching if length >= 4
+  if (sNorm.length >= 4 && pNorm.includes(sNorm)) return true;
+  if (pNorm.length >= 4 && sNorm.includes(pNorm)) return true;
+
+  return false;
+};
+
+interface ActiveSalesMemo {
+  id: string;
+  lotNumber: number | null;
+  entries: Array<{
+    name: string;
+    totalKg: number | string;
+    weightUnit?: string;
+  }>;
+}
+
+/**
+ * Retrieves all active non-purchase sales memos across all storage keys
+ */
+export const getAllActiveSalesMemos = (): ActiveSalesMemo[] => {
+  const memosMap = new Map<string, ActiveSalesMemo>();
+
+  const processMemo = (memoId: string, explicitLot: number | null, rawObj: any) => {
+    if (!memoId || isMemoDeleted(memoId) || !rawObj) return;
+
+    const inner = rawObj.memoState || rawObj;
+
+    // Strict exclusion of purchase memos
+    const isPurchase =
+      rawObj.type === 'purchase' ||
+      inner.type === 'purchase' ||
+      rawObj.customerType === 'purchase' ||
+      inner.customerType === 'purchase' ||
+      memoId.startsWith('purchase_') ||
+      (inner.supplierName && !inner.customerName && rawObj.type !== 'regular' && rawObj.type !== 'permanent' && rawObj.type !== 'reseller');
+
+    if (isPurchase) return;
+
+    const rawLot = (inner.lotNumberInput !== undefined && inner.lotNumberInput !== '')
+      ? inner.lotNumberInput
+      : (inner.lotNumber !== undefined && inner.lotNumber !== '' ? inner.lotNumber : explicitLot);
+    const lotNumber = normalizeLotNumber(rawLot);
+
+    const entries = Array.isArray(inner.entries) ? inner.entries : [];
+
+    if (memosMap.has(memoId)) {
+      const existing = memosMap.get(memoId)!;
+      if (existing.lotNumber === null && lotNumber !== null) {
+        existing.lotNumber = lotNumber;
+      }
+      if (entries.length > existing.entries.length) {
+        existing.entries = entries;
+      }
+      return;
+    }
+
+    memosMap.set(memoId, {
+      id: memoId,
+      lotNumber,
+      entries
+    });
+  };
+
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+
+    // 1. Canonical sales memos: sales_memo_*
+    if (key.startsWith('sales_memo_') && !key.startsWith('sales_memo_lot_') && !key.startsWith('sales_memo_list_')) {
+      const id = key.replace('sales_memo_', '');
+      try {
+        const obj = JSON.parse(localStorage.getItem(key) || '{}');
+        processMemo(id, null, obj);
+      } catch (e) {}
+    }
+    // 2. Direct lot-specific sales memos: sales_memo_lot_*_memo_*
+    else if (key.startsWith('sales_memo_lot_') && key.includes('_memo_')) {
+      const parts = key.split('_memo_');
+      if (parts.length === 2) {
+        const id = parts[1];
+        const lotPart = parts[0].replace('sales_memo_lot_', '');
+        const lotNum = normalizeLotNumber(lotPart);
+        try {
+          const obj = JSON.parse(localStorage.getItem(key) || '{}');
+          processMemo(id, lotNum, obj);
+        } catch (e) {}
+      }
+    }
+    // 3. Due memos: due_memo_*
+    else if (key.startsWith('due_memo_')) {
+      const id = key.replace('due_memo_', '');
+      try {
+        const obj = JSON.parse(localStorage.getItem(key) || '{}');
+        const lotNum = normalizeLotNumber(obj.lotNumber);
+        processMemo(id, lotNum, obj);
+      } catch (e) {}
+    }
+  }
+
+  return Array.from(memosMap.values());
+};
+
+const getAvailableLotNumbers = (): number[] => {
+  const lotNumbersSet = new Set<number>();
+  const saved = localStorage.getItem('purchase_lots_list');
+  if (saved) {
+    try {
+      const list: any[] = JSON.parse(saved);
+      list.forEach(item => {
+        const num = normalizeLotNumber(item);
+        if (num) lotNumbersSet.add(num);
+      });
+    } catch (e) {}
+  }
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('memo_lot_')) {
+      const lotStr = key.replace('memo_lot_', '');
+      const num = normalizeLotNumber(lotStr);
+      if (num) lotNumbersSet.add(num);
+    }
+  }
+  if (lotNumbersSet.size === 0) {
+    lotNumbersSet.add(1);
+  }
+  return Array.from(lotNumbersSet).sort((a, b) => a - b);
+};
+
+const getRawPurchaseData = (lotNumber: number): any => {
+  let purchaseData: any = null;
+  const directKey = `memo_lot_${lotNumber}`;
+  const rawPurchase = localStorage.getItem(directKey) || localStorage.getItem(`memo_lot_${String(lotNumber).padStart(2, '0')}`);
+  if (rawPurchase) {
+    try { purchaseData = JSON.parse(rawPurchase); } catch (e) {}
+  }
+  if (!purchaseData) {
+    const duePurchase = localStorage.getItem(`due_memo_purchase_lot_${lotNumber}`);
+    if (duePurchase) {
+      try {
+        const parsed = JSON.parse(duePurchase);
+        purchaseData = parsed.memoState || parsed;
+      } catch (e) {}
+    }
+  }
+  return purchaseData;
+};
+
+/**
+ * Calculates stock across all purchase lots using intelligent multi-lot FIFO allocation
+ */
+export const getAllLotsStock = (): LotStockSummary[] => {
+  const lotNumbers = getAvailableLotNumbers();
+
+  interface LotInternalItem {
+    id: string;
+    serialNo: number;
+    name: string;
+    purchasedKg: number;
+    soldKg: number;
+    buyRate: number;
+    unit: string;
+  }
+
+  interface LotInternalData {
+    lotNumber: number;
+    supplierName: string;
+    date: string;
+    items: LotInternalItem[];
+  }
+
+  const lotsMap = new Map<number, LotInternalData>();
+
+  lotNumbers.forEach(normLot => {
+    const purchaseData = getRawPurchaseData(normLot);
+    const supplierName = purchaseData?.supplierName || purchaseData?.name || '';
+    const date = purchaseData?.createdAt || purchaseData?.date || '';
+    const purchaseEntries: any[] = Array.isArray(purchaseData?.entries) ? purchaseData.entries : [];
+
+    const items: LotInternalItem[] = purchaseEntries.map((entry, index) => {
+      const serialNo = index + 1;
+      const name = (entry.name || '').trim();
+      let purchasedKg = Number(entry.totalKg) || 0;
+      if (entry.weightUnit === 'g') {
+        purchasedKg = purchasedKg / 1000;
+      }
+      purchasedKg = Math.round(purchasedKg * 100) / 100;
+      const buyPrice = Number(entry.totalPrice) || 0;
+      const buyRate = purchasedKg > 0 ? Math.round((buyPrice / purchasedKg) * 100) / 100 : 0;
+
+      return {
+        id: entry.id || String(serialNo),
+        serialNo,
+        name: name || `মাছ ${serialNo}`,
+        purchasedKg,
+        soldKg: 0,
+        buyRate,
+        unit: entry.weightUnit || 'kg'
+      };
+    });
+
+    lotsMap.set(normLot, {
+      lotNumber: normLot,
+      supplierName,
+      date,
+      items
+    });
+  });
+
+  // Fetch all active sales memos
+  const salesMemos = getAllActiveSalesMemos();
+
+  // Phase 1: Memos with explicit lot number
+  salesMemos.forEach(memo => {
+    if (memo.lotNumber !== null && lotsMap.has(memo.lotNumber)) {
+      const lotObj = lotsMap.get(memo.lotNumber)!;
+      memo.entries.forEach(entry => {
+        const name = (entry.name || '').trim();
+        let weight = Number(entry.totalKg) || 0;
+        if (entry.weightUnit === 'g') weight /= 1000;
+        if (weight <= 0 || !name) return;
+
+        const matchedItem = lotObj.items.find(item => matchesFish(name, item.name));
+        if (matchedItem) {
+          matchedItem.soldKg += weight;
+        }
+      });
+    }
+  });
+
+  // Phase 2: Unassigned memos (lotNumber === null)
+  // Allocate to lot containing that fish, using FIFO across lots (Lot 1, Lot 2, ...)
+  const sortedLotNums = Array.from(lotsMap.keys()).sort((a, b) => a - b);
+
+  salesMemos.forEach(memo => {
+    if (memo.lotNumber === null) {
+      memo.entries.forEach(entry => {
+        const name = (entry.name || '').trim();
+        let weight = Number(entry.totalKg) || 0;
+        if (entry.weightUnit === 'g') weight /= 1000;
+        if (weight <= 0 || !name) return;
+
+        // Find candidate items across lots in FIFO order
+        const candidateItems: LotInternalItem[] = [];
+        sortedLotNums.forEach(lNum => {
+          const lObj = lotsMap.get(lNum)!;
+          const found = lObj.items.find(item => matchesFish(name, item.name));
+          if (found) {
+            candidateItems.push(found);
+          }
+        });
+
+        if (candidateItems.length === 0) return;
+
+        let weightToDeduct = weight;
+        for (const item of candidateItems) {
+          const availableStock = Math.max(0, item.purchasedKg - item.soldKg);
+          if (availableStock > 0) {
+            const take = Math.min(weightToDeduct, availableStock);
+            item.soldKg += take;
+            weightToDeduct -= take;
+            if (weightToDeduct <= 0.0001) break;
+          }
+        }
+
+        // If all candidate lots are depleted, allocate any remaining overflow to the last lot
+        if (weightToDeduct > 0.0001) {
+          candidateItems[candidateItems.length - 1].soldKg += weightToDeduct;
+        }
+      });
+    }
+  });
+
+  // Build final LotStockSummary
+  const result: LotStockSummary[] = [];
+
+  sortedLotNums.forEach(lNum => {
+    const lotObj = lotsMap.get(lNum)!;
+    let totalPurchasedKg = 0;
+    let totalSoldKg = 0;
+    let totalRemainingKg = 0;
+
+    const items: FishStockItem[] = lotObj.items.map(item => {
+      const purchasedKg = Math.round(item.purchasedKg * 100) / 100;
+      const soldKg = Math.round(item.soldKg * 100) / 100;
+      const remainingKg = Math.max(0, Math.round((purchasedKg - soldKg) * 100) / 100);
+
+      totalPurchasedKg += purchasedKg;
+      totalSoldKg += soldKg;
+      totalRemainingKg += remainingKg;
+
+      let status: 'in_stock' | 'low_stock' | 'out_of_stock' = 'in_stock';
+      if (remainingKg <= 0.001) {
+        status = 'out_of_stock';
+      } else if (remainingKg <= purchasedKg * 0.25 || (purchasedKg >= 10 && remainingKg <= 5) || (remainingKg <= 3 && purchasedKg > 3)) {
+        status = 'low_stock';
+      }
+
+      return {
+        id: item.id,
+        serialNo: item.serialNo,
+        name: item.name,
+        purchasedKg,
+        soldKg,
+        remainingKg,
+        buyRate: item.buyRate,
+        unit: item.unit,
+        status
+      };
+    });
+
+    result.push({
+      lotNumber: lNum,
+      supplierName: lotObj.supplierName,
+      date: lotObj.date,
+      totalPurchasedKg: Math.round(totalPurchasedKg * 100) / 100,
+      totalSoldKg: Math.round(totalSoldKg * 100) / 100,
+      totalRemainingKg: Math.round(totalRemainingKg * 100) / 100,
+      items
+    });
+  });
+
+  return result;
+};
+
 /**
  * Calculates stock for a specific purchase lot
  */
@@ -46,203 +472,19 @@ export const getLotStock = (lotNumber: number): LotStockSummary => {
     };
   }
 
-  // 1. Fetch Purchase Lot Data
-  let purchaseData: any = null;
-  const directKey = `memo_lot_${normLot}`;
-  const rawPurchase = localStorage.getItem(directKey) || localStorage.getItem(`memo_lot_${String(normLot).padStart(2, '0')}`);
-  if (rawPurchase) {
-    try {
-      purchaseData = JSON.parse(rawPurchase);
-    } catch (e) {}
-  }
-
-  // Fallback check in due_memo_purchase_lot_*
-  if (!purchaseData) {
-    const duePurchase = localStorage.getItem(`due_memo_purchase_lot_${normLot}`);
-    if (duePurchase) {
-      try {
-        const parsed = JSON.parse(duePurchase);
-        purchaseData = parsed.memoState || parsed;
-      } catch (e) {}
-    }
-  }
-
-  const supplierName = purchaseData?.supplierName || purchaseData?.name || '';
-  const date = purchaseData?.createdAt || purchaseData?.date || '';
-  const purchaseEntries: any[] = Array.isArray(purchaseData?.entries) ? purchaseData.entries : [];
-
-  // 2. Fetch All Sales Memos for this Lot
-  const salesMemosMap = new Map<string, any>();
-
-  // Check sales_memo_list_*
-  const listKeys = [`sales_memo_list_${normLot}`, `sales_memo_list_lot_${normLot}`];
-  listKeys.forEach(listKey => {
-    const listStr = localStorage.getItem(listKey);
-    if (listStr) {
-      try {
-        const memoIds: string[] = JSON.parse(listStr);
-        memoIds.forEach(id => {
-          const mKey = `sales_memo_lot_${normLot}_memo_${id}`;
-          const mStr = localStorage.getItem(mKey);
-          if (mStr) {
-            try { salesMemosMap.set(id, JSON.parse(mStr)); } catch(e) {}
-          }
-        });
-      } catch (e) {}
-    }
-  });
-
-  // Direct scan of all sales_memo_lot_${normLot}_memo_*
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && (key.startsWith(`sales_memo_lot_${normLot}_memo_`) || key.startsWith(`sales_memo_lot_${String(normLot).padStart(2, '0')}_memo_`))) {
-      const parts = key.split('_memo_');
-      if (parts.length === 2) {
-        const memoId = parts[1];
-        if (!salesMemosMap.has(memoId)) {
-          try {
-            salesMemosMap.set(memoId, JSON.parse(localStorage.getItem(key) || '{}'));
-          } catch (e) {}
-        }
-      }
-    }
-  }
-
-  // Also check due_memo_*
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith('due_memo_')) {
-      const memoId = key.replace('due_memo_', '');
-      if (!salesMemosMap.has(memoId)) {
-        try {
-          const dueObj = JSON.parse(localStorage.getItem(key) || '{}');
-          const lotNum = dueObj.lotNumber ? parseInt(dueObj.lotNumber, 10) : null;
-          if (lotNum === normLot && (dueObj.type === 'regular' || dueObj.type === 'permanent')) {
-            salesMemosMap.set(memoId, dueObj.memoState || dueObj);
-          }
-        } catch (e) {}
-      }
-    }
-  }
-
-  // 3. Aggregate Sales by fish name
-  const soldByName = new Map<string, number>();
-
-  salesMemosMap.forEach(memo => {
-    const entries: any[] = Array.isArray(memo.entries) ? memo.entries : [];
-    entries.forEach(entry => {
-      let weight = Number(entry.totalKg) || 0;
-      if (entry.weightUnit === 'g') {
-        weight = weight / 1000;
-      }
-      if (weight <= 0) return;
-
-      const name = (entry.name || '').trim().toLowerCase();
-      if (name) {
-        soldByName.set(name, (soldByName.get(name) || 0) + weight);
-      }
-    });
-  });
-
-  // 4. Calculate Stock for each purchased fish entry
-  let totalPurchasedKg = 0;
-  let totalSoldKg = 0;
-  let totalRemainingKg = 0;
-
-  const items: FishStockItem[] = purchaseEntries.map((entry, index) => {
-    const serialNo = index + 1;
-    const name = (entry.name || '').trim();
-    const nameKey = name.toLowerCase();
-
-    let purchasedKg = Number(entry.totalKg) || 0;
-    if (entry.weightUnit === 'g') {
-      purchasedKg = purchasedKg / 1000;
-    }
-
-    // Determine sold amount: match strictly by fish name
-    let soldKg = 0;
-    if (nameKey && soldByName.has(nameKey)) {
-      soldKg = soldByName.get(nameKey) || 0;
-    }
-
-    // Avoid rounding floating point quirks
-    purchasedKg = Math.round(purchasedKg * 100) / 100;
-    soldKg = Math.round(soldKg * 100) / 100;
-    const remainingKg = Math.max(0, Math.round((purchasedKg - soldKg) * 100) / 100);
-
-    totalPurchasedKg += purchasedKg;
-    totalSoldKg += soldKg;
-    totalRemainingKg += remainingKg;
-
-    let status: 'in_stock' | 'low_stock' | 'out_of_stock' = 'in_stock';
-    if (remainingKg <= 0.001) {
-      status = 'out_of_stock';
-    } else if (remainingKg <= purchasedKg * 0.25 || (purchasedKg >= 10 && remainingKg <= 5) || (remainingKg <= 3 && purchasedKg > 3)) {
-      status = 'low_stock';
-    }
-
-    const buyPrice = Number(entry.totalPrice) || 0;
-    const buyRate = purchasedKg > 0 ? Math.round((buyPrice / purchasedKg) * 100) / 100 : 0;
-
-    return {
-      id: entry.id || String(serialNo),
-      serialNo,
-      name: name || `মাছ ${serialNo}`,
-      purchasedKg,
-      soldKg,
-      remainingKg,
-      buyRate,
-      unit: entry.weightUnit || 'kg',
-      status
-    };
-  });
+  const allLots = getAllLotsStock();
+  const matched = allLots.find(l => l.lotNumber === normLot);
+  if (matched) return matched;
 
   return {
     lotNumber: normLot,
-    supplierName,
-    date,
-    totalPurchasedKg: Math.round(totalPurchasedKg * 100) / 100,
-    totalSoldKg: Math.round(totalSoldKg * 100) / 100,
-    totalRemainingKg: Math.round(totalRemainingKg * 100) / 100,
-    items
+    supplierName: '',
+    date: '',
+    totalPurchasedKg: 0,
+    totalSoldKg: 0,
+    totalRemainingKg: 0,
+    items: []
   };
-};
-
-/**
- * Calculates stock across all purchase lots
- */
-export const getAllLotsStock = (): LotStockSummary[] => {
-  const lotNumbersSet = new Set<number>();
-
-  // Read saved purchase lots list
-  const saved = localStorage.getItem('purchase_lots_list');
-  if (saved) {
-    try {
-      const list: any[] = JSON.parse(saved);
-      list.forEach(item => {
-        const num = normalizeLotNumber(item);
-        if (num) lotNumbersSet.add(num);
-      });
-    } catch (e) {}
-  }
-
-  // Scan all memo_lot_* keys
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith('memo_lot_')) {
-      const lotStr = key.replace('memo_lot_', '');
-      const num = normalizeLotNumber(lotStr);
-      if (num) lotNumbersSet.add(num);
-    }
-  }
-
-  // Default to at least Lot 1 if nothing found
-  if (lotNumbersSet.size === 0) {
-    lotNumbersSet.add(1);
-  }
-
-  const sortedLots = Array.from(lotNumbersSet).sort((a, b) => a - b);
-  return sortedLots.map(lotNum => getLotStock(lotNum));
 };
 
 export interface LotPurchaseFishItem {
@@ -302,7 +544,7 @@ export const getLotPurchaseItems = (lotNumber: number | null): LotPurchaseFishIt
     const profitPercent = Number(entry.profitPercent !== undefined && entry.profitPercent !== '' ? entry.profitPercent : globalProfitPercent) || 0;
     const suggestedSaleRate = Math.round((effectiveCostRate + (effectiveCostRate * profitPercent / 100)) * 100) / 100;
 
-    const stockItem = stockSummary.items.find(it => it.name.trim().toLowerCase() === name.toLowerCase());
+    const stockItem = stockSummary.items.find(it => matchesFish(name, it.name));
     const remainingKg = stockItem ? stockItem.remainingKg : Math.max(0, purchasedKg);
 
     return {

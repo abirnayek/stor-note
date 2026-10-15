@@ -612,6 +612,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       if (onLotChange) {
         onLotChange(validLot);
       }
+
+      window.dispatchEvent(new Event('storage'));
     } catch(e) {}
   };
 
