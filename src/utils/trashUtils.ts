@@ -43,6 +43,42 @@ export const restoreFromTrash = (item: TrashedItem) => {
         localStorage.setItem('purchase_lots_list', JSON.stringify([...existingLots, lotNum].sort((a,b) => a-b)));
       }
       localStorage.setItem(`memo_lot_${lotNum}`, JSON.stringify(item.data));
+      localStorage.setItem(`memo_lot_${String(lotNum).padStart(2, '0')}`, JSON.stringify(item.data));
+
+      // Also restore due memo for purchase lot
+      const paidAmount = Number(item.data?.paidAmount) || 0;
+      const dueId = `purchase_lot_${lotNum}`;
+      const dueData = {
+        id: dueId,
+        type: 'purchase',
+        name: item.data?.supplierName || '',
+        address: '',
+        mobile: item.data?.supplierPhone || '',
+        lotNumber: String(lotNum),
+        deposit: paidAmount,
+        date: item.data?.createdAt || new Date().toLocaleDateString('bn-BD'),
+        entries: (item.data?.entries || []).map((e: any, idx: number) => ({
+          id: e.id || String(Date.now() + idx),
+          serialNo: (idx + 1).toString(),
+          name: e.name || `পণ্য ${idx + 1}`,
+          totalKg: e.totalKg,
+          weightUnit: e.weightUnit || 'kg',
+          buyRate: e.totalPrice || '',
+          profitPercent: e.profitPercent !== undefined ? e.profitPercent : '',
+          manualSaleRate: e.totalPrice || ''
+        }))
+      };
+      localStorage.setItem(`due_memo_${dueId}`, JSON.stringify(dueData));
+      localStorage.setItem(`due_memo_purchase_lot_${lotNum}`, JSON.stringify(dueData));
+
+      try {
+        const duesStr = localStorage.getItem('dues_purchase');
+        const dues: string[] = duesStr ? JSON.parse(duesStr) : [];
+        if (!dues.includes(dueId)) {
+          dues.push(dueId);
+          localStorage.setItem('dues_purchase', JSON.stringify(dues));
+        }
+      } catch (e) {}
     }
   } else if (item.type === 'sales_lot') {
     if (item.id.startsWith('sales_memo_')) {

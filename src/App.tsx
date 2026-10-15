@@ -29,6 +29,7 @@ import DeviceManager from './components/DeviceManager';
 import { LotPasswordManager } from './components/LotPasswordManager';
 
 import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow } from './utils/syncEngine';
+import { runLotRecovery } from './utils/lotRecovery';
 
 export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock' | 'sales-month-memos' | 'reseller-password' | 'reseller' | 'aratdar';
 
@@ -140,12 +141,17 @@ function App() {
   const [syncToast, setSyncToast] = useState<string | null>(null);
 
   useEffect(() => {
+    runLotRecovery();
+  }, []);
+
+  useEffect(() => {
     const handleOnline = async () => {
       setIsOnline(true);
       setSyncToast(language === 'bn' ? 'অনলাইন হয়েছে! স্বয়ংক্রিয়ভাবে সিঙ্ক হচ্ছে...' : 'Back online! Syncing changes...');
       try {
         await pushUnsyncedLocalData(false);
         await restoreFromCloud();
+        runLotRecovery();
         setupRealtimeSync();
         setSyncToast(language === 'bn' ? 'সব মেমো সফলভাবে ক্লাউডে সিঙ্ক হয়েছে ✓' : 'All memos synced with cloud ✓');
         setTimeout(() => setSyncToast(null), 3500);
@@ -204,6 +210,7 @@ function App() {
         (async () => {
           try {
             await restoreFromCloud();
+            runLotRecovery();
             await pushUnsyncedLocalData(false);
             setupRealtimeSync();
             window.dispatchEvent(new Event('storage'));

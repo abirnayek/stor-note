@@ -10,6 +10,7 @@ import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
 import { getLotStock, type LotStockSummary } from '../utils/stockUtils';
 import { bnToEnDigits, parseMemoMonthYear } from '../utils/dateUtils';
+import { runLotRecovery, isMemoEmpty } from '../utils/lotRecovery';
 
 // Helper to convert date strings to YYYY-MM-DD for native <input type="date">
 const getIsoDateForPicker = (dateStr?: string): string => {
@@ -90,9 +91,9 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   });
 
   const getInitialState = (): MemoState => {
-    let saved = localStorage.getItem(`memo_lot_${lotNumber}`);
+    let saved = localStorage.getItem(`memo_lot_${lotNumber}`) || localStorage.getItem(`memo_lot_${String(lotNumber).padStart(2, '0')}`);
     if (!saved && lotNumber) {
-      const dueSaved = localStorage.getItem(`due_memo_purchase_lot_${lotNumber}`);
+      const dueSaved = localStorage.getItem(`due_memo_purchase_lot_${lotNumber}`) || localStorage.getItem(`due_memo_purchase_lot_${String(lotNumber).padStart(2, '0')}`);
       if (dueSaved) {
         try {
           const parsedDue = JSON.parse(dueSaved);
@@ -102,6 +103,24 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
         } catch(e) {}
       }
     }
+
+    // If still missing or empty, trigger auto-recovery (e.g. for Lot 2)
+    if (!saved || (() => { try { return isMemoEmpty(JSON.parse(saved!)); } catch(e) { return true; } })()) {
+      runLotRecovery();
+      saved = localStorage.getItem(`memo_lot_${lotNumber}`) || localStorage.getItem(`memo_lot_${String(lotNumber).padStart(2, '0')}`);
+      if (!saved && lotNumber) {
+        const dueSaved = localStorage.getItem(`due_memo_purchase_lot_${lotNumber}`) || localStorage.getItem(`due_memo_purchase_lot_${String(lotNumber).padStart(2, '0')}`);
+        if (dueSaved) {
+          try {
+            const parsedDue = JSON.parse(dueSaved);
+            if (parsedDue.memoState) {
+              saved = JSON.stringify(parsedDue.memoState);
+            }
+          } catch(e) {}
+        }
+      }
+    }
+
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -365,7 +384,23 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
         }
       }
 
-      localStorage.setItem(`memo_lot_${lotNumber}`, JSON.stringify({ ...memoState, totalPriceMain: totalBill, status: currentStatus }));
+      // Safety check: Never overwrite an existing populated memo with a completely blank memo
+      if (isMemoEmpty(memoState)) {
+        const existingStr = localStorage.getItem(`memo_lot_${lotNumber}`);
+        if (existingStr) {
+          try {
+            const existingObj = JSON.parse(existingStr);
+            if (!isMemoEmpty(existingObj)) {
+              console.warn('[MemoScreen] Blocked clobbering existing populated memo with blank state');
+              return;
+            }
+          } catch(e) {}
+        }
+      }
+
+      const memoPayload = { ...memoState, totalPriceMain: totalBill, status: currentStatus };
+      localStorage.setItem(`memo_lot_${lotNumber}`, JSON.stringify(memoPayload));
+      localStorage.setItem(`memo_lot_${String(lotNumber).padStart(2, '0')}`, JSON.stringify(memoPayload));
       setSaveStatus('Saved');
     }, 350);
 
