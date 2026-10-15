@@ -23,12 +23,38 @@ export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: 
   const [historyCount, setHistoryCount] = useState(0);
   const [redoCount, setRedoCount] = useState(0);
 
-  const persistState = useCallback((val: T) => {
-    if (storageKey) {
+  const persistTimerRef = useRef<any>(null);
+
+  const persistState = useCallback((val: T, immediate = false) => {
+    if (!storageKey) return;
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    if (immediate) {
       try {
         localStorage.setItem(storageKey, JSON.stringify(val));
       } catch (e) {}
+    } else {
+      persistTimerRef.current = setTimeout(() => {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(val));
+        } catch (e) {}
+      }, 300);
     }
+  }, [storageKey]);
+
+  useEffect(() => {
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        if (storageKey && stateRef.current) {
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(stateRef.current));
+          } catch (e) {}
+        }
+      }
+    };
   }, [storageKey]);
 
   useEffect(() => {
@@ -80,7 +106,7 @@ export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: 
       if (!recordHistory) {
         // Programmatic / background update: update state & storage without disturbing history or redo
         stateRef.current = nextState;
-        persistState(nextState);
+        persistState(nextState, true);
         return nextState;
       }
 
@@ -138,7 +164,7 @@ export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: 
       }
 
       stateRef.current = nextState;
-      persistState(nextState);
+      persistState(nextState, immediate);
       return nextState;
     });
   }, [maxHistory, persistState]);
@@ -171,7 +197,7 @@ export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: 
       }
 
       stateRef.current = previousState;
-      persistState(previousState);
+      persistState(previousState, true);
 
       setHistoryCount(historyRef.current.length);
       setRedoCount(redoRef.current.length);
@@ -199,7 +225,7 @@ export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: 
       }
 
       stateRef.current = nextState;
-      persistState(nextState);
+      persistState(nextState, true);
 
       setHistoryCount(historyRef.current.length);
       setRedoCount(redoRef.current.length);

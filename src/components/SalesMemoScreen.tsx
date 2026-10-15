@@ -656,188 +656,192 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       return;
     }
 
-    // Calculate due amount for auto-sync
-    let fishTotal = 0;
-    memoState.entries.forEach(entry => {
-      let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
-      let buyRateNum = Number(entry.buyRate) || 0;
-      let calculatedSaleRate = buyRateNum > 0 ? buyRateNum + (buyRateNum * currentProfitPercent / 100) : 0;
-      let saleRate = 0;
-      if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-        let manualRateNum = Number(entry.manualSaleRate);
-        saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
-      } else {
-        saleRate = calculatedSaleRate;
-      }
-      let weightInKg = 0;
-      let totalKgNum = Number(entry.totalKg) || 0;
-      if (totalKgNum > 0) {
-        weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
-      }
-      if (weightInKg > 0 && saleRate > 0) {
-        fishTotal += weightInKg * saleRate;
-      }
-    });
-
-    const totalDeductions = (memoState.deductions || []).reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
-    let rawCommVal = memoState.commissionValue;
-    if (typeof rawCommVal === 'object' && rawCommVal !== null) {
-      rawCommVal = (rawCommVal as any).target?.value ?? (rawCommVal as any).value ?? (rawCommVal as any).amount ?? '';
-    }
-    const commVal = typeof rawCommVal === 'string'
-      ? (Number(rawCommVal.replace(/[০-৯]/g, (d: string) => (d.charCodeAt(0) - 0x09e6).toString())) || 0)
-      : (Number(rawCommVal) || 0);
-    const commType = memoState.commissionType || 'percent';
-    const commOp = memoState.commissionOperation || 'subtract';
-    let commissionAmount = 0;
-    if (commVal > 0) {
-      if (commType === 'flat') {
-        commissionAmount = commVal;
-      } else {
-        commissionAmount = Math.round((fishTotal * commVal / 100) * 100) / 100;
-      }
-    }
-    let grandTotal = 0;
-    if (commOp === 'subtract') {
-      grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions - commissionAmount) * 100) / 100);
-    } else {
-      grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions + commissionAmount) * 100) / 100);
-    }
-    const dueAmount = Math.max(0, Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100);
-    let currentStatus = memoState.status || 'draft';
-
-    if (memoState.customerType) {
-      if (dueAmount > 0) {
-        currentStatus = 'due';
-      } else if (grandTotal > 0 && dueAmount <= 0) {
-        currentStatus = 'paid';
-      }
-    }
-
-        const effectiveState = memoState.status !== currentStatus 
-      ? { ...memoState, status: currentStatus } 
-      : memoState;
-
-    if (memoState.status !== currentStatus) {
-      setMemoState(prev => ({ ...prev, status: currentStatus }), { recordHistory: false });
-    }
-
-    // Sync to due accounts (default to 'regular' if not explicitly chosen, so due is NEVER lost!)
-    if (memoState.customerType || dueAmount > 0 || (grandTotal > 0 && Number(memoState.paidAmount || 0) > 0)) {
-      const type = (memoState.customerType === 'permanent' || memoState.customerType === 'reseller') 
-        ? memoState.customerType 
-        : (defaultCustomerType === 'permanent' || defaultCustomerType === 'reseller' ? defaultCustomerType : 'regular');
-      const allTypes = ['regular', 'permanent', 'reseller'];
-      const otherTypes = allTypes.filter(t => t !== type);
-      
-      let existingDueObj: any = {};
-      try {
-        const dStr = localStorage.getItem(`due_memo_${memoId}`);
-        if (dStr) existingDueObj = JSON.parse(dStr);
-      } catch (e) {}
-
-      const effectiveDateStr = (memoState.isOriginalDate === false && memoState.customDate)
-        ? memoState.customDate
-        : (memoState.createdAt || today);
-
-      const newDueData = {
-        ...existingDueObj,
-        id: memoId,
-        memoState: { ...memoState, date: effectiveDateStr, customDate: memoState.customDate },
-        date: effectiveDateStr,
-        createdAt: effectiveDateStr,
-        name: memoState.customerName,
-        customerName: memoState.customerName,
-        address: memoState.address,
-        mobile: memoState.mobile,
-        lotNumber: memoState.lotNumberInput,
-        deposit: memoState.paidAmount,
-        paidAmount: memoState.paidAmount,
-        type: type,
-        status: currentStatus,
-        autoMessage: existingDueObj.autoMessage,
-        deductions: memoState.deductions || [],
-        commissionValue: (typeof rawCommVal === 'number' || typeof rawCommVal === 'string') ? rawCommVal : '',
-        commissionType: commType,
-        commissionOperation: commOp,
-        commissionAmount: commissionAmount,
-        entries: memoState.entries.map((e, i) => ({
-          id: e.id,
-          serialNo: (i+1).toString(),
-          name: e.name,
-          totalKg: e.totalKg,
-          weightUnit: e.weightUnit,
-          buyRate: e.buyRate || '',
-          profitPercent: e.profitPercent,
-          manualSaleRate: e.manualSaleRate,
-          highlightColor: e.highlightColor
-        }))
-      };
-
-      if (currentStatus === 'due') {
-        localStorage.setItem(`due_memo_${memoId}`, JSON.stringify(newDueData));
-        
-        const existingDuesStr = localStorage.getItem(`dues_${type}`);
-        let existingDues: string[] = existingDuesStr ? JSON.parse(existingDuesStr) : [];
-        if (!existingDues.includes(memoId)) {
-          existingDues.push(memoId);
-          localStorage.setItem(`dues_${type}`, JSON.stringify(existingDues));
-        }
-
-        // Remove from other type dues lists
-        otherTypes.forEach(ot => {
-          const otherDuesStr = localStorage.getItem(`dues_${ot}`);
-          let otherDues: string[] = otherDuesStr ? JSON.parse(otherDuesStr) : [];
-          if (otherDues.includes(memoId)) {
-            otherDues = otherDues.filter(id => id !== memoId);
-            localStorage.setItem(`dues_${ot}`, JSON.stringify(otherDues));
-          }
-        });
-
-        // Remove from all paid lists
-        allTypes.forEach(t => {
-          const paidStr = localStorage.getItem(`paid_dues_${t}`);
-          let paidList: string[] = paidStr ? JSON.parse(paidStr) : [];
-          if (paidList.includes(memoId)) {
-            paidList = paidList.filter(id => id !== memoId);
-            localStorage.setItem(`paid_dues_${t}`, JSON.stringify(paidList));
-          }
-        });
-      } else if (currentStatus === 'paid') {
-        localStorage.setItem(`due_memo_${memoId}`, JSON.stringify({ ...newDueData, paidDate: existingDueObj.paidDate || Date.now() }));
-        
-        const existingPaidStr = localStorage.getItem(`paid_dues_${type}`);
-        let existingPaid: string[] = existingPaidStr ? JSON.parse(existingPaidStr) : [];
-        if (!existingPaid.includes(memoId)) {
-          existingPaid.push(memoId);
-          localStorage.setItem(`paid_dues_${type}`, JSON.stringify(existingPaid));
-        }
-
-        // Remove from other paid lists
-        otherTypes.forEach(ot => {
-          const otherPaidStr = localStorage.getItem(`paid_dues_${ot}`);
-          let otherPaid: string[] = otherPaidStr ? JSON.parse(otherPaidStr) : [];
-          if (otherPaid.includes(memoId)) {
-            otherPaid = otherPaid.filter(id => id !== memoId);
-            localStorage.setItem(`paid_dues_${ot}`, JSON.stringify(otherPaid));
-          }
-        });
-
-        // Remove from all dues lists
-        allTypes.forEach(t => {
-          const duesStr = localStorage.getItem(`dues_${t}`);
-          let duesList: string[] = duesStr ? JSON.parse(duesStr) : [];
-          if (duesList.includes(memoId)) {
-            duesList = duesList.filter(id => id !== memoId);
-            localStorage.setItem(`dues_${t}`, JSON.stringify(duesList));
-          }
-        });
-      }
-    }
-
-    syncMemoToLot(memoState.lotNumberInput, effectiveState || memoState);
     setSaveStatus('Saving...');
-    const timer = setTimeout(() => setSaveStatus('Saved'), 500);
+
+    const timer = setTimeout(() => {
+      // Calculate due amount for auto-sync
+      let fishTotal = 0;
+      memoState.entries.forEach(entry => {
+        let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
+        let buyRateNum = Number(entry.buyRate) || 0;
+        let calculatedSaleRate = buyRateNum > 0 ? buyRateNum + (buyRateNum * currentProfitPercent / 100) : 0;
+        let saleRate = 0;
+        if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+          let manualRateNum = Number(entry.manualSaleRate);
+          saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+        } else {
+          saleRate = calculatedSaleRate;
+        }
+        let weightInKg = 0;
+        let totalKgNum = Number(entry.totalKg) || 0;
+        if (totalKgNum > 0) {
+          weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
+        }
+        if (weightInKg > 0 && saleRate > 0) {
+          fishTotal += weightInKg * saleRate;
+        }
+      });
+
+      const totalDeductions = (memoState.deductions || []).reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+      let rawCommVal = memoState.commissionValue;
+      if (typeof rawCommVal === 'object' && rawCommVal !== null) {
+        rawCommVal = (rawCommVal as any).target?.value ?? (rawCommVal as any).value ?? (rawCommVal as any).amount ?? '';
+      }
+      const commVal = typeof rawCommVal === 'string'
+        ? (Number(rawCommVal.replace(/[০-৯]/g, (d: string) => (d.charCodeAt(0) - 0x09e6).toString())) || 0)
+        : (Number(rawCommVal) || 0);
+      const commType = memoState.commissionType || 'percent';
+      const commOp = memoState.commissionOperation || 'subtract';
+      let commissionAmount = 0;
+      if (commVal > 0) {
+        if (commType === 'flat') {
+          commissionAmount = commVal;
+        } else {
+          commissionAmount = Math.round((fishTotal * commVal / 100) * 100) / 100;
+        }
+      }
+      let grandTotal = 0;
+      if (commOp === 'subtract') {
+        grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions - commissionAmount) * 100) / 100);
+      } else {
+        grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions + commissionAmount) * 100) / 100);
+      }
+      const dueAmount = Math.max(0, Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100);
+      let currentStatus = memoState.status || 'draft';
+
+      if (memoState.customerType) {
+        if (dueAmount > 0) {
+          currentStatus = 'due';
+        } else if (grandTotal > 0 && dueAmount <= 0) {
+          currentStatus = 'paid';
+        }
+      }
+
+      const effectiveState = memoState.status !== currentStatus 
+        ? { ...memoState, status: currentStatus } 
+        : memoState;
+
+      if (memoState.status !== currentStatus) {
+        setMemoState(prev => ({ ...prev, status: currentStatus }), { recordHistory: false });
+      }
+
+      // Sync to due accounts (default to 'regular' if not explicitly chosen, so due is NEVER lost!)
+      if (memoState.customerType || dueAmount > 0 || (grandTotal > 0 && Number(memoState.paidAmount || 0) > 0)) {
+        const type = (memoState.customerType === 'permanent' || memoState.customerType === 'reseller') 
+          ? memoState.customerType 
+          : (defaultCustomerType === 'permanent' || defaultCustomerType === 'reseller' ? defaultCustomerType : 'regular');
+        const allTypes = ['regular', 'permanent', 'reseller'];
+        const otherTypes = allTypes.filter(t => t !== type);
+        
+        let existingDueObj: any = {};
+        try {
+          const dStr = localStorage.getItem(`due_memo_${memoId}`);
+          if (dStr) existingDueObj = JSON.parse(dStr);
+        } catch (e) {}
+
+        const effectiveDateStr = (memoState.isOriginalDate === false && memoState.customDate)
+          ? memoState.customDate
+          : (memoState.createdAt || today);
+
+        const newDueData = {
+          ...existingDueObj,
+          id: memoId,
+          memoState: { ...memoState, date: effectiveDateStr, customDate: memoState.customDate },
+          date: effectiveDateStr,
+          createdAt: effectiveDateStr,
+          name: memoState.customerName,
+          customerName: memoState.customerName,
+          address: memoState.address,
+          mobile: memoState.mobile,
+          lotNumber: memoState.lotNumberInput,
+          deposit: memoState.paidAmount,
+          paidAmount: memoState.paidAmount,
+          type: type,
+          status: currentStatus,
+          autoMessage: existingDueObj.autoMessage,
+          deductions: memoState.deductions || [],
+          commissionValue: (typeof rawCommVal === 'number' || typeof rawCommVal === 'string') ? rawCommVal : '',
+          commissionType: commType,
+          commissionOperation: commOp,
+          commissionAmount: commissionAmount,
+          entries: memoState.entries.map((e, i) => ({
+            id: e.id,
+            serialNo: (i+1).toString(),
+            name: e.name,
+            totalKg: e.totalKg,
+            weightUnit: e.weightUnit,
+            buyRate: e.buyRate || '',
+            profitPercent: e.profitPercent,
+            manualSaleRate: e.manualSaleRate,
+            highlightColor: e.highlightColor
+          }))
+        };
+
+        if (currentStatus === 'due') {
+          localStorage.setItem(`due_memo_${memoId}`, JSON.stringify(newDueData));
+          
+          const existingDuesStr = localStorage.getItem(`dues_${type}`);
+          let existingDues: string[] = existingDuesStr ? JSON.parse(existingDuesStr) : [];
+          if (!existingDues.includes(memoId)) {
+            existingDues.push(memoId);
+            localStorage.setItem(`dues_${type}`, JSON.stringify(existingDues));
+          }
+
+          // Remove from other type dues lists
+          otherTypes.forEach(ot => {
+            const otherDuesStr = localStorage.getItem(`dues_${ot}`);
+            let otherDues: string[] = otherDuesStr ? JSON.parse(otherDuesStr) : [];
+            if (otherDues.includes(memoId)) {
+              otherDues = otherDues.filter(id => id !== memoId);
+              localStorage.setItem(`dues_${ot}`, JSON.stringify(otherDues));
+            }
+          });
+
+          // Remove from all paid lists
+          allTypes.forEach(t => {
+            const paidStr = localStorage.getItem(`paid_dues_${t}`);
+            let paidList: string[] = paidStr ? JSON.parse(paidStr) : [];
+            if (paidList.includes(memoId)) {
+              paidList = paidList.filter(id => id !== memoId);
+              localStorage.setItem(`paid_dues_${t}`, JSON.stringify(paidList));
+            }
+          });
+        } else if (currentStatus === 'paid') {
+          localStorage.setItem(`due_memo_${memoId}`, JSON.stringify({ ...newDueData, paidDate: existingDueObj.paidDate || Date.now() }));
+          
+          const existingPaidStr = localStorage.getItem(`paid_dues_${type}`);
+          let existingPaid: string[] = existingPaidStr ? JSON.parse(existingPaidStr) : [];
+          if (!existingPaid.includes(memoId)) {
+            existingPaid.push(memoId);
+            localStorage.setItem(`paid_dues_${type}`, JSON.stringify(existingPaid));
+          }
+
+          // Remove from other paid lists
+          otherTypes.forEach(ot => {
+            const otherPaidStr = localStorage.getItem(`paid_dues_${ot}`);
+            let otherPaid: string[] = otherPaidStr ? JSON.parse(otherPaidStr) : [];
+            if (otherPaid.includes(memoId)) {
+              otherPaid = otherPaid.filter(id => id !== memoId);
+              localStorage.setItem(`paid_dues_${ot}`, JSON.stringify(otherPaid));
+            }
+          });
+
+          // Remove from all dues lists
+          allTypes.forEach(t => {
+            const duesStr = localStorage.getItem(`dues_${t}`);
+            let duesList: string[] = duesStr ? JSON.parse(duesStr) : [];
+            if (duesList.includes(memoId)) {
+              duesList = duesList.filter(id => id !== memoId);
+              localStorage.setItem(`dues_${t}`, JSON.stringify(duesList));
+            }
+          });
+        }
+      }
+
+      syncMemoToLot(memoState.lotNumberInput, effectiveState || memoState);
+      setSaveStatus('Saved');
+    }, 350);
+
     return () => clearTimeout(timer);
   }, [memoState, lotNumber, memoId]);
 
@@ -856,7 +860,6 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         if (!cleanVal) {
           newState.entries = newState.entries.map(e => ({ ...e, buyRate: 0 }));
         }
-        syncMemoToLot(cleanVal, newState);
       }
       return newState;
     });
