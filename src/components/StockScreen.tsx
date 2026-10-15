@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { type Screen } from '../App';
-import { ChevronLeft, Search, Package, CheckCircle2, AlertTriangle, XCircle, ArrowRight, Layers, LayoutGrid, Table, Calendar, ArrowUpDown, Download, Share2, MessageCircle } from 'lucide-react';
+import { ChevronLeft, Search, Package, CheckCircle2, AlertTriangle, XCircle, ArrowRight, Layers, LayoutGrid, Table, Calendar, ArrowUpDown, Download, Share2, MessageCircle, Trash2 } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getAllLotsStock, type LotStockSummary, type FishStockItem } from '../utils/stockUtils';
+import { moveToTrash } from '../utils/trashUtils';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -21,6 +22,17 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
   const [lotsStock, setLotsStock] = useState<LotStockSummary[]>([]);
   const stockReportRef = useRef<HTMLDivElement>(null);
 
+  // Admin permission state
+  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('device_permission') === 'admin');
+
+  useEffect(() => {
+    const checkAdmin = () => {
+      setIsAdmin(localStorage.getItem('device_permission') === 'admin');
+    };
+    window.addEventListener('storage', checkAdmin);
+    return () => window.removeEventListener('storage', checkAdmin);
+  }, []);
+
   const loadStockData = () => {
     const data = getAllLotsStock();
     setLotsStock(data);
@@ -31,6 +43,76 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
     window.addEventListener('storage', loadStockData);
     return () => window.removeEventListener('storage', loadStockData);
   }, []);
+
+  const handleDeleteLot = (lotNumber: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    // Strict permission check: only admin can delete
+    const currentPermission = localStorage.getItem('device_permission');
+    if (currentPermission !== 'admin') {
+      alert(language === 'bn' ? 'শুধুমাত্র অ্যাডমিন স্টক লট ডিলিট করতে পারবেন।' : 'Only Admin can delete stock lot.');
+      return;
+    }
+
+    const confirmMsg = language === 'bn'
+      ? `আপনি কি নিশ্চিত যে আপনি লট নং ${lotNumber}-এর স্টক ও ক্রয় হিসাব ডিলিট করতে চান?\n\n(এটি ট্র্যাশে সংরক্ষিত থাকবে এবং প্রয়োজনে রিস্টোর করা যাবে)`
+      : `Are you sure you want to delete Lot #${lotNumber} stock?\n\n(It will be moved to Trash and can be restored)`;
+
+    if (window.confirm(confirmMsg)) {
+      // 1. Collect memo data for trash
+      let memoDataStr = localStorage.getItem(`memo_lot_${lotNumber}`) || localStorage.getItem(`memo_lot_${String(lotNumber).padStart(2, '0')}`);
+      if (!memoDataStr) {
+        memoDataStr = localStorage.getItem(`due_memo_purchase_lot_${lotNumber}`) || localStorage.getItem(`due_memo_purchase_lot_${String(lotNumber).padStart(2, '0')}`);
+      }
+      const memoData = memoDataStr ? JSON.parse(memoDataStr) : {};
+
+      moveToTrash({
+        id: `lot_${lotNumber}`,
+        type: 'purchase_lot',
+        title: `Purchase Lot ${lotNumber}`,
+        data: memoData
+      });
+
+      // 2. Remove from purchase_lots_list
+      try {
+        const pLotsStr = localStorage.getItem('purchase_lots_list');
+        const pLots: number[] = pLotsStr ? JSON.parse(pLotsStr) : [];
+        const updatedLots = pLots.filter(l => l !== lotNumber);
+        localStorage.setItem('purchase_lots_list', JSON.stringify(updatedLots));
+      } catch (err) {}
+
+      // 3. Clean all lot keys
+      localStorage.removeItem(`memo_lot_${lotNumber}`);
+      localStorage.removeItem(`memo_lot_${String(lotNumber).padStart(2, '0')}`);
+      localStorage.removeItem(`due_memo_${lotNumber}`);
+      localStorage.removeItem(`due_memo_purchase_${lotNumber}`);
+      localStorage.removeItem(`due_memo_purchase_lot_${lotNumber}`);
+      localStorage.removeItem(`due_memo_purchase_lot_${String(lotNumber).padStart(2, '0')}`);
+      localStorage.removeItem(`lot_password_${lotNumber}`);
+
+      // 4. Clean dues lists
+      const cleanList = (k: string) => {
+        try {
+          const s = localStorage.getItem(k);
+          if (s) {
+            const arr: any[] = JSON.parse(s);
+            localStorage.setItem(k, JSON.stringify(arr.filter(id => String(id) !== String(lotNumber))));
+          }
+        } catch(e) {}
+      };
+      cleanList('dues_purchase');
+      cleanList('paid_dues_purchase');
+
+      // 5. Update UI & reload
+      window.dispatchEvent(new Event('storage'));
+      loadStockData();
+
+      if (selectedLot === lotNumber) {
+        setSelectedLot('all');
+        setViewMode('cards');
+      }
+    }
+  };
 
   // Aggregated totals
   const totalPurchased = lotsStock.reduce((sum, lot) => sum + lot.totalPurchasedKg, 0);
@@ -473,9 +555,40 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                           )}
                         </div>
                       </div>
-                      <span style={{ background: badgeBg, color: badgeColor, fontWeight: 'bold', fontSize: '0.7rem', padding: '3px 8px', borderRadius: '6px', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                        {badgeText}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                        <span style={{ background: badgeBg, color: badgeColor, fontWeight: 'bold', fontSize: '0.7rem', padding: '3px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>
+                          {badgeText}
+                        </span>
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => handleDeleteLot(lot.lotNumber, e)}
+                            title={language === 'bn' ? `লট ${lot.lotNumber} স্টক ডিলিট করুন` : `Delete Lot ${lot.lotNumber} Stock`}
+                            style={{
+                              background: 'rgba(255, 82, 82, 0.15)',
+                              border: '1px solid rgba(255, 82, 82, 0.35)',
+                              color: '#ff5252',
+                              cursor: 'pointer',
+                              padding: '4px',
+                              borderRadius: '6px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.2s ease',
+                              lineHeight: 1
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'rgba(255, 82, 82, 0.35)';
+                              e.currentTarget.style.transform = 'scale(1.08)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'rgba(255, 82, 82, 0.15)';
+                              e.currentTarget.style.transform = 'scale(1)';
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Date info if available */}
@@ -645,15 +758,43 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                   </div>
                 </div>
 
-                {onSelectPurchaseLot && (
-                  <button
-                    className="btn-primary"
-                    onClick={() => onSelectPurchaseLot(lotInfo.lotNumber)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}
-                  >
-                    ক্রয় মেমো দেখুন <ArrowRight size={16} />
-                  </button>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  {isAdmin && (
+                    <button
+                      onClick={(e) => handleDeleteLot(lotInfo.lotNumber, e)}
+                      title={language === 'bn' ? `লট ${lotInfo.lotNumber} স্টক ডিলিট করুন` : `Delete Lot ${lotInfo.lotNumber} Stock`}
+                      style={{
+                        background: 'rgba(255, 82, 82, 0.15)',
+                        border: '1px solid rgba(255, 82, 82, 0.4)',
+                        color: '#ff5252',
+                        cursor: 'pointer',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontWeight: 'bold',
+                        fontSize: '0.85rem',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255, 82, 82, 0.3)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255, 82, 82, 0.15)')}
+                    >
+                      <Trash2 size={16} />
+                      <span>{language === 'bn' ? 'লট ডিলিট' : 'Delete Lot'}</span>
+                    </button>
+                  )}
+
+                  {onSelectPurchaseLot && (
+                    <button
+                      className="btn-primary"
+                      onClick={() => onSelectPurchaseLot(lotInfo.lotNumber)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}
+                    >
+                      ক্রয় মেমো দেখুন <ArrowRight size={16} />
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })()}
