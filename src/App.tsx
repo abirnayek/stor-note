@@ -30,6 +30,7 @@ import { LotPasswordManager } from './components/LotPasswordManager';
 
 import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow } from './utils/syncEngine';
 import { runLotRecovery } from './utils/lotRecovery';
+import { getAllGlobalSalesMemos } from './utils/dueSyncUtils';
 
 export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock' | 'sales-month-memos' | 'reseller-password' | 'reseller' | 'aratdar';
 
@@ -47,6 +48,7 @@ export interface NavSnapshot {
   isPaidDue?: boolean;
   investorId?: string | null;
   investorMemoId?: string | null;
+  targetMemoId?: string | null;
   isModal?: string | null;
 }
 
@@ -406,6 +408,7 @@ function App() {
   const [isPaidDue, setIsPaidDue] = useState<boolean>(false);
   const [currentInvestorId, setCurrentInvestorId] = useState<string | null>(null);
   const [currentInvestorMemoId, setCurrentInvestorMemoId] = useState<string | null>(null);
+  const [targetMemoId, setTargetMemoId] = useState<string | null>(null);
   const [pendingReminders, setPendingReminders] = useState<PendingReminder[]>([]);
 
   useEffect(() => {
@@ -477,7 +480,8 @@ function App() {
     dueId: null,
     isPaidDue: false,
     investorId: null,
-    investorMemoId: null
+    investorMemoId: null,
+    targetMemoId: null
   }]);
 
   const applySnapshot = (snapshot: NavSnapshot) => {
@@ -494,6 +498,7 @@ function App() {
     setIsPaidDue(snapshot.isPaidDue ?? false);
     setCurrentInvestorId(snapshot.investorId ?? null);
     setCurrentInvestorMemoId(snapshot.investorMemoId ?? null);
+    setTargetMemoId(snapshot.targetMemoId ?? null);
   };
 
   const isSettingsOpenRef = useRef(false);
@@ -702,6 +707,7 @@ function App() {
       isPaidDue: params?.isPaidDue !== undefined ? params.isPaidDue : isPaidDue,
       investorId: params?.investorId !== undefined ? params.investorId : (nextScreen.startsWith('investor-') ? currentInvestorId : null),
       investorMemoId: params?.investorMemoId !== undefined ? params.investorMemoId : (nextScreen === 'investor-memo' ? currentInvestorMemoId : null),
+      targetMemoId: params?.targetMemoId !== undefined ? params.targetMemoId : null,
     };
 
     if (replace) {
@@ -930,46 +936,73 @@ function App() {
             />
             {searchQuery && (() => {
               const q = searchQuery.toLowerCase().trim();
-              const results: { label: string; screen: Screen; id?: string; lotNumber?: number | null; memoId?: string }[] = [];
+              const results: { 
+                label: string; 
+                subtext?: string;
+                screen: Screen; 
+                id?: string; 
+                lotNumber?: number | null; 
+                memoId?: string;
+                isSalesMemo?: boolean;
+              }[] = [];
 
-              // Search Sales Memos
-              const salesLots = localStorage.getItem('sales_lots_list');
-              if (salesLots) {
-                try {
-                  JSON.parse(salesLots).forEach((lot: number) => {
-                    const memoListStr = localStorage.getItem(`sales_memo_list_lot_${lot}`);
-                    if (memoListStr) {
-                      JSON.parse(memoListStr).forEach((memoId: string) => {
-                        const memoStr = localStorage.getItem(`sales_memo_lot_${lot}_memo_${memoId}`);
-                        if (memoStr) {
-                          try {
-                            const memo = JSON.parse(memoStr);
-                            const name = (memo.customerName || '').toLowerCase();
-                            if (name.includes(q)) {
-                              results.push({ label: `${t('salesAccount')}: ${memo.customerName} (Lot ${lot})`, screen: 'sales-memo', lotNumber: lot, memoId });
-                            }
-                          } catch (e) {}
-                        }
-                      });
-                    }
-                  });
-                } catch (e) {}
-              }
+              const seenSalesIds = new Set<string>();
 
-              // Search Due Memos
+              // 1. Search Global Sales Memos (unassigned, lot memos, aratdar, reseller)
+              try {
+                const globalSalesMemos = getAllGlobalSalesMemos();
+                globalSalesMemos.forEach(memo => {
+                  const name = (memo.name || '').toLowerCase();
+                  if (name.includes(q)) {
+                    seenSalesIds.add(memo.id);
+                    let categoryLabel = '';
+                    if (memo.customerType === 'permanent') categoryLabel = 'আড়তদার';
+                    else if (memo.customerType === 'reseller') categoryLabel = 'রিসেলার';
+                    else if (memo.lotNumber !== null) categoryLabel = `লট ${memo.lotNumber}`;
+                    else categoryLabel = 'সাধারণ ক্রেতা';
+
+                    const isDue = memo.status === 'due' || (memo.dueAmount && memo.dueAmount > 0);
+                    const prefix = isDue ? 'বকেয়া হিসাব' : 'বিক্রয় হিসাব';
+                    const amountText = isDue 
+                      ? `৳${Math.round(memo.dueAmount || memo.totalAmount).toLocaleString()} বাকি` 
+                      : `৳${Math.round(memo.totalAmount).toLocaleString()}`;
+
+                    results.push({
+                      label: `${prefix} (${categoryLabel}): ${memo.name}`,
+                      subtext: `${memo.lotNumber !== null ? `Lot: ${memo.lotNumber}` : 'Lot: N/A'} • ${amountText}`,
+                      screen: 'sales-lots',
+                      lotNumber: memo.lotNumber,
+                      memoId: memo.id,
+                      id: memo.id,
+                      isSalesMemo: true
+                    });
+                  }
+                });
+              } catch (e) {}
+
+              // 2. Search Due Memos (regular, permanent, reseller)
               ['regular', 'permanent', 'reseller'].forEach(type => {
                 const duesStr = localStorage.getItem(`dues_${type}`);
                 if (duesStr) {
                   try {
                     JSON.parse(duesStr).forEach((dueId: string) => {
+                      if (seenSalesIds.has(dueId)) return;
                       const memoStr = localStorage.getItem(`due_memo_${dueId}`);
                       if (memoStr) {
                         try {
                           const memo = JSON.parse(memoStr);
                           const name = (memo.name || '').toLowerCase();
                           if (name.includes(q)) {
+                            seenSalesIds.add(dueId);
                             const typeLabel = type === 'reseller' ? (t('reseller') || 'রিসেলার') : (type === 'regular' ? t('regularSeller') : t('aratdarSeller'));
-                            results.push({ label: `${t('dueAccount')} (${typeLabel}): ${memo.name}`, screen: 'due-memo', id: dueId });
+                            results.push({ 
+                              label: `${t('dueAccount')} (${typeLabel}): ${memo.name}`, 
+                              subtext: `বকেয়া তালিকা • ID: ${dueId}`,
+                              screen: 'sales-lots', 
+                              id: dueId,
+                              memoId: dueId,
+                              isSalesMemo: true
+                            });
                           }
                         } catch (e) {}
                       }
@@ -978,7 +1011,31 @@ function App() {
                 }
               });
 
-              // Search Purchase Memos (lots by supplier name)
+              // 3. Search Purchase Dues (dues_purchase)
+              const purchaseDuesStr = localStorage.getItem('dues_purchase');
+              if (purchaseDuesStr) {
+                try {
+                  JSON.parse(purchaseDuesStr).forEach((dueId: string) => {
+                    const memoStr = localStorage.getItem(`due_memo_${dueId}`);
+                    if (memoStr) {
+                      try {
+                        const memo = JSON.parse(memoStr);
+                        const name = (memo.name || '').toLowerCase();
+                        if (name.includes(q)) {
+                          results.push({
+                            label: `${t('dueAccount')} (ক্রয় মহাজন): ${memo.name}`,
+                            subtext: `ক্রয় বকেয়া`,
+                            screen: 'due-memo',
+                            id: dueId
+                          });
+                        }
+                      } catch (e) {}
+                    }
+                  });
+                } catch (e) {}
+              }
+
+              // 4. Search Purchase Memos (lots by supplier name)
               const purchaseLots = localStorage.getItem('purchase_lots_list');
               if (purchaseLots) {
                 try {
@@ -989,7 +1046,12 @@ function App() {
                         const memo = JSON.parse(memoStr);
                         const supplier = (memo.supplierName || '').toLowerCase();
                         if (supplier.includes(q)) {
-                          results.push({ label: `${t('purchaseAccount')}: ${memo.supplierName} (Lot ${lot})`, screen: 'memo', lotNumber: lot });
+                          results.push({ 
+                            label: `${t('purchaseAccount')}: ${memo.supplierName} (Lot ${lot})`, 
+                            subtext: `ক্রয় হিসাব লট ${lot}`,
+                            screen: 'memo', 
+                            lotNumber: lot 
+                          });
                         }
                       } catch (e) {}
                     }
@@ -1005,13 +1067,29 @@ function App() {
                     results.map((r, i) => (
                       <div
                         key={i}
-                        style={{ padding: '0.5rem 1rem', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.08)', fontSize: '0.9rem' }}
+                        style={{ 
+                          padding: '0.55rem 1rem', 
+                          cursor: 'pointer', 
+                          borderBottom: '1px solid rgba(255,255,255,0.08)', 
+                          fontSize: '0.9rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '2px',
+                          textAlign: 'left'
+                        }}
                         onClick={() => {
                           setSearchQuery('');
-                          if (r.screen === 'sales-memo' && r.lotNumber && r.memoId) {
-                            navigateTo('sales-memo', { salesLot: r.lotNumber, salesMemoId: r.memoId, salesMemoReturnScreen: 'sales-lots' });
+                          if (r.isSalesMemo || r.screen === 'sales-lots') {
+                            const targetId = r.memoId || r.id;
+                            if (currentScreen === 'sales-lots') {
+                              window.dispatchEvent(new CustomEvent('highlight_sales_memo', { 
+                                detail: { memoId: targetId, lotNumber: r.lotNumber } 
+                              }));
+                            } else {
+                              navigateTo('sales-lots', { targetMemoId: targetId });
+                            }
                           } else if (r.screen === 'due-memo' && r.id) {
-                            navigateTo('due-memo', { dueId: r.id, isPaidDue: false });
+                            navigateTo('due-memo', { dueId: r.id, isPaidDue: false, dueType: 'purchase' });
                           } else if (r.screen === 'memo' && r.lotNumber) {
                             navigateTo('memo', { lot: r.lotNumber });
                           }
@@ -1019,7 +1097,10 @@ function App() {
                         onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
-                        {r.label}
+                        <div style={{ fontWeight: 600 }}>{r.label}</div>
+                        {r.subtext && (
+                          <div style={{ fontSize: '0.75rem', opacity: 0.65 }}>{r.subtext}</div>
+                        )}
                       </div>
                     ))
                   )}
@@ -1296,6 +1377,7 @@ function App() {
             <SalesLotsScreen 
               onNavigate={handleNavigate} 
               onBack={() => navigateBack('dashboard')}
+              targetMemoId={targetMemoId}
               onSelectLot={(lot) => {
                 navigateTo('sales-memo-list', { salesLot: lot });
               }}

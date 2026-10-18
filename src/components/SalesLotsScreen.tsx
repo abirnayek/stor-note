@@ -12,11 +12,12 @@ interface SalesLotsScreenProps {
   onSelectMemo: (memoId: string, lotNumber: number | null) => void;
   onSelectMonth?: (monthIndex: number, year: number) => void;
   onBack?: () => void;
+  targetMemoId?: string | null;
 }
 
 type GlobalMemo = SalesMemoGlobalItem;
 
-const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectLot, onSelectMemo, onSelectMonth, onBack }) => {
+const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectLot, onSelectMemo, onSelectMonth, onBack, targetMemoId }) => {
   const [lots, setLots] = useState<number[]>(() => {
     const saved = localStorage.getItem('sales_lots_list');
     return saved ? JSON.parse(saved) : [];
@@ -32,6 +33,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
   const [draggedMemoId, setDraggedMemoId] = useState<string | null>(null);
   const [dragOverLotNumber, setDragOverLotNumber] = useState<number | null>(null);
   const [dropSuccessMsg, setDropSuccessMsg] = useState<string | null>(null);
+  const [highlightedMemoId, setHighlightedMemoId] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<any>(null);
   const { t, language } = useLanguage();
   const devicePermission = localStorage.getItem('device_permission');
   const hasEditPermission = devicePermission === 'edit' || devicePermission === 'admin';
@@ -40,6 +43,53 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
   const [scrollLeftState, setScrollLeftState] = useState(0);
+
+  const triggerHighlightMemo = (memoId: string) => {
+    if (!memoId) return;
+    setMemoFilter('all');
+    setHighlightedMemoId(memoId);
+
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+    }
+
+    // Scroll smoothly to memo card
+    setTimeout(() => {
+      const el = document.getElementById(`sales-memo-card-${memoId}`) || document.getElementById(`memo-card-${memoId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 150);
+
+    // Keep highlighted for 5 seconds so user has plenty of time to recognize
+    highlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedMemoId((prev) => (prev === memoId ? null : prev));
+    }, 5000);
+  };
+
+  useEffect(() => {
+    if (targetMemoId) {
+      triggerHighlightMemo(targetMemoId);
+    }
+  }, [targetMemoId]);
+
+  useEffect(() => {
+    const handleHighlightEvent = (e: any) => {
+      const memoId = e.detail?.memoId;
+      if (memoId) {
+        triggerHighlightMemo(memoId);
+      }
+    };
+
+    window.addEventListener('highlight_sales_memo', handleHighlightEvent);
+    return () => {
+      window.removeEventListener('highlight_sales_memo', handleHighlightEvent);
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+    };
+  }, []);
+
 
   const scrollLots = (direction: 'left' | 'right') => {
     if (lotScrollRef.current) {
@@ -852,7 +902,8 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
             onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}
           >
             <div 
-              className="lot-card"
+              className={`lot-card ${highlightedMemoId === memo.id ? 'highlighted-memo-card' : ''}`}
+              id={`sales-memo-card-${memo.id}`}
               draggable={true}
               onDragStart={(e) => {
                 e.stopPropagation();
@@ -870,8 +921,11 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
               style={{
                 cursor: 'grab',
                 opacity: draggedMemoId === memo.id ? 0.35 : 1,
-                boxShadow: draggedMemoId === memo.id ? '0 0 16px rgba(255, 183, 77, 0.5)' : undefined,
-                transition: 'all 0.2s ease'
+                boxShadow: highlightedMemoId === memo.id 
+                  ? '0 0 25px #ffd700, 0 0 10px #ffb300, inset 0 0 15px rgba(255, 215, 0, 0.3)' 
+                  : (draggedMemoId === memo.id ? '0 0 16px rgba(255, 183, 77, 0.5)' : undefined),
+                borderColor: highlightedMemoId === memo.id ? '#ffd700' : undefined,
+                transition: 'all 0.25s ease'
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>

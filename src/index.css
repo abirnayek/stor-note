@@ -2146,4 +2146,32 @@ body.view-only-mode .weight-unit-toggle {
   }
 }
 
+/* Search Highlighted Memo Card Glow Animation */
+@keyframes memoPulseGlow {
+  0% {
+    box-shadow: 0 0 0 2px #ffd700, 0 0 15px rgba(255, 215, 0, 0.6), inset 0 0 10px rgba(255, 215, 0, 0.2);
+    border-color: #ffd700;
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 3px #ffffff, 0 0 30px rgba(255, 215, 0, 0.9), 0 0 50px rgba(255, 179, 0, 0.6), inset 0 0 20px rgba(255, 215, 0, 0.4);
+    border-color: #ffffff;
+    transform: scale(1.03);
+  }
+  100% {
+    box-shadow: 0 0 0 2px #ffd700, 0 0 15px rgba(255, 215, 0, 0.6), inset 0 0 10px rgba(255, 215, 0, 0.2);
+    border-color: #ffd700;
+    transform: scale(1);
+  }
+}
+
+.highlighted-memo-card {
+  animation: memoPulseGlow 1.2s ease-in-out infinite alternate !important;
+  border: 2px solid #ffd700 !important;
+  z-index: 20 !important;
+  position: relative !important;
+  transition: all 0.3s ease !important;
+}
+
+
 
