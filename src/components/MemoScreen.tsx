@@ -596,7 +596,16 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar">
-        <button className="btn-icon" onClick={handleBack}>
+        <button
+          key="btn-back-memo"
+          type="button"
+          className="btn-icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleBack();
+          }}
+          title="Back"
+        >
           <ChevronLeft size={24} />
         </button>
         <div style={{ display: 'flex', flexDirection: 'column' }}>

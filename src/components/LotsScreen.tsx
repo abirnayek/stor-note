@@ -9,9 +9,10 @@ import { runLotRecovery } from '../utils/lotRecovery';
 interface LotsScreenProps {
   onNavigate: (screen: Screen) => void;
   onSelectLot: (lotNumber: number) => void;
+  onBack?: () => void;
 }
 
-const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
+const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack }) => {
   const [lots, setLots] = useState<number[]>([]);
   
   useEffect(() => {
@@ -163,10 +164,12 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <button
             key="btn-back-lots"
+            type="button"
             className="btn-icon"
             onClick={(e) => {
               e.stopPropagation();
-              onNavigate('dashboard');
+              if (onBack) onBack();
+              else onNavigate('dashboard');
             }}
             title="Back"
           >

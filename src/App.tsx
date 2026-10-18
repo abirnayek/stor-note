@@ -68,10 +68,10 @@ const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
       if (current.salesMemoReturnScreen === 'aratdar') {
         return { screen: 'aratdar', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'aratdar', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
-      if (current.salesMemoReturnScreen === 'sales-memo-list' && current.salesLot !== null) {
-        return { screen: 'sales-memo-list', lot: null, salesLot: current.salesLot, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      if (current.salesMemoReturnScreen === 'sales-memo-list') {
+        return { screen: 'sales-memo-list', lot: null, salesLot: current.salesLot || 1, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
-      if (current.salesMemoReturnScreen === 'sales-month-memos' && current.selectedMonth) {
+      if (current.salesMemoReturnScreen === 'sales-month-memos' && current.selectedMonth !== null && current.selectedMonth !== undefined) {
         return { screen: 'sales-month-memos', selectedMonth: current.selectedMonth, selectedYear: current.selectedYear, lot: null, salesLot: current.salesLot, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
       return { screen: 'sales-lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
@@ -89,9 +89,16 @@ const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
         return { screen: 'due-purchase-list', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'purchase', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
       return { screen: 'due-list', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: current.dueType || 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
-    case 'due-list':
     case 'paid-due-list':
-      return { screen: 'due-types', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      if (current.dueType === 'purchase') {
+        return { screen: 'due-purchase-list', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'purchase', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
+      return { screen: 'due-list', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: current.dueType || 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+    case 'due-list':
+      if (current.dueType === 'purchase') {
+        return { screen: 'due-category', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'purchase', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
+      return { screen: 'due-types', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: current.dueType || 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'due-purchase-list':
     case 'due-types':
       return { screen: 'due-category', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
@@ -557,6 +564,87 @@ function App() {
     }
   };
 
+  const isNavigatingBackRef = useRef(false);
+
+  const navigateBack = (
+    fallbackScreen?: Screen,
+    fallbackParams?: Partial<NavSnapshot>
+  ) => {
+    // 1. If any modal is open, close modal first
+    if (isSettingsOpenRef.current) { closeSettings(); return; }
+    if (isDeviceManagerOpenRef.current) { closeDeviceManager(); return; }
+    if (isLotPasswordManagerOpenRef.current) { closeLotPasswordManager(); return; }
+    if (isUserMenuOpenRef.current) { closeUserMenu(); return; }
+    if (showLoginScreenRef.current) { closeLogin(); return; }
+
+    const now = Date.now();
+    if (now - lastNavTimeRef.current < 200) {
+      return;
+    }
+    lastNavTimeRef.current = now;
+
+    // 2. If stack has history, pop exactly 1 step
+    if (navStackRef.current.length > 1) {
+      navStackRef.current.pop();
+      // Skip duplicate entries of same screen if any
+      while (navStackRef.current.length > 1 && navStackRef.current[navStackRef.current.length - 1].screen === currentScreen) {
+        navStackRef.current.pop();
+      }
+      const targetSnapshot = navStackRef.current[navStackRef.current.length - 1];
+
+      applySnapshot(targetSnapshot);
+      isNavigatingBackRef.current = true;
+      try {
+        window.history.back();
+      } catch (e) {
+        window.history.replaceState(targetSnapshot, '');
+      }
+      return;
+    }
+
+    // 3. Fallback if at root of navStack (e.g. refreshed page or deep-link)
+    const currentTop = navStackRef.current[0] || {
+      screen: currentScreen,
+      lot: currentLot,
+      salesLot: currentSalesLot,
+      salesMemoId: currentSalesMemoId,
+      salesMemoReturnScreen,
+      resellerReturnScreen,
+      selectedMonth,
+      selectedYear,
+      dueType: currentDueType,
+      dueId: currentDueId,
+      isPaidDue,
+      investorId: currentInvestorId,
+      investorMemoId: currentInvestorMemoId
+    };
+
+    let targetSnapshot: NavSnapshot;
+    if (fallbackScreen) {
+      targetSnapshot = {
+        screen: fallbackScreen,
+        lot: fallbackParams?.lot !== undefined ? fallbackParams.lot : (fallbackScreen === 'memo' ? currentLot : null),
+        salesLot: fallbackParams?.salesLot !== undefined ? fallbackParams.salesLot : (fallbackScreen.startsWith('sales-') ? currentSalesLot : null),
+        salesMemoId: fallbackParams?.salesMemoId !== undefined ? fallbackParams.salesMemoId : null,
+        salesMemoReturnScreen: fallbackParams?.salesMemoReturnScreen || salesMemoReturnScreen,
+        resellerReturnScreen: fallbackParams?.resellerReturnScreen || resellerReturnScreen,
+        selectedMonth: fallbackParams?.selectedMonth !== undefined ? fallbackParams.selectedMonth : selectedMonth,
+        selectedYear: fallbackParams?.selectedYear !== undefined ? fallbackParams.selectedYear : selectedYear,
+        dueType: fallbackParams?.dueType !== undefined ? fallbackParams.dueType : currentDueType,
+        dueId: fallbackParams?.dueId !== undefined ? fallbackParams.dueId : null,
+        isPaidDue: fallbackParams?.isPaidDue !== undefined ? fallbackParams.isPaidDue : isPaidDue,
+        investorId: fallbackParams?.investorId !== undefined ? fallbackParams.investorId : null,
+        investorMemoId: fallbackParams?.investorMemoId !== undefined ? fallbackParams.investorMemoId : null,
+      };
+    } else {
+      targetSnapshot = getParentSnapshot(currentTop);
+    }
+
+    navStackRef.current = [targetSnapshot];
+    window.history.replaceState(targetSnapshot, '');
+    applySnapshot(targetSnapshot);
+  };
+
   const navigateTo = (
     nextScreen: Screen,
     params?: Partial<NavSnapshot>,
@@ -578,9 +666,20 @@ function App() {
       }
     }
 
-    // Prevent rapid double back / duplicate navigation triggers within 350ms
+    // If navigating back to parent or previous screen without explicit new forward params, execute single back
+    if (!replace && !params && currentTop) {
+      const parent = getParentSnapshot(currentTop);
+      const isParent = parent.screen === nextScreen;
+      const isPrev = navStackRef.current.length > 1 && navStackRef.current[navStackRef.current.length - 2].screen === nextScreen;
+      if (isParent || isPrev) {
+        navigateBack(nextScreen);
+        return;
+      }
+    }
+
+    // Prevent rapid duplicate navigation triggers within 200ms
     const now = Date.now();
-    if (now - lastNavTimeRef.current < 350 && !replace) {
+    if (now - lastNavTimeRef.current < 200 && !replace) {
       return;
     }
     lastNavTimeRef.current = now;
@@ -669,19 +768,20 @@ function App() {
         return;
       }
 
-      // 2. Regular navigation back using history state if present
-      if (event.state && event.state.screen) {
-        if (navStackRef.current.length > 1) {
-          navStackRef.current.pop();
-        }
-        applySnapshot(event.state);
+      // If this popstate was triggered by our own navigateBack(), ignore it
+      if (isNavigatingBackRef.current) {
+        isNavigatingBackRef.current = false;
         return;
       }
 
+      // 2. Hardware/Browser back: pop 1 step from navStackRef
       if (navStackRef.current.length > 1) {
         navStackRef.current.pop();
         const targetSnapshot = navStackRef.current[navStackRef.current.length - 1];
         applySnapshot(targetSnapshot);
+      } else if (event.state && event.state.screen) {
+        navStackRef.current = [event.state];
+        applySnapshot(event.state);
       } else {
         const currentTop = navStackRef.current[0] || rootSnapshot;
         if (currentTop.screen !== 'dashboard') {
@@ -1074,7 +1174,7 @@ function App() {
           {currentScreen === 'password' && (
             <PasswordScreen 
               onSuccess={handlePasswordSuccess} 
-              onBack={() => handleNavigate('dashboard')} 
+              onBack={() => navigateBack('dashboard')} 
               pinKey="kenaHisabPin"
               title={t('purchaseAccount') || 'ক্রয় হিসাব'}
             />
@@ -1082,23 +1182,27 @@ function App() {
           {currentScreen === 'lots' && (
             <LotsScreen 
               onNavigate={handleNavigate} 
+              onBack={() => navigateBack('dashboard')}
               onSelectLot={handleSelectLot} 
             />
           )}
-          {currentScreen === 'memo' && currentLot !== null && (
+          {currentScreen === 'memo' && (
             <MemoScreen 
               onNavigate={handleNavigate} 
-              lotNumber={currentLot} 
+              onBack={() => navigateBack('lots')}
+              lotNumber={currentLot ?? 1} 
             />
           )}
           {currentScreen === 'due-category' && (
             <DueCategoryScreen 
               onNavigate={handleNavigate} 
+              onBack={() => navigateBack('dashboard')}
             />
           )}
           {currentScreen === 'due-types' && (
             <DueTypesScreen 
               onNavigate={handleNavigate} 
+              onBack={() => navigateBack('due-category')}
               onSelectType={(type) => {
                 navigateTo('due-list', { dueType: type });
               }} 
@@ -1107,6 +1211,7 @@ function App() {
           {currentScreen === 'due-list' && (
             <DueListScreen 
               onNavigate={handleNavigate} 
+              onBack={() => navigateBack(currentDueType === 'purchase' ? 'due-category' : 'due-types')}
               dueType={currentDueType} 
               onSelectType={(type) => {
                 navigateTo('due-list', { dueType: type }, true);
@@ -1119,6 +1224,7 @@ function App() {
           {currentScreen === 'due-purchase-list' && (
             <DueListScreen 
               onNavigate={handleNavigate} 
+              onBack={() => navigateBack('due-category')}
               dueType="purchase"
               onSelectDue={(id) => {
                 navigateTo('due-memo', { dueId: id, isPaidDue: false, dueType: 'purchase' });
@@ -1128,6 +1234,7 @@ function App() {
           {currentScreen === 'paid-due-list' && (
             <PaidDueListScreen 
               onNavigate={handleNavigate} 
+              onBack={() => navigateBack(currentDueType === 'purchase' ? 'due-purchase-list' : 'due-list')}
               dueType={currentDueType} 
               onSelectType={(type) => {
                 navigateTo('paid-due-list', { dueType: type }, true);
@@ -1145,6 +1252,7 @@ function App() {
             currentDueId !== null ? (
               <DueMemoScreen 
                 onNavigate={handleNavigate} 
+                onBack={() => navigateBack(isPaidDue ? 'paid-due-list' : 'due-purchase-list')}
                 dueId={currentDueId}
                 isPaid={isPaidDue}
                 dueType="purchase"
@@ -1152,6 +1260,7 @@ function App() {
             ) : (
               <DueListScreen 
                 onNavigate={handleNavigate} 
+                onBack={() => navigateBack('due-category')}
                 dueType="purchase"
                 onSelectDue={(id) => {
                   navigateTo('due-memo', { dueId: id, isPaidDue: false, dueType: 'purchase' });
@@ -1163,6 +1272,7 @@ function App() {
             currentDueId !== null ? (
               <DueSalesMemoScreen 
                 onNavigate={handleNavigate} 
+                onBack={() => navigateBack(isPaidDue ? 'paid-due-list' : (currentDueType === 'purchase' ? 'due-purchase-list' : 'due-list'))}
                 dueId={currentDueId}
                 isPaid={isPaidDue}
                 dueType={currentDueType === 'purchase' ? 'regular' : currentDueType}
@@ -1170,6 +1280,7 @@ function App() {
             ) : (
               <DueListScreen 
                 onNavigate={handleNavigate} 
+                onBack={() => navigateBack(currentDueType === 'purchase' ? 'due-category' : 'due-types')}
                 dueType={currentDueType} 
                 onSelectDue={(id) => {
                   if (currentDueType === 'purchase' || id.startsWith('purchase_')) {
@@ -1184,6 +1295,7 @@ function App() {
           {currentScreen === 'sales-lots' && (
             <SalesLotsScreen 
               onNavigate={handleNavigate} 
+              onBack={() => navigateBack('dashboard')}
               onSelectLot={(lot) => {
                 navigateTo('sales-memo-list', { salesLot: lot });
               }}
@@ -1202,7 +1314,7 @@ function App() {
               onNavigate={handleNavigate}
               monthIndex={selectedMonth}
               year={selectedYear}
-              onBack={() => handleNavigate('sales-lots')}
+              onBack={() => navigateBack('sales-lots')}
               onSelectMemo={(memoId, lotNumber) => {
                 navigateTo('sales-memo', {
                   salesLot: lotNumber,
@@ -1214,28 +1326,33 @@ function App() {
               }}
             />
           )}
-          {currentScreen === 'sales-memo-list' && currentSalesLot !== null && (
+          {currentScreen === 'sales-memo-list' && (
             <SalesMemoListScreen 
               onNavigate={handleNavigate} 
-              lotNumber={currentSalesLot}
+              onBack={() => navigateBack('sales-lots')}
+              lotNumber={currentSalesLot ?? 1}
               onSelectMemo={(memoId) => {
-                navigateTo('sales-memo', { salesMemoId: memoId, salesMemoReturnScreen: 'sales-memo-list' });
+                navigateTo('sales-memo', { salesLot: currentSalesLot ?? 1, salesMemoId: memoId, salesMemoReturnScreen: 'sales-memo-list' });
               }}
             />
           )}
           {currentScreen === 'sales-memo' && currentSalesMemoId !== null && (
             <SalesMemoScreen 
               onNavigate={handleNavigate} 
-              onBack={() => handleNavigate(salesMemoReturnScreen)}
+              onBack={() => navigateBack(salesMemoReturnScreen, { salesLot: currentSalesLot ?? undefined })}
               lotNumber={currentSalesLot} 
               memoId={currentSalesMemoId}
-              onLotChange={(lot) => setCurrentSalesLot(lot)}
+              onLotChange={(lot) => {
+                if (lot !== null) {
+                  setCurrentSalesLot(lot);
+                }
+              }}
             />
           )}
           {currentScreen === 'reseller-password' && (
             <PasswordScreen
               onSuccess={() => navigateTo('reseller', undefined, true)}
-              onBack={() => handleNavigate('dashboard')}
+              onBack={() => navigateBack('dashboard')}
               pinKey="resellerPin"
               title={t('resellerAccount') || 'রিসেলার হিসাব'}
             />
@@ -1243,7 +1360,7 @@ function App() {
           {currentScreen === 'reseller' && (
             <ResellerScreen
               onNavigate={handleNavigate}
-              onBack={() => handleNavigate(resellerReturnScreen === 'dashboard' ? 'dashboard' : 'sales-lots')}
+              onBack={() => navigateBack(resellerReturnScreen === 'dashboard' ? 'dashboard' : 'sales-lots')}
               onSelectMemo={(memoId, lotNumber) => {
                 navigateTo('sales-memo', {
                   salesLot: lotNumber,
@@ -1257,7 +1374,7 @@ function App() {
           {currentScreen === 'aratdar' && (
             <AratdarScreen
               onNavigate={handleNavigate}
-              onBack={() => handleNavigate('sales-lots')}
+              onBack={() => navigateBack('sales-lots')}
               onSelectMemo={(memoId, lotNumber) => {
                 navigateTo('sales-memo', {
                   salesLot: lotNumber,
@@ -1270,12 +1387,13 @@ function App() {
           {currentScreen === 'trash' && (
             <TrashScreen 
               onNavigate={handleNavigate} 
+              onBack={() => navigateBack('dashboard')}
             />
           )}
           {currentScreen === 'investor-password' && (
             <PasswordScreen
               onSuccess={() => navigateTo('investor-list', undefined, true)}
-              onBack={() => handleNavigate('dashboard')}
+              onBack={() => navigateBack('dashboard')}
               pinKey="investorPin"
               title={t('investorAccount')}
             />
@@ -1283,6 +1401,7 @@ function App() {
           {currentScreen === 'investor-list' && (
             <InvestorListScreen
               onNavigate={handleNavigate}
+              onBack={() => navigateBack('dashboard')}
               onSelectInvestor={(id) => {
                 navigateTo('investor-memos-list', { investorId: id });
               }}
@@ -1291,6 +1410,7 @@ function App() {
           {currentScreen === 'investor-memos-list' && currentInvestorId !== null && (
             <InvestorMemosListScreen
               onNavigate={handleNavigate}
+              onBack={() => navigateBack('investor-list')}
               investorId={currentInvestorId}
               onSelectMemo={(memoId) => {
                 navigateTo('investor-memo', { investorMemoId: memoId });
@@ -1300,6 +1420,7 @@ function App() {
           {currentScreen === 'investor-memo' && currentInvestorId !== null && currentInvestorMemoId !== null && (
             <InvestorMemoScreen
               onNavigate={handleNavigate}
+              onBack={() => navigateBack('investor-memos-list', { investorId: currentInvestorId })}
               investorId={currentInvestorId}
               memoId={currentInvestorMemoId}
             />
@@ -1307,6 +1428,7 @@ function App() {
           {currentScreen === 'stock' && (
             <StockScreen 
               onNavigate={handleNavigate}
+              onBack={() => navigateBack('dashboard')}
               onSelectPurchaseLot={handleSelectLot}
             />
           )}

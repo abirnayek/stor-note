@@ -13,6 +13,7 @@ interface InvestorMemoScreenProps {
   onNavigate: (screen: Screen) => void;
   investorId: string;
   memoId: string;
+  onBack?: () => void;
 }
 
 interface InvestEntry {
@@ -45,7 +46,7 @@ interface InvestorMemo {
   updatedAt?: string;
 }
 
-const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, investorId, memoId }) => {
+const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, investorId, memoId, onBack }) => {
   const getInitialMemo = (): InvestorMemo => {
     const memoStr = localStorage.getItem(`investor_memo_${memoId}`);
     if (memoStr) {
@@ -304,7 +305,17 @@ const InvestorMemoScreen: React.FC<InvestorMemoScreenProps> = ({ onNavigate, inv
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar" data-html2canvas-ignore>
-        <button className="btn-icon" onClick={() => onNavigate('investor-memos-list')}>
+        <button
+          key="btn-back-investor-memo"
+          type="button"
+          className="btn-icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onBack) onBack();
+            else onNavigate('investor-memos-list');
+          }}
+          title="Back"
+        >
           <ChevronLeft size={24} />
         </button>
         <div style={{ display: 'flex', flexDirection: 'column' }}>

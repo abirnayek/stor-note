@@ -620,9 +620,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const handleBack = () => {
     syncMemoToLot(memoState.lotNumberInput, memoState);
     const rawNum = memoState.lotNumberInput ? parseInt(memoState.lotNumberInput, 10) : null;
-    const validLot = (rawNum !== null && !isNaN(rawNum) && rawNum > 0) ? rawNum : null;
+    const validLot = (rawNum !== null && !isNaN(rawNum) && rawNum > 0) ? rawNum : (lotNumber || null);
 
-    if (onLotChange) {
+    if (validLot !== null && onLotChange) {
       onLotChange(validLot);
     }
 
@@ -1219,7 +1219,16 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar" data-html2canvas-ignore>
-        <button className="btn-icon" onClick={handleBack}>
+        <button
+          key="btn-back-sales-memo"
+          type="button"
+          className="btn-icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleBack();
+          }}
+          title="Back"
+        >
           <ChevronLeft size={24} />
         </button>
         <div style={{ display: 'flex', flexDirection: 'column' }}>

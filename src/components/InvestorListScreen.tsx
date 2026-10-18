@@ -8,9 +8,10 @@ import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 interface InvestorListScreenProps {
   onNavigate: (screen: Screen) => void;
   onSelectInvestor: (investorId: string) => void;
+  onBack?: () => void;
 }
 
-const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onSelectInvestor }) => {
+const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onSelectInvestor, onBack }) => {
   const [investors, setInvestors] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [investorTotals, setInvestorTotals] = useState<Record<string, number>>({});
@@ -182,7 +183,17 @@ const InvestorListScreen: React.FC<InvestorListScreenProps> = ({ onNavigate, onS
     <div className="lots-screen">
       <div className="screen-header" style={{ flexWrap: 'wrap', gap: '12px', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button className="btn-icon" onClick={() => onNavigate('dashboard')}>
+          <button
+            key="btn-back-investor-list"
+            type="button"
+            className="btn-icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onBack) onBack();
+              else onNavigate('dashboard');
+            }}
+            title="Back"
+          >
             <ChevronLeft size={24} />
           </button>
           <h2>{t('investorAccount')}</h2>

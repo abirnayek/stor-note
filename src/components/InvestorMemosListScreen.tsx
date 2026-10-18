@@ -8,9 +8,10 @@ interface InvestorMemosListScreenProps {
   onNavigate: (screen: Screen) => void;
   onSelectMemo: (memoId: string) => void;
   investorId: string;
+  onBack?: () => void;
 }
 
-const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNavigate, onSelectMemo, investorId }) => {
+const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNavigate, onSelectMemo, investorId, onBack }) => {
   const [activeMemos, setActiveMemos] = useState<any[]>([]);
   const [completedMemos, setCompletedMemos] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>({});
@@ -124,7 +125,17 @@ const InvestorMemosListScreen: React.FC<InvestorMemosListScreenProps> = ({ onNav
     <div className="due-list-screen">
       <div className="screen-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button className="btn-icon" onClick={() => onNavigate('investor-list')}>
+          <button
+            key="btn-back-investor-memos-list"
+            type="button"
+            className="btn-icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onBack) onBack();
+              else onNavigate('investor-list');
+            }}
+            title="Back"
+          >
             <ChevronLeft size={24} />
           </button>
           <h2>{profile.name || 'Investor'}{t('investorMemos')}</h2>

@@ -6,16 +6,21 @@ import { getNormalizedMemo } from '../utils/dueSyncUtils';
 
 interface DueMemoScreenProps {
   onNavigate: (screen: Screen) => void;
+  onBack?: () => void;
   dueType?: 'regular' | 'permanent' | 'purchase' | 'reseller';
   dueId: string;
   isPaid?: boolean;
 }
 
-const DueSalesMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType = 'regular', dueId, isPaid = false }) => {
+const DueSalesMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, onBack, dueType = 'regular', dueId, isPaid = false }) => {
   const normMemo = getNormalizedMemo(dueId);
   const targetLotNumber = normMemo.lotNumber;
 
   const handleBack = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
     if (isPaid) {
       onNavigate('paid-due-list');
     } else {

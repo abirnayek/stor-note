@@ -7,9 +7,10 @@ import { syncAllDueAccounts, getNormalizedMemo } from '../utils/dueSyncUtils';
 interface DueTypesScreenProps {
   onNavigate: (screen: Screen) => void;
   onSelectType: (type: 'regular' | 'permanent' | 'reseller') => void;
+  onBack?: () => void;
 }
 
-const DueTypesScreen: React.FC<DueTypesScreenProps> = ({ onNavigate, onSelectType }) => {
+const DueTypesScreen: React.FC<DueTypesScreenProps> = ({ onNavigate, onSelectType, onBack }) => {
   const { t } = useLanguage();
   const [totalDueAmount, setTotalDueAmount] = useState(0);
   const [regularCount, setRegularCount] = useState(0);
@@ -62,10 +63,12 @@ const DueTypesScreen: React.FC<DueTypesScreenProps> = ({ onNavigate, onSelectTyp
       <div className="screen-header">
         <button
           key="btn-back-due-types"
+          type="button"
           className="btn-icon"
           onClick={(e) => {
             e.stopPropagation();
-            onNavigate('due-category');
+            if (onBack) onBack();
+            else onNavigate('due-category');
           }}
           title="Back"
         >

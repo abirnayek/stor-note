@@ -10,9 +10,10 @@ import { jsPDF } from 'jspdf';
 interface StockScreenProps {
   onNavigate: (screen: Screen) => void;
   onSelectPurchaseLot?: (lotNumber: number) => void;
+  onBack?: () => void;
 }
 
-const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseLot }) => {
+const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseLot, onBack }) => {
   const { language } = useLanguage();
   const [viewMode, setViewMode] = useState<'cards' | 'detail'>('cards');
   const [selectedLot, setSelectedLot] = useState<number | 'all'>('all');
@@ -317,10 +318,15 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
       <div className="screen-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <button 
+            key="btn-back-stock"
+            type="button"
             className="btn-icon" 
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               if (viewMode === 'detail') {
                 setViewMode('cards');
+              } else if (onBack) {
+                onBack();
               } else {
                 onNavigate('dashboard');
               }

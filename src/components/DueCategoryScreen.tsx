@@ -4,18 +4,21 @@ import { ChevronLeft, ShoppingCart, ShoppingBag } from 'lucide-react';
 
 interface DueCategoryScreenProps {
   onNavigate: (screen: Screen) => void;
+  onBack?: () => void;
 }
 
-const DueCategoryScreen: React.FC<DueCategoryScreenProps> = ({ onNavigate }) => {
+const DueCategoryScreen: React.FC<DueCategoryScreenProps> = ({ onNavigate, onBack }) => {
   return (
     <div className="lots-screen">
       <div className="screen-header">
         <button
           key="btn-back-due-category"
+          type="button"
           className="btn-icon"
           onClick={(e) => {
             e.stopPropagation();
-            onNavigate('dashboard');
+            if (onBack) onBack();
+            else onNavigate('dashboard');
           }}
           title="Back"
         >

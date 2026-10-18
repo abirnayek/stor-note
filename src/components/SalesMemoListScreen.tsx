@@ -9,9 +9,10 @@ interface SalesMemoListScreenProps {
   onNavigate: (screen: Screen) => void;
   lotNumber: number;
   onSelectMemo: (memoId: string) => void;
+  onBack?: () => void;
 }
 
-const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, lotNumber, onSelectMemo }) => {
+const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, lotNumber, onSelectMemo, onBack }) => {
   const [memos, setMemos] = useState<SalesMemoGlobalItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'paid' | 'due'>('all');
   const [customerTypeFilter, setCustomerTypeFilter] = useState<'all' | 'regular' | 'permanent' | 'reseller'>('all');
@@ -124,10 +125,12 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <button
             key="btn-back-sales-memo-list"
+            type="button"
             className="btn-icon"
             onClick={(e) => {
               e.stopPropagation();
-              onNavigate('sales-lots');
+              if (onBack) onBack();
+              else onNavigate('sales-lots');
             }}
             title="Back"
           >

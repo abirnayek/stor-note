@@ -10,9 +10,10 @@ interface PaidDueListScreenProps {
   dueType: 'regular' | 'permanent' | 'purchase' | 'reseller';
   onSelectDue: (dueId: string) => void;
   onSelectType?: (type: 'regular' | 'permanent' | 'reseller') => void;
+  onBack?: () => void;
 }
 
-const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueType, onSelectDue, onSelectType }) => {
+const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueType, onSelectDue, onSelectType, onBack }) => {
   const [dues, setDues] = useState<string[]>([]);
   const [paidRegularCount, setPaidRegularCount] = useState(0);
   const [paidPermanentCount, setPaidPermanentCount] = useState(0);
@@ -142,10 +143,12 @@ const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueTy
       <div className="screen-header" style={{ display: 'flex', alignItems: 'center' }}>
         <button
           key="btn-back-paid-due-list"
+          type="button"
           className="btn-icon"
           onClick={(e) => {
             e.stopPropagation();
-            onNavigate(dueType === 'purchase' ? 'due-purchase-list' : 'due-list');
+            if (onBack) onBack();
+            else onNavigate(dueType === 'purchase' ? 'due-purchase-list' : 'due-list');
           }}
           title="Back"
         >

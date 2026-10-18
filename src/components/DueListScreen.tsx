@@ -16,9 +16,10 @@ interface DueListScreenProps {
   dueType: 'regular' | 'permanent' | 'purchase' | 'reseller';
   onSelectDue: (dueId: string) => void;
   onSelectType?: (type: 'regular' | 'permanent' | 'reseller') => void;
+  onBack?: () => void;
 }
 
-const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSelectDue, onSelectType }) => {
+const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSelectDue, onSelectType, onBack }) => {
   const [dues, setDues] = useState<string[]>([]);
   const [regularCount, setRegularCount] = useState(0);
   const [permanentCount, setPermanentCount] = useState(0);
@@ -146,10 +147,12 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
       <div className="screen-header">
         <button
           key="btn-back-due-list"
+          type="button"
           className="btn-icon"
           onClick={(e) => {
             e.stopPropagation();
-            onNavigate(dueType === 'purchase' ? 'due-category' : 'due-types');
+            if (onBack) onBack();
+            else onNavigate(dueType === 'purchase' ? 'due-category' : 'due-types');
           }}
           title="Back"
         >

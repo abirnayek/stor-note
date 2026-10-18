@@ -5,9 +5,10 @@ import { getTrashItems, type TrashedItem, restoreFromTrash, permanentlyDeleteFro
 
 interface TrashScreenProps {
   onNavigate: (screen: Screen) => void;
+  onBack?: () => void;
 }
 
-const TrashScreen: React.FC<TrashScreenProps> = ({ onNavigate }) => {
+const TrashScreen: React.FC<TrashScreenProps> = ({ onNavigate, onBack }) => {
   const [items, setItems] = useState<TrashedItem[]>([]);
 
   useEffect(() => {
@@ -50,10 +51,12 @@ const TrashScreen: React.FC<TrashScreenProps> = ({ onNavigate }) => {
       <div className="screen-header">
         <button
           key="btn-back-trash"
+          type="button"
           className="btn-icon"
           onClick={(e) => {
             e.stopPropagation();
-            onNavigate('dashboard');
+            if (onBack) onBack();
+            else onNavigate('dashboard');
           }}
           title="Back"
         >

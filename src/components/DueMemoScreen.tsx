@@ -14,6 +14,7 @@ import MemoScreen from './MemoScreen';
 
 interface DueMemoScreenProps {
   onNavigate: (screen: Screen) => void;
+  onBack?: () => void;
   dueType?: 'regular' | 'permanent' | 'purchase';
   dueId: string;
   isPaid?: boolean;
@@ -52,7 +53,7 @@ interface DueMemoState {
   autoMessage?: AutoMessageConfig;
 }
 
-const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueId, isPaid = false }) => {
+const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, onBack, dueType, dueId, isPaid = false }) => {
   if (dueType === 'purchase' || dueId.startsWith('purchase_lot_')) {
     let lotNum = 1;
     if (dueId.startsWith('purchase_lot_')) {
@@ -70,7 +71,7 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
       <MemoScreen 
         onNavigate={onNavigate} 
         lotNumber={lotNum}
-        onBack={() => onNavigate(isPaid ? 'paid-due-list' : 'due-purchase-list')}
+        onBack={onBack ? onBack : () => onNavigate(isPaid ? 'paid-due-list' : 'due-purchase-list')}
       />
     );
   }
@@ -222,7 +223,11 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
       const finalState = { ...memoState };
       localStorage.setItem(key, JSON.stringify(finalState));
     } catch(e) {}
-    onNavigate(isPaid ? 'paid-due-list' : ((dueType as string) === 'purchase' ? 'due-purchase-list' : 'due-list'));
+    if (onBack) {
+      onBack();
+    } else {
+      onNavigate(isPaid ? 'paid-due-list' : ((dueType as string) === 'purchase' ? 'due-purchase-list' : 'due-list'));
+    }
   };
 
   // Auto-save
@@ -544,7 +549,16 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, dueType, dueI
   return (
     <div className="memo-screen">
       <div className="screen-header memo-action-bar" data-html2canvas-ignore>
-        <button className="btn-icon" onClick={handleBack}>
+        <button
+          key="btn-back-due-memo"
+          type="button"
+          className="btn-icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleBack();
+          }}
+          title="Back"
+        >
           <ChevronLeft size={24} />
         </button>
         <div style={{ display: 'flex', flexDirection: 'column' }}>

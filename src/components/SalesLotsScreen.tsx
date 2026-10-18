@@ -11,11 +11,12 @@ interface SalesLotsScreenProps {
   onSelectLot: (lotNumber: number) => void;
   onSelectMemo: (memoId: string, lotNumber: number | null) => void;
   onSelectMonth?: (monthIndex: number, year: number) => void;
+  onBack?: () => void;
 }
 
 type GlobalMemo = SalesMemoGlobalItem;
 
-const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectLot, onSelectMemo, onSelectMonth }) => {
+const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectLot, onSelectMemo, onSelectMonth, onBack }) => {
   const [lots, setLots] = useState<number[]>(() => {
     const saved = localStorage.getItem('sales_lots_list');
     return saved ? JSON.parse(saved) : [];
@@ -211,10 +212,12 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <button
             key="btn-back-sales-lots"
+            type="button"
             className="btn-icon"
             onClick={(e) => {
               e.stopPropagation();
-              onNavigate('dashboard');
+              if (onBack) onBack();
+              else onNavigate('dashboard');
             }}
             title="Back"
           >
