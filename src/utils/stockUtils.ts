@@ -171,16 +171,29 @@ export const matchesFish = (soldName: string, purchaseName: string): boolean => 
   return false;
 };
 
-interface ActiveSalesMemo {
+export interface ActiveSalesMemoEntry {
+  id?: string;
+  serialNo?: string;
+  name: string;
+  totalKg: number | string;
+  weightUnit?: string;
+  buyRate?: number;
+  profitPercent?: number | '';
+  manualSaleRate?: number | '';
+}
+
+export interface ActiveSalesMemo {
   id: string;
   lotNumber: number | null;
+  customerName: string;
+  customerType?: string;
+  mobile?: string;
   timestamp: number;
   date: string;
-  entries: Array<{
-    name: string;
-    totalKg: number | string;
-    weightUnit?: string;
-  }>;
+  time?: string;
+  folderId?: string;
+  folderName?: string;
+  entries: ActiveSalesMemoEntry[];
 }
 
 /**
@@ -214,6 +227,12 @@ export const getAllActiveSalesMemos = (): ActiveSalesMemo[] => {
 
     const timestamp = getMemoExactTimestamp(rawObj);
     const date = inner.createdAt || inner.date || rawObj.date || '';
+    const time = inner.createdAtTime || rawObj.createdAtTime || '';
+    const customerName = inner.customerName || inner.name || rawObj.name || '';
+    const customerType = inner.customerType || rawObj.customerType || 'regular';
+    const mobile = inner.mobile || rawObj.mobile || '';
+    const folderId = inner.folderId || rawObj.folderId || '';
+    const folderName = inner.folderName || rawObj.folderName || '';
 
     if (memosMap.has(memoId)) {
       const existing = memosMap.get(memoId)!;
@@ -226,14 +245,23 @@ export const getAllActiveSalesMemos = (): ActiveSalesMemo[] => {
       if (!existing.timestamp && timestamp) {
         existing.timestamp = timestamp;
       }
+      if (!existing.customerName && customerName) existing.customerName = customerName;
+      if (!existing.time && time) existing.time = time;
+      if (!existing.folderId && folderId) { existing.folderId = folderId; existing.folderName = folderName; }
       return;
     }
 
     memosMap.set(memoId, {
       id: memoId,
       lotNumber,
+      customerName,
+      customerType,
+      mobile,
       timestamp,
       date,
+      time,
+      folderId,
+      folderName,
       entries
     });
   };
@@ -622,4 +650,240 @@ export const getAllPurchaseItems = (): LotPurchaseFishItem[] => {
     items.push(...lotItems);
   });
   return items;
+};
+
+export interface FishMemoSaleDetail {
+  memoId: string;
+  lotNumber: number | null;
+  customerName: string;
+  customerType: string;
+  mobile: string;
+  date: string;
+  time: string;
+  timestamp: number;
+  weightKg: number;
+  buyRate: number;
+  saleRate: number;
+  totalSalePrice: number;
+  totalCostPrice: number;
+  profit: number;
+  isLoss: boolean;
+  folderId?: string;
+  folderName?: string;
+}
+
+export interface FishSalesSummary {
+  fishName: string;
+  lotNumber: number;
+  supplierName: string;
+  lotDate: string;
+  purchasedKg: number;
+  remainingKg: number;
+  lotBuyRate: number;
+  totalSoldKg: number;
+  totalRevenue: number;
+  totalCost: number;
+  totalProfit: number;
+  totalLoss: number;
+  netProfit: number;
+  avgSaleRate: number;
+  memos: FishMemoSaleDetail[];
+}
+
+/**
+ * Retrieves the complete sales breakdown and memo history for a specific fish in a lot
+ */
+export const getFishSalesBreakdown = (targetFishName: string, targetLotNumber: number): FishSalesSummary => {
+  const normTargetLot = normalizeLotNumber(targetLotNumber) || 1;
+  const cleanTargetName = (targetFishName || '').trim();
+
+  // 1. Purchase lot info
+  const purchaseData = getRawPurchaseData(normTargetLot);
+  const supplierName = purchaseData?.supplierName || purchaseData?.name || '';
+  const lotDate = purchaseData?.createdAt || purchaseData?.date || '';
+  const lotItems = getLotPurchaseItems(normTargetLot);
+  const matchedLotItem = lotItems.find(it => matchesFish(cleanTargetName, it.name) || it.name === cleanTargetName);
+
+  const purchasedKg = matchedLotItem ? matchedLotItem.purchasedKg : 0;
+  const lotBuyRate = matchedLotItem ? (matchedLotItem.effectiveCostRate > 0 ? matchedLotItem.effectiveCostRate : matchedLotItem.baseBuyRate) : 0;
+
+  // 2. Set up multi-lot tracking for accurate FIFO allocation across lots
+  const lotNumbers = getAvailableLotNumbers();
+  interface LotTrackItem {
+    name: string;
+    purchasedKg: number;
+    soldKg: number;
+    buyRate: number;
+    suggestedSaleRate: number;
+  }
+  interface LotTrack {
+    lotNumber: number;
+    timestamp: number;
+    items: LotTrackItem[];
+  }
+
+  const lotsMap = new Map<number, LotTrack>();
+  lotNumbers.forEach(lNum => {
+    const pData = getRawPurchaseData(lNum);
+    const pItems = getLotPurchaseItems(lNum);
+    const items: LotTrackItem[] = pItems.map(pi => ({
+      name: pi.name,
+      purchasedKg: pi.purchasedKg,
+      soldKg: 0,
+      buyRate: pi.effectiveCostRate > 0 ? pi.effectiveCostRate : pi.baseBuyRate,
+      suggestedSaleRate: pi.suggestedSaleRate
+    }));
+    lotsMap.set(lNum, {
+      lotNumber: lNum,
+      timestamp: getMemoExactTimestamp(pData),
+      items
+    });
+  });
+
+  const salesMemos = getAllActiveSalesMemos();
+  const matchedMemoSales: FishMemoSaleDetail[] = [];
+
+  const addMemoRecord = (
+    memo: ActiveSalesMemo,
+    entry: ActiveSalesMemoEntry,
+    weightKg: number,
+    costRate: number,
+    suggestedSaleRate: number
+  ) => {
+    if (weightKg <= 0) return;
+    const currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
+    
+    let saleRate = 0;
+    if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+      const manualRateNum = Number(entry.manualSaleRate) || 0;
+      saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+    } else if (suggestedSaleRate > 0) {
+      saleRate = suggestedSaleRate + (suggestedSaleRate * currentProfitPercent / 100);
+    } else if (costRate > 0) {
+      saleRate = costRate + (costRate * currentProfitPercent / 100);
+    }
+    saleRate = Math.round(saleRate * 100) / 100;
+    const effectiveCost = Math.round(costRate * 100) / 100;
+
+    const totalSalePrice = Math.round((weightKg * saleRate) * 100) / 100;
+    const totalCostPrice = Math.round((weightKg * effectiveCost) * 100) / 100;
+    const profit = Math.round((totalSalePrice - totalCostPrice) * 100) / 100;
+
+    matchedMemoSales.push({
+      memoId: memo.id,
+      lotNumber: normTargetLot,
+      customerName: memo.customerName || '',
+      customerType: memo.customerType || 'regular',
+      mobile: memo.mobile || '',
+      date: memo.date || '',
+      time: memo.time || '',
+      timestamp: memo.timestamp || 0,
+      weightKg: Math.round(weightKg * 100) / 100,
+      buyRate: effectiveCost,
+      saleRate,
+      totalSalePrice,
+      totalCostPrice,
+      profit,
+      isLoss: profit < 0,
+      folderId: memo.folderId,
+      folderName: memo.folderName
+    });
+  };
+
+  // Phase 1: Memos with explicit lot number
+  salesMemos.forEach(memo => {
+    if (memo.lotNumber !== null && lotsMap.has(memo.lotNumber)) {
+      const lotObj = lotsMap.get(memo.lotNumber)!;
+      memo.entries.forEach(entry => {
+        const name = (entry.name || '').trim();
+        let weight = Number(entry.totalKg) || 0;
+        if (entry.weightUnit === 'g') weight /= 1000;
+        if (weight <= 0 || !name) return;
+
+        const matchedItem = lotObj.items.find(item => matchesFish(name, item.name));
+        if (matchedItem) {
+          matchedItem.soldKg += weight;
+          if (memo.lotNumber === normTargetLot && (matchesFish(name, cleanTargetName) || matchesFish(cleanTargetName, matchedItem.name))) {
+            const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : matchedItem.buyRate;
+            addMemoRecord(memo, entry, weight, cost, matchedItem.suggestedSaleRate);
+          }
+        }
+      });
+    }
+  });
+
+  // Phase 2: Unassigned memos (lotNumber === null) - FIFO across lots
+  const sortedLotNums = Array.from(lotsMap.keys()).sort((a, b) => a - b);
+  salesMemos.forEach(memo => {
+    if (memo.lotNumber === null) {
+      memo.entries.forEach(entry => {
+        const name = (entry.name || '').trim();
+        let weight = Number(entry.totalKg) || 0;
+        if (entry.weightUnit === 'g') weight /= 1000;
+        if (weight <= 0 || !name) return;
+
+        // Find candidate items across lots
+        const candidateItems: { lotNum: number; item: LotTrackItem }[] = [];
+        sortedLotNums.forEach(lNum => {
+          const lObj = lotsMap.get(lNum)!;
+          const isLotExisting = !memo.timestamp || !lObj.timestamp || memo.timestamp >= (lObj.timestamp - 24 * 60 * 60 * 1000);
+          if (isLotExisting) {
+            const found = lObj.items.find(item => matchesFish(name, item.name));
+            if (found) {
+              candidateItems.push({ lotNum: lNum, item: found });
+            }
+          }
+        });
+
+        if (candidateItems.length === 0) return;
+
+        let weightToDeduct = weight;
+        for (const candidate of candidateItems) {
+          const availableStock = Math.max(0, candidate.item.purchasedKg - candidate.item.soldKg);
+          if (availableStock > 0) {
+            const take = Math.min(weightToDeduct, availableStock);
+            candidate.item.soldKg += take;
+            weightToDeduct -= take;
+
+            if (candidate.lotNum === normTargetLot && (matchesFish(name, cleanTargetName) || matchesFish(cleanTargetName, candidate.item.name))) {
+              const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : candidate.item.buyRate;
+              addMemoRecord(memo, entry, take, cost, candidate.item.suggestedSaleRate);
+            }
+
+            if (weightToDeduct <= 0.0001) break;
+          }
+        }
+      });
+    }
+  });
+
+  // Sort memos newest first
+  matchedMemoSales.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+  const totalSoldKg = Math.round(matchedMemoSales.reduce((sum, m) => sum + m.weightKg, 0) * 100) / 100;
+  const totalRevenue = Math.round(matchedMemoSales.reduce((sum, m) => sum + m.totalSalePrice, 0) * 100) / 100;
+  const totalCost = Math.round(matchedMemoSales.reduce((sum, m) => sum + m.totalCostPrice, 0) * 100) / 100;
+  const totalProfit = Math.round(matchedMemoSales.filter(m => m.profit > 0).reduce((sum, m) => sum + m.profit, 0) * 100) / 100;
+  const totalLoss = Math.round(matchedMemoSales.filter(m => m.profit < 0).reduce((sum, m) => sum + Math.abs(m.profit), 0) * 100) / 100;
+  const netProfit = Math.round((totalRevenue - totalCost) * 100) / 100;
+  const avgSaleRate = totalSoldKg > 0 ? Math.round((totalRevenue / totalSoldKg) * 100) / 100 : 0;
+  const remainingKg = Math.max(0, Math.round((purchasedKg - totalSoldKg) * 100) / 100);
+
+  return {
+    fishName: cleanTargetName,
+    lotNumber: normTargetLot,
+    supplierName,
+    lotDate,
+    purchasedKg,
+    remainingKg,
+    lotBuyRate,
+    totalSoldKg,
+    totalRevenue,
+    totalCost,
+    totalProfit,
+    totalLoss,
+    netProfit,
+    avgSaleRate,
+    memos: matchedMemoSales
+  };
 };

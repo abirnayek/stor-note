@@ -77,6 +77,9 @@ const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
       if (current.salesMemoReturnScreen === 'aratdar') {
         return { screen: 'aratdar', folderId: current.folderId || null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'aratdar', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
+      if (current.salesMemoReturnScreen === 'stock') {
+        return { screen: 'stock', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
       if (current.salesMemoReturnScreen === 'sales-memo-list') {
         return { screen: 'sales-memo-list', folderId: null, lot: null, salesLot: current.salesLot || 1, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
@@ -1588,6 +1591,13 @@ function App() {
               onNavigate={handleNavigate}
               onBack={() => navigateBack('dashboard')}
               onSelectPurchaseLot={handleSelectLot}
+              onSelectSalesMemo={(memoId, lotNumber) => {
+                navigateTo('sales-memo', {
+                  salesLot: lotNumber,
+                  salesMemoId: memoId,
+                  salesMemoReturnScreen: 'stock'
+                });
+              }}
             />
           )}
         </main>
