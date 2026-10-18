@@ -33,8 +33,12 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
   const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('device_permission') === 'admin');
 
   // Search highlight & blinking animation state
-  const [highlightedRowKey, setHighlightedRowKey] = useState<string | null>(null);
-  const highlightTimeoutRef = useRef<any>(null);
+  const [highlightTarget, setHighlightTarget] = useState<{
+    lotNumber?: number;
+    serialNo?: number;
+    fishName?: string;
+    key?: string;
+  } | null>(null);
 
   useEffect(() => {
     const handleHighlightStock = (e: any) => {
@@ -57,7 +61,12 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
       setSearchQuery('');
 
       const targetKey = `${lotNumber}-${serialNo}`;
-      setHighlightedRowKey(targetKey);
+      setHighlightTarget({
+        lotNumber: Number(lotNumber),
+        serialNo: serialNo !== undefined ? Number(serialNo) : undefined,
+        fishName: fishName ? String(fishName).trim() : undefined,
+        key: targetKey
+      });
 
       // 4. Smoothly scroll directly to that fish row
       const attemptScroll = () => {
@@ -72,19 +81,28 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
       setTimeout(attemptScroll, 60);
       setTimeout(attemptScroll, 180);
       setTimeout(attemptScroll, 380);
-
-      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
-      highlightTimeoutRef.current = setTimeout(() => {
-        setHighlightedRowKey(null);
-      }, 6000);
     };
 
     window.addEventListener('highlight_stock_item', handleHighlightStock);
     return () => {
       window.removeEventListener('highlight_stock_item', handleHighlightStock);
-      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
     };
   }, []);
+
+  // Dismiss highlight when user clicks anywhere on the page
+  useEffect(() => {
+    if (!highlightTarget) return;
+    const handleDismissClick = () => {
+      setHighlightTarget(null);
+    };
+    const timer = setTimeout(() => {
+      window.addEventListener('click', handleDismissClick);
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('click', handleDismissClick);
+    };
+  }, [highlightTarget]);
 
   useEffect(() => {
     const checkAdmin = () => {
@@ -1095,6 +1113,14 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                         StatusIcon = AlertTriangle;
                       }
 
+                      const isHighlighted = Boolean(
+                        highlightTarget && (
+                          (highlightTarget.key && highlightTarget.key === `${item.lotNumber}-${item.serialNo}`) ||
+                          (highlightTarget.lotNumber === item.lotNumber && highlightTarget.serialNo === item.serialNo) ||
+                          (highlightTarget.lotNumber === item.lotNumber && highlightTarget.fishName && (item.name || '').trim().toLowerCase() === highlightTarget.fishName.toLowerCase())
+                        )
+                      );
+
                       return (
                         <tr
                           key={`${item.lotNumber}-${item.id}`}
@@ -1102,17 +1128,28 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                           data-lot={item.lotNumber}
                           data-serial={item.serialNo}
                           data-fish-name={(item.name || '').toLowerCase()}
-                          className={highlightedRowKey === `${item.lotNumber}-${item.serialNo}` ? 'search-highlight-blink' : ''}
+                          onClick={() => {
+                            if (isHighlighted) {
+                              setHighlightTarget(null);
+                            }
+                          }}
+                          className={isHighlighted ? 'search-highlight-blink' : ''}
                           style={{
                             borderBottom: '1px solid rgba(255,255,255,0.06)',
-                            background: isLow 
-                              ? 'rgba(255, 152, 0, 0.09)' 
-                              : (isOut ? 'rgba(239, 68, 68, 0.07)' : undefined),
-                            boxShadow: isLow 
-                              ? 'inset 4px 0 0 #ff9800' 
-                              : (isOut ? 'inset 4px 0 0 #ef4444' : undefined),
-                            transition: 'background-color 0.2s'
+                            background: isHighlighted 
+                              ? undefined 
+                              : (isLow 
+                                ? 'rgba(255, 152, 0, 0.09)' 
+                                : (isOut ? 'rgba(239, 68, 68, 0.07)' : undefined)),
+                            boxShadow: isHighlighted 
+                              ? undefined 
+                              : (isLow 
+                                ? 'inset 4px 0 0 #ff9800' 
+                                : (isOut ? 'inset 4px 0 0 #ef4444' : undefined)),
+                            transition: 'background-color 0.2s',
+                            cursor: isHighlighted ? 'pointer' : undefined
                           }}
+                          title={isHighlighted ? (language === 'bn' ? 'হাইলাইট বন্ধ করতে ক্লিক করুন' : 'Click to stop highlight') : undefined}
                         >
                           <td data-label="#" style={{ textAlign: 'center', opacity: 0.85, fontWeight: 'bold' }}>{index + 1}</td>
                           <td data-label="মাছের নাম">

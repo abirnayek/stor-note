@@ -304,6 +304,247 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
   };
 };
 
+export const isInvalidMemoId = (id: string): boolean => {
+  if (!id) return true;
+  const lower = id.toLowerCase().trim();
+  if (
+    lower === 'lot_unassigned' ||
+    lower === 'unassigned' ||
+    lower === 'undefined' ||
+    lower === 'null' ||
+    lower === '[object object]' ||
+    lower.startsWith('lot_') ||
+    lower.startsWith('list_') ||
+    lower.startsWith('memo_list')
+  ) {
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Detects and repairs memos mistakenly saved under invalid IDs (such as 'lot_unassigned', 'unassigned', 'undefined', etc.).
+ * If actual memo data is found (e.g. Osman Hotel), it automatically migrates the memo to a clean valid numeric ID,
+ * updates all lists (dues, global sales, unassigned list), and removes the corrupt keys.
+ */
+let lastHealInvalidMemoIdsTime = 0;
+export const healInvalidMemoIds = (force = false): void => {
+  const now = Date.now();
+  if (!force && now - lastHealInvalidMemoIdsTime < 10000) return;
+  lastHealInvalidMemoIdsTime = now;
+  try {
+    const badIdsToProcess = new Set<string>();
+
+    // 1. Check all localStorage keys
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (key.startsWith('due_memo_')) {
+        let rawId = key.replace('due_memo_', '');
+        rawId = rawId.replace(/^(regular|permanent|reseller|purchase)_/, '');
+        if (isInvalidMemoId(rawId)) {
+          badIdsToProcess.add(rawId);
+        }
+      } else if (key.startsWith('sales_memo_') && !key.startsWith('sales_memo_lot_') && !key.startsWith('sales_memo_list_')) {
+        const rawId = key.replace('sales_memo_', '');
+        if (isInvalidMemoId(rawId)) {
+          badIdsToProcess.add(rawId);
+        }
+      } else if (key.startsWith('sales_memo_lot_') && key.includes('_memo_')) {
+        const parts = key.split('_memo_');
+        if (parts[1] && isInvalidMemoId(parts[1])) {
+          badIdsToProcess.add(parts[1]);
+        }
+      }
+    }
+
+    // 2. Check dues lists
+    const duesListKeys = [
+      'dues_regular', 'dues_permanent', 'dues_purchase', 'dues_reseller',
+      'paid_dues_regular', 'paid_dues_permanent', 'paid_dues_purchase', 'paid_dues_reseller',
+      'sales_memo_list_unassigned'
+    ];
+
+    duesListKeys.forEach(listKey => {
+      try {
+        const raw = localStorage.getItem(listKey);
+        if (raw) {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            list.forEach(id => {
+              if (isInvalidMemoId(id)) badIdsToProcess.add(id);
+            });
+          }
+        }
+      } catch (e) {}
+    });
+
+    if (badIdsToProcess.size === 0) return;
+
+    let didChange = false;
+
+    badIdsToProcess.forEach(badId => {
+      // Find candidate data
+      const candidateKeys = [
+        `due_memo_${badId}`,
+        `sales_memo_${badId}`,
+        `due_memo_permanent_${badId}`,
+        `due_memo_regular_${badId}`,
+        `due_memo_reseller_${badId}`,
+        `due_memo_purchase_${badId}`,
+        `sales_memo_lot_unassigned_memo_${badId}`
+      ];
+
+      let foundData: any = null;
+      for (const ck of candidateKeys) {
+        const raw = localStorage.getItem(ck);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            const inner = parsed.memoState || parsed;
+            const name = parsed.customerName || inner.customerName || parsed.name || inner.name || parsed.supplierName || inner.supplierName || '';
+            const entries = (Array.isArray(parsed.entries) && parsed.entries.length > 0) ? parsed.entries : ((Array.isArray(inner.entries) && inner.entries.length > 0) ? inner.entries : []);
+            const hasRealEntries = entries.some((e: any) => (e.name && e.name.trim() !== '') || Number(e.totalKg || 0) > 0 || Number(e.amount || 0) > 0);
+            const hasBill = Number(parsed.totalAmount || inner.totalAmount || parsed.totalBill || inner.totalBill || parsed.dueAmount || inner.dueAmount || 0) > 0;
+            if ((name && name.trim() !== '' && name.toLowerCase() !== 'unknown') || hasRealEntries || hasBill) {
+              foundData = parsed;
+              break;
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (foundData) {
+        // Generate a new clean numeric timestamp ID
+        let newId = Date.now().toString();
+        while (
+          localStorage.getItem(`sales_memo_${newId}`) || 
+          localStorage.getItem(`due_memo_${newId}`) ||
+          isInvalidMemoId(newId)
+        ) {
+          newId = (Number(newId) + 1).toString();
+        }
+
+        const inner = foundData.memoState || foundData;
+        foundData.id = newId;
+        foundData.memoId = newId;
+        if (foundData.memoState) {
+          foundData.memoState.id = newId;
+          foundData.memoState.memoId = newId;
+        }
+
+        const effectiveCustomerType = foundData.customerType || inner.customerType || (foundData.type === 'permanent' ? 'permanent' : foundData.type === 'reseller' ? 'reseller' : 'regular');
+        foundData.customerType = effectiveCustomerType;
+        if (foundData.memoState) {
+          foundData.memoState.customerType = effectiveCustomerType;
+        }
+
+        // Save under valid keys
+        localStorage.setItem(`sales_memo_${newId}`, JSON.stringify(foundData));
+        localStorage.setItem(`due_memo_${newId}`, JSON.stringify(foundData));
+        localStorage.setItem(`sales_memo_lot_unassigned_memo_${newId}`, JSON.stringify(foundData));
+
+        // Add to sales_memo_list_unassigned
+        try {
+          const uStr = localStorage.getItem('sales_memo_list_unassigned');
+          let uList: string[] = uStr ? JSON.parse(uStr) : [];
+          uList = uList.filter(id => !isInvalidMemoId(id) && id !== badId);
+          if (!uList.includes(newId)) {
+            uList.push(newId);
+          }
+          localStorage.setItem('sales_memo_list_unassigned', JSON.stringify(uList));
+        } catch (e) {}
+
+        // Replace badId in dues lists
+        duesListKeys.forEach(listKey => {
+          try {
+            const raw = localStorage.getItem(listKey);
+            if (raw) {
+              const list: string[] = JSON.parse(raw);
+              if (Array.isArray(list)) {
+                const updated = list
+                  .map(id => (id === badId ? newId : id))
+                  .filter(id => !isInvalidMemoId(id));
+
+                if (listKey === `dues_${effectiveCustomerType}` && !updated.includes(newId)) {
+                  updated.push(newId);
+                }
+                localStorage.setItem(listKey, JSON.stringify(updated));
+              }
+            }
+          } catch (e) {}
+        });
+
+        // Also check any sales_memo_list_* keys
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('sales_memo_list_')) {
+            try {
+              const listStr = localStorage.getItem(k);
+              if (listStr) {
+                const list: string[] = JSON.parse(listStr);
+                if (Array.isArray(list)) {
+                  let changed = false;
+                  const updated = list.map(id => {
+                    if (id === badId) { changed = true; return newId; }
+                    return id;
+                  }).filter(id => !isInvalidMemoId(id));
+                  if (changed || updated.length !== list.length) {
+                    localStorage.setItem(k, JSON.stringify(updated));
+                  }
+                }
+              }
+            } catch (e) {}
+          }
+        }
+
+        // Migrate passwords if any
+        const pwd = localStorage.getItem(`memo_password_${badId}`) || 
+                    localStorage.getItem(`memo_password_due_memo_${badId}`) ||
+                    localStorage.getItem(`memo_password_sales_memo_${badId}`);
+        if (pwd) {
+          localStorage.setItem(`memo_password_${newId}`, pwd);
+          localStorage.setItem(`memo_password_due_memo_${newId}`, pwd);
+          localStorage.setItem(`memo_password_sales_memo_${newId}`, pwd);
+        }
+
+        didChange = true;
+      } else {
+        // No real data - scrub badId from dues lists
+        duesListKeys.forEach(listKey => {
+          try {
+            const raw = localStorage.getItem(listKey);
+            if (raw) {
+              const list: string[] = JSON.parse(raw);
+              if (Array.isArray(list)) {
+                const updated = list.filter(id => id !== badId && !isInvalidMemoId(id));
+                localStorage.setItem(listKey, JSON.stringify(updated));
+              }
+            }
+          } catch (e) {}
+        });
+        didChange = true;
+      }
+
+      // Cleanup obsolete bad keys
+      candidateKeys.forEach(k => localStorage.removeItem(k));
+      localStorage.removeItem(`due_memo_${badId}`);
+      localStorage.removeItem(`sales_memo_${badId}`);
+      localStorage.removeItem(`sales_memo_lot_unassigned`);
+      localStorage.removeItem(`due_memo_lot_unassigned`);
+      localStorage.removeItem(`due_memo_unassigned`);
+      localStorage.removeItem(`sales_memo_unassigned`);
+      localStorage.removeItem(`memo_password_${badId}`);
+      localStorage.removeItem(`memo_password_due_memo_${badId}`);
+      localStorage.removeItem(`memo_password_sales_memo_${badId}`);
+    });
+
+    if (didChange) {
+      window.dispatchEvent(new Event('storage'));
+    }
+  } catch (e) {}
+};
+
 /**
  * Master sync function that scans all sales and due memos, aligns dues lists,
  * resolves categories, ensures two-way linkages, and removes obsolete entries.
@@ -318,6 +559,7 @@ export const syncAllDueAccounts = (): {
   paidPurchaseDues: string[];
   paidResellerDues: string[];
 } => {
+  healInvalidMemoIds();
   const allCandidateIds = new Set<string>();
 
   // 1. Scan canonical sales_memo_*, due_memo_*, and lot-specific sales memos
@@ -326,13 +568,14 @@ export const syncAllDueAccounts = (): {
     if (!key) continue;
     if (key.startsWith('sales_memo_') && !key.startsWith('sales_memo_lot_') && !key.startsWith('sales_memo_list_')) {
       const id = key.replace('sales_memo_', '');
-      if (id) allCandidateIds.add(id);
+      if (id && !isInvalidMemoId(id)) allCandidateIds.add(id);
     } else if (key.startsWith('due_memo_')) {
-      const id = key.replace('due_memo_', '');
-      if (id) allCandidateIds.add(id);
+      let id = key.replace('due_memo_', '');
+      id = id.replace(/^(regular|permanent|reseller|purchase)_/, '');
+      if (id && !isInvalidMemoId(id)) allCandidateIds.add(id);
     } else if (key.startsWith('sales_memo_lot_') && key.includes('_memo_')) {
       const parts = key.split('_memo_');
-      if (parts[1]) allCandidateIds.add(parts[1]);
+      if (parts[1] && !isInvalidMemoId(parts[1])) allCandidateIds.add(parts[1]);
     } else if (key.startsWith('memo_lot_')) {
       const lotStr = key.replace('memo_lot_', '');
       if (lotStr && !isNaN(Number(lotStr))) {
@@ -345,7 +588,9 @@ export const syncAllDueAccounts = (): {
   const readList = (key: string): string[] => {
     try {
       const str = localStorage.getItem(key);
-      return str ? JSON.parse(str) : [];
+      if (!str) return [];
+      const list = JSON.parse(str);
+      return Array.isArray(list) ? list.filter(id => id && !isInvalidMemoId(id)) : [];
     } catch (e) {
       return [];
     }
@@ -792,23 +1037,7 @@ export const deleteDueMemo = (dueId: string, dueType?: 'regular' | 'permanent' |
   window.dispatchEvent(new Event('settingsChange'));
 };
 
-export const isInvalidMemoId = (id: string): boolean => {
-  if (!id) return true;
-  const lower = id.toLowerCase().trim();
-  if (
-    lower === 'lot_unassigned' ||
-    lower === 'unassigned' ||
-    lower === 'undefined' ||
-    lower === 'null' ||
-    lower === '[object object]' ||
-    lower.startsWith('lot_') ||
-    lower.startsWith('list_') ||
-    lower.startsWith('memo_list')
-  ) {
-    return true;
-  }
-  return false;
-};
+
 
 export interface SalesMemoGlobalItem {
   id: string;
@@ -833,6 +1062,7 @@ export interface SalesMemoGlobalItem {
 }
 
 export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
+  healInvalidMemoIds();
   let localTimestamps: Record<string, number> = {};
   try {
     const tsRaw = localStorage.getItem('local_timestamps');
@@ -1293,5 +1523,10 @@ export const moveSalesMemoToLot = (memoId: string, newLotNumber: number): { succ
   window.dispatchEvent(new Event('storage'));
   return { success: true, memoTitle };
 };
+
+// Immediate self-healing check on module evaluation
+try {
+  healInvalidMemoIds();
+} catch (e) {}
 
 

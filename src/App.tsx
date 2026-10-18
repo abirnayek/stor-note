@@ -87,6 +87,15 @@ const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
       if (current.salesMemoReturnScreen === 'sales-month-memos' && current.selectedMonth !== null && current.selectedMonth !== undefined) {
         return { screen: 'sales-month-memos', folderId: null, selectedMonth: current.selectedMonth, selectedYear: current.selectedYear, lot: null, salesLot: current.salesLot, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
+      if (current.salesMemoReturnScreen === 'due-list') {
+        return { screen: 'due-list', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: current.dueType || 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
+      if (current.salesMemoReturnScreen === 'paid-due-list') {
+        return { screen: 'paid-due-list', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: current.dueType || 'regular', dueId: null, isPaidDue: true, investorId: null, investorMemoId: null };
+      }
+      if (current.salesMemoReturnScreen === 'dashboard') {
+        return { screen: 'dashboard', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
       return { screen: 'sales-lots', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'sales-month-memos':
     case 'sales-memo-list':
@@ -151,8 +160,25 @@ function App() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isLotPasswordManagerOpen, setIsLotPasswordManagerOpen] = useState(false);
   const [userEmail] = useState<string | null>(localStorage.getItem('userEmail'));
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+
+  useEffect(() => {
+    if (!searchInput.trim()) {
+      setSearchQuery('');
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const clearSearch = () => {
+    setSearchInput('');
+    setSearchQuery('');
+  };
   
   const [session, setSession] = useState<any>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -983,8 +1009,12 @@ function App() {
                   ? (language === 'bn' ? 'বকেয়া ক্রেতা বা মেমো খুঁজুন...' : 'Search due customer or memo...')
                   : (language === 'bn' ? 'খুঁজুন (মাছ, মেমো, ক্রেতা বা লট)...' : 'Search (fish, memo, lot)...')
               } 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchInput(val);
+                if (!val.trim()) setSearchQuery('');
+              }}
             />
             {searchQuery && (() => {
               const q = searchQuery.toLowerCase().trim();
@@ -1231,7 +1261,7 @@ function App() {
 
               // Click Handlers
               const handleSelectStock = (item: StockSearchResult) => {
-                setSearchQuery('');
+                clearSearch();
                 if (currentScreen === 'stock') {
                   window.dispatchEvent(new CustomEvent('highlight_stock_item', {
                     detail: { fishName: item.fishName, lotNumber: item.lotNumber, serialNo: item.serialNo }
@@ -1247,37 +1277,68 @@ function App() {
               };
 
               const handleSelectPurchaseItem = (item: PurchaseItemResult) => {
-                setSearchQuery('');
+                clearSearch();
                 window.dispatchEvent(new CustomEvent('highlight_purchase_memo_item', {
                   detail: { entryId: item.entryId, fishName: item.fishName, serialNo: item.serialNo }
                 }));
               };
 
               const handleSelectSalesItem = (item: SalesItemResult) => {
-                setSearchQuery('');
+                clearSearch();
                 window.dispatchEvent(new CustomEvent('highlight_sales_memo_item', {
                   detail: { entryId: item.entryId, fishName: item.fishName }
                 }));
               };
 
               const handleSelectSalesMemo = (memo: SalesMemoResult) => {
-                setSearchQuery('');
-                if (currentScreen === 'sales-lots') {
-                  window.dispatchEvent(new CustomEvent('highlight_sales_memo', { 
-                    detail: { memoId: memo.memoId, lotNumber: memo.lotNumber } 
-                  }));
-                } else {
-                  navigateTo('sales-lots', { targetMemoId: memo.memoId });
+                clearSearch();
+                navigateTo('sales-memo', { 
+                  salesMemoId: memo.memoId, 
+                  salesLot: memo.lotNumber, 
+                  salesMemoReturnScreen: currentScreen 
+                });
+                if (memo.matchedFish) {
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('highlight_sales_memo_item', {
+                      detail: { fishName: memo.matchedFish }
+                    }));
+                  }, 350);
                 }
               };
 
               const handleSelectDueMemo = (due: DueMemoResult) => {
-                setSearchQuery('');
-                navigateTo('due-memo', { dueId: due.dueId, isPaidDue: false, dueType: due.type as any });
+                clearSearch();
+                if (due.type === 'purchase' || due.dueId.startsWith('purchase_')) {
+                  navigateTo('due-memo', { dueId: due.dueId, isPaidDue: false, dueType: 'purchase' });
+                  if (due.matchedFish) {
+                    setTimeout(() => {
+                      window.dispatchEvent(new CustomEvent('highlight_purchase_memo_item', {
+                        detail: { fishName: due.matchedFish }
+                      }));
+                    }, 350);
+                  }
+                } else {
+                  if (currentScreen === 'due-list' || currentScreen === 'paid-due-list') {
+                    navigateTo('due-sales-memo', { dueId: due.dueId, isPaidDue: false, dueType: due.type as any });
+                  } else {
+                    navigateTo('sales-memo', { 
+                      salesMemoId: due.dueId, 
+                      salesLot: null, 
+                      salesMemoReturnScreen: currentScreen 
+                    });
+                  }
+                  if (due.matchedFish) {
+                    setTimeout(() => {
+                      window.dispatchEvent(new CustomEvent('highlight_sales_memo_item', {
+                        detail: { fishName: due.matchedFish }
+                      }));
+                    }, 350);
+                  }
+                }
               };
 
               const handleSelectPurchaseLot = (lot: PurchaseLotResult) => {
-                setSearchQuery('');
+                clearSearch();
                 navigateTo('memo', { lot: lot.lotNumber });
               };
 
@@ -1862,6 +1923,7 @@ function App() {
           )}
           {currentScreen === 'sales-memo' && currentSalesMemoId !== null && (
             <SalesMemoScreen 
+              key={`sales_memo_${currentSalesMemoId}`}
               onNavigate={handleNavigate} 
               onBack={() => navigateBack(salesMemoReturnScreen, { 
                 salesLot: currentSalesLot ?? undefined,
