@@ -31,6 +31,7 @@ import { LotPasswordManager } from './components/LotPasswordManager';
 import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow } from './utils/syncEngine';
 import { runLotRecovery } from './utils/lotRecovery';
 import { getAllGlobalSalesMemos } from './utils/dueSyncUtils';
+import { getAllLotsStock } from './utils/stockUtils';
 
 export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock' | 'sales-month-memos' | 'reseller-password' | 'reseller' | 'aratdar';
 
@@ -969,58 +970,183 @@ function App() {
             <input 
               type="text" 
               className="search-input" 
-              placeholder={t('searchPlaceholder')} 
+              placeholder={
+                currentScreen === 'stock'
+                  ? (language === 'bn' ? 'মাছের নাম বা লট দিয়ে স্টক খুঁজুন...' : 'Search fish or lot in stock...')
+                  : currentScreen === 'memo'
+                  ? (language === 'bn' ? 'ক্রয় হিসাবের মাছ বা লট খুঁজুন...' : 'Search fish or lot in purchase...')
+                  : currentScreen === 'sales-memo'
+                  ? (language === 'bn' ? 'বিক্রয় মেমোর মাছ বা ক্রেতা খুঁজুন...' : 'Search fish or customer in memo...')
+                  : currentScreen === 'sales-lots' || currentScreen === 'sales-memo-list'
+                  ? (language === 'bn' ? 'বিক্রয় মেমো, ক্রেতা বা মাছ খুঁজুন...' : 'Search sales memos, customer, fish...')
+                  : currentScreen === 'due-memo' || currentScreen === 'due-list' || currentScreen === 'due-types'
+                  ? (language === 'bn' ? 'বকেয়া ক্রেতা বা মেমো খুঁজুন...' : 'Search due customer or memo...')
+                  : (language === 'bn' ? 'খুঁজুন (মাছ, মেমো, ক্রেতা বা লট)...' : 'Search (fish, memo, lot)...')
+              } 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             {searchQuery && (() => {
               const q = searchQuery.toLowerCase().trim();
-              const results: { 
-                label: string; 
-                subtext?: string;
-                screen: Screen; 
-                id?: string; 
-                lotNumber?: number | null; 
-                memoId?: string;
-                isSalesMemo?: boolean;
-              }[] = [];
 
+              // Screen Context Flags
+              const isStockContext = currentScreen === 'stock';
+              const isPurchaseMemoContext = currentScreen === 'memo';
+              const isSalesLotsContext = currentScreen === 'sales-lots' || currentScreen === 'sales-memo-list' || currentScreen === 'sales-month-memos' || currentScreen === 'sales-memo';
+              const isDueContext = currentScreen === 'due-memo' || currentScreen === 'due-list' || currentScreen === 'due-types' || currentScreen === 'due-category' || currentScreen === 'paid-due-list' || currentScreen === 'due-purchase-list';
+
+              // 1. Stock Fish Search
+              interface StockSearchResult {
+                fishName: string;
+                lotNumber: number;
+                serialNo: number;
+                supplierName: string;
+                remainingKg: number;
+                purchasedKg: number;
+                soldKg: number;
+                status: 'in_stock' | 'low_stock' | 'out_of_stock';
+              }
+              const stockResults: StockSearchResult[] = [];
+
+              try {
+                const allLots = getAllLotsStock();
+                allLots.forEach(lot => {
+                  lot.items.forEach(item => {
+                    const matchName = item.name.toLowerCase().includes(q);
+                    const matchLot = `লট ${lot.lotNumber}`.toLowerCase().includes(q) || `lot ${lot.lotNumber}`.toLowerCase().includes(q) || String(lot.lotNumber) === q;
+                    const matchSupplier = (lot.supplierName || '').toLowerCase().includes(q);
+
+                    if (matchName || matchLot || matchSupplier) {
+                      stockResults.push({
+                        fishName: item.name,
+                        lotNumber: lot.lotNumber,
+                        serialNo: item.serialNo,
+                        supplierName: lot.supplierName,
+                        remainingKg: item.remainingKg,
+                        purchasedKg: item.purchasedKg,
+                        soldKg: item.soldKg,
+                        status: item.status
+                      });
+                    }
+                  });
+                });
+              } catch (e) {}
+
+              // 2. Current Purchase Memo Fish Search
+              interface PurchaseItemResult {
+                entryId: string;
+                fishName: string;
+                serialNo: number;
+                totalKg: number;
+                rate: number;
+              }
+              const currentPurchaseItems: PurchaseItemResult[] = [];
+              if (currentScreen === 'memo' && currentLot) {
+                try {
+                  const memoStr = localStorage.getItem(`memo_lot_${currentLot}`);
+                  if (memoStr) {
+                    const parsed = JSON.parse(memoStr);
+                    (parsed.entries || []).forEach((e: any, idx: number) => {
+                      if ((e.name || '').toLowerCase().includes(q)) {
+                        currentPurchaseItems.push({
+                          entryId: e.id,
+                          fishName: e.name,
+                          serialNo: e.serialNo || idx + 1,
+                          totalKg: Number(e.totalKg || e.weight || 0),
+                          rate: Number(e.unitRateAuto || e.rate || 0)
+                        });
+                      }
+                    });
+                  }
+                } catch (e) {}
+              }
+
+              // 3. Current Sales Memo Fish Search
+              interface SalesItemResult {
+                entryId: string;
+                fishName: string;
+                weightKg: number;
+                saleRate: number;
+              }
+              const currentSalesItems: SalesItemResult[] = [];
+              if (currentScreen === 'sales-memo') {
+                try {
+                  const keys = currentSalesMemoId
+                    ? [`sales_memo_${currentSalesMemoId}`, 'temp_sales_memo', 'memo_active_sales']
+                    : ['temp_sales_memo', 'memo_active_sales'];
+                  for (const k of keys) {
+                    const s = localStorage.getItem(k);
+                    if (s) {
+                      const parsed = JSON.parse(s);
+                      (parsed.entries || []).forEach((e: any) => {
+                        if ((e.name || '').toLowerCase().includes(q)) {
+                          currentSalesItems.push({
+                            entryId: e.id,
+                            fishName: e.name,
+                            weightKg: Number(e.weightKg || e.weight || 0),
+                            saleRate: Number(e.saleRate || e.rate || 0)
+                          });
+                        }
+                      });
+                      if (currentSalesItems.length > 0) break;
+                    }
+                  }
+                } catch (e) {}
+              }
+
+              // 4. Global Sales Memos Search
+              interface SalesMemoResult {
+                memoId: string;
+                name: string;
+                lotNumber: number | null;
+                customerType: string;
+                isDue: boolean;
+                amount: number;
+                matchedFish?: string;
+              }
+              const salesMemoResults: SalesMemoResult[] = [];
               const seenSalesIds = new Set<string>();
 
-              // 1. Search Global Sales Memos (unassigned, lot memos, aratdar, reseller)
               try {
                 const globalSalesMemos = getAllGlobalSalesMemos();
                 globalSalesMemos.forEach(memo => {
-                  const name = (memo.name || '').toLowerCase();
-                  if (name.includes(q)) {
+                  const anyMemo = memo as any;
+                  const nameMatch = (memo.name || '').toLowerCase().includes(q);
+                  const memoIdMatch = (memo.id || '').toLowerCase().includes(q);
+                  const mobileMatch = typeof anyMemo.mobile === 'string' && anyMemo.mobile.includes(q);
+
+                  let matchedFishName = '';
+                  if (Array.isArray(anyMemo.entries)) {
+                    const matchEntry = anyMemo.entries.find((e: any) => (e.name || '').toLowerCase().includes(q));
+                    if (matchEntry) matchedFishName = matchEntry.name;
+                  }
+
+                  if (nameMatch || memoIdMatch || mobileMatch || matchedFishName) {
                     seenSalesIds.add(memo.id);
-                    let categoryLabel = '';
-                    if (memo.customerType === 'permanent') categoryLabel = 'আড়তদার';
-                    else if (memo.customerType === 'reseller') categoryLabel = 'রিসেলার';
-                    else if (memo.lotNumber !== null) categoryLabel = `লট ${memo.lotNumber}`;
-                    else categoryLabel = 'সাধারণ ক্রেতা';
-
-                    const isDue = memo.status === 'due' || (memo.dueAmount && memo.dueAmount > 0);
-                    const prefix = isDue ? 'বকেয়া হিসাব' : 'বিক্রয় হিসাব';
-                    const amountText = isDue 
-                      ? `৳${Math.round(memo.dueAmount || memo.totalAmount).toLocaleString()} বাকি` 
-                      : `৳${Math.round(memo.totalAmount).toLocaleString()}`;
-
-                    results.push({
-                      label: `${prefix} (${categoryLabel}): ${memo.name}`,
-                      subtext: `${memo.lotNumber !== null ? `Lot: ${memo.lotNumber}` : 'Lot: N/A'} • ${amountText}`,
-                      screen: 'sales-lots',
-                      lotNumber: memo.lotNumber,
+                    salesMemoResults.push({
                       memoId: memo.id,
-                      id: memo.id,
-                      isSalesMemo: true
+                      name: memo.name || 'খুচরা ক্রেতা',
+                      lotNumber: memo.lotNumber,
+                      customerType: memo.customerType || '',
+                      isDue: memo.status === 'due' || (typeof memo.dueAmount === 'number' && memo.dueAmount > 0),
+                      amount: Math.round(memo.dueAmount || memo.totalAmount || 0),
+                      matchedFish: matchedFishName || undefined
                     });
                   }
                 });
               } catch (e) {}
 
-              // 2. Search Due Memos (regular, permanent, reseller)
-              ['regular', 'permanent', 'reseller'].forEach(type => {
+              // 5. Due Memos Search
+              interface DueMemoResult {
+                dueId: string;
+                name: string;
+                type: string;
+                typeLabel: string;
+                matchedFish?: string;
+              }
+              const dueMemoResults: DueMemoResult[] = [];
+
+              ['regular', 'permanent', 'reseller', 'purchase'].forEach(type => {
                 const duesStr = localStorage.getItem(`dues_${type}`);
                 if (duesStr) {
                   try {
@@ -1030,17 +1156,31 @@ function App() {
                       if (memoStr) {
                         try {
                           const memo = JSON.parse(memoStr);
-                          const name = (memo.name || '').toLowerCase();
-                          if (name.includes(q)) {
+                          const nameMatch = (memo.name || '').toLowerCase().includes(q);
+                          const mobileMatch = (memo.mobile || '').includes(q);
+
+                          let matchedFishName = '';
+                          if (Array.isArray(memo.entries)) {
+                            const matchEntry = memo.entries.find((e: any) => (e.name || '').toLowerCase().includes(q));
+                            if (matchEntry) matchedFishName = matchEntry.name;
+                          }
+
+                          if (nameMatch || mobileMatch || matchedFishName) {
                             seenSalesIds.add(dueId);
-                            const typeLabel = type === 'reseller' ? (t('reseller') || 'রিসেলার') : (type === 'regular' ? t('regularSeller') : t('aratdarSeller'));
-                            results.push({ 
-                              label: `${t('dueAccount')} (${typeLabel}): ${memo.name}`, 
-                              subtext: `বকেয়া তালিকা • ID: ${dueId}`,
-                              screen: 'sales-lots', 
-                              id: dueId,
-                              memoId: dueId,
-                              isSalesMemo: true
+                            const typeLabel = type === 'purchase'
+                              ? 'ক্রয় মহাজন'
+                              : type === 'reseller'
+                              ? 'রিসেলার'
+                              : type === 'permanent'
+                              ? 'আড়তদার'
+                              : 'রেগুলার';
+
+                            dueMemoResults.push({
+                              dueId,
+                              name: memo.name || 'ক্রেতা',
+                              type,
+                              typeLabel,
+                              matchedFish: matchedFishName || undefined
                             });
                           }
                         } catch (e) {}
@@ -1050,31 +1190,13 @@ function App() {
                 }
               });
 
-              // 3. Search Purchase Dues (dues_purchase)
-              const purchaseDuesStr = localStorage.getItem('dues_purchase');
-              if (purchaseDuesStr) {
-                try {
-                  JSON.parse(purchaseDuesStr).forEach((dueId: string) => {
-                    const memoStr = localStorage.getItem(`due_memo_${dueId}`);
-                    if (memoStr) {
-                      try {
-                        const memo = JSON.parse(memoStr);
-                        const name = (memo.name || '').toLowerCase();
-                        if (name.includes(q)) {
-                          results.push({
-                            label: `${t('dueAccount')} (ক্রয় মহাজন): ${memo.name}`,
-                            subtext: `ক্রয় বকেয়া`,
-                            screen: 'due-memo',
-                            id: dueId
-                          });
-                        }
-                      } catch (e) {}
-                    }
-                  });
-                } catch (e) {}
+              // 6. Purchase Lots Search
+              interface PurchaseLotResult {
+                lotNumber: number;
+                supplierName: string;
+                matchedFish?: string;
               }
-
-              // 4. Search Purchase Memos (lots by supplier name)
+              const purchaseLotResults: PurchaseLotResult[] = [];
               const purchaseLots = localStorage.getItem('purchase_lots_list');
               if (purchaseLots) {
                 try {
@@ -1083,13 +1205,20 @@ function App() {
                     if (memoStr) {
                       try {
                         const memo = JSON.parse(memoStr);
-                        const supplier = (memo.supplierName || '').toLowerCase();
-                        if (supplier.includes(q)) {
-                          results.push({ 
-                            label: `${t('purchaseAccount')}: ${memo.supplierName} (Lot ${lot})`, 
-                            subtext: `ক্রয় হিসাব লট ${lot}`,
-                            screen: 'memo', 
-                            lotNumber: lot 
+                        const supplierMatch = (memo.supplierName || '').toLowerCase().includes(q);
+                        const lotMatch = `লট ${lot}`.toLowerCase().includes(q) || String(lot) === q;
+
+                        let matchedFishName = '';
+                        if (Array.isArray(memo.entries)) {
+                          const matchEntry = memo.entries.find((e: any) => (e.name || '').toLowerCase().includes(q));
+                          if (matchEntry) matchedFishName = matchEntry.name;
+                        }
+
+                        if (supplierMatch || lotMatch || matchedFishName) {
+                          purchaseLotResults.push({
+                            lotNumber: lot,
+                            supplierName: memo.supplierName || 'মহাজন',
+                            matchedFish: matchedFishName || undefined
                           });
                         }
                       } catch (e) {}
@@ -1098,57 +1227,324 @@ function App() {
                 } catch (e) {}
               }
 
+              const totalMatches = stockResults.length + currentPurchaseItems.length + currentSalesItems.length + salesMemoResults.length + dueMemoResults.length + purchaseLotResults.length;
+
+              // Click Handlers
+              const handleSelectStock = (item: StockSearchResult) => {
+                setSearchQuery('');
+                if (currentScreen === 'stock') {
+                  window.dispatchEvent(new CustomEvent('highlight_stock_item', {
+                    detail: { fishName: item.fishName, lotNumber: item.lotNumber, serialNo: item.serialNo }
+                  }));
+                } else {
+                  navigateTo('stock');
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('highlight_stock_item', {
+                      detail: { fishName: item.fishName, lotNumber: item.lotNumber, serialNo: item.serialNo }
+                    }));
+                  }, 250);
+                }
+              };
+
+              const handleSelectPurchaseItem = (item: PurchaseItemResult) => {
+                setSearchQuery('');
+                window.dispatchEvent(new CustomEvent('highlight_purchase_memo_item', {
+                  detail: { entryId: item.entryId, fishName: item.fishName, serialNo: item.serialNo }
+                }));
+              };
+
+              const handleSelectSalesItem = (item: SalesItemResult) => {
+                setSearchQuery('');
+                window.dispatchEvent(new CustomEvent('highlight_sales_memo_item', {
+                  detail: { entryId: item.entryId, fishName: item.fishName }
+                }));
+              };
+
+              const handleSelectSalesMemo = (memo: SalesMemoResult) => {
+                setSearchQuery('');
+                if (currentScreen === 'sales-lots') {
+                  window.dispatchEvent(new CustomEvent('highlight_sales_memo', { 
+                    detail: { memoId: memo.memoId, lotNumber: memo.lotNumber } 
+                  }));
+                } else {
+                  navigateTo('sales-lots', { targetMemoId: memo.memoId });
+                }
+              };
+
+              const handleSelectDueMemo = (due: DueMemoResult) => {
+                setSearchQuery('');
+                navigateTo('due-memo', { dueId: due.dueId, isPaidDue: false, dueType: due.type as any });
+              };
+
+              const handleSelectPurchaseLot = (lot: PurchaseLotResult) => {
+                setSearchQuery('');
+                navigateTo('memo', { lot: lot.lotNumber });
+              };
+
+              // Reusable Section Header Component
+              const renderSectionHeader = (title: string, count: number, isHighlighted: boolean = false) => (
+                <div style={{
+                  padding: '6px 12px',
+                  background: isHighlighted ? 'rgba(114, 190, 68, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: '0.78rem',
+                  fontWeight: 'bold',
+                  color: isHighlighted ? '#72be44' : '#aaa'
+                }}>
+                  <span>{title}</span>
+                  <span style={{
+                    background: isHighlighted ? 'rgba(114, 190, 68, 0.3)' : 'rgba(255, 255, 255, 0.1)',
+                    color: isHighlighted ? '#fff' : '#ccc',
+                    padding: '1px 6px',
+                    borderRadius: '10px',
+                    fontSize: '0.72rem'
+                  }}>
+                    {count} টি
+                  </span>
+                </div>
+              );
+
               return (
                 <div className="search-results">
-                  {results.length === 0 ? (
-                    <p style={{ padding: '0.5rem', opacity: 0.7 }}>{t('noResults')} "{searchQuery}"</p>
+                  {totalMatches === 0 ? (
+                    <div style={{ padding: '1.2rem', textAlign: 'center', color: '#aaa' }}>
+                      <p style={{ margin: 0, fontSize: '0.9rem', color: '#fff' }}>
+                        {language === 'bn' ? `কোনো ফলাফল পাওয়া যায়নি "${searchQuery}"` : `No results found for "${searchQuery}"`}
+                      </p>
+                      <div style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '4px' }}>
+                        {language === 'bn' ? 'মাছের নাম, লট নম্বর, ক্রেতা বা মেমো নং লিখে খুঁজুন' : 'Search by fish, lot, customer or memo'}
+                      </div>
+                    </div>
                   ) : (
-                    results.map((r, i) => {
-                      const handleSelect = (e: React.MouseEvent) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setSearchQuery('');
-                        if (r.isSalesMemo || r.screen === 'sales-lots') {
-                          const targetId = r.memoId || r.id;
-                          if (currentScreen === 'sales-lots') {
-                            window.dispatchEvent(new CustomEvent('highlight_sales_memo', { 
-                              detail: { memoId: targetId, lotNumber: r.lotNumber } 
-                            }));
-                          } else {
-                            navigateTo('sales-lots', { targetMemoId: targetId });
-                          }
-                        } else if (r.screen === 'due-memo' && r.id) {
-                          navigateTo('due-memo', { dueId: r.id, isPaidDue: false, dueType: 'purchase' });
-                        } else if (r.screen === 'memo' && r.lotNumber) {
-                          navigateTo('memo', { lot: r.lotNumber });
-                        }
-                      };
-
-                      return (
-                        <div
-                          key={i}
-                          style={{ 
-                            padding: '0.6rem 1rem', 
-                            cursor: 'pointer', 
-                            borderBottom: '1px solid rgba(255,255,255,0.08)', 
-                            fontSize: '0.9rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '2px',
-                            textAlign: 'left'
-                          }}
-                          onMouseDown={handleSelect}
-                          onClick={handleSelect}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          <div style={{ fontWeight: 600 }}>{r.label}</div>
-                          {r.subtext && (
-                            <div style={{ fontSize: '0.75rem', opacity: 0.65 }}>{r.subtext}</div>
+                    <div>
+                      {/* ---------------- 1. STOCK SECTION ---------------- */}
+                      {stockResults.length > 0 && (
+                        <div>
+                          {renderSectionHeader(
+                            isStockContext 
+                              ? `মাছের স্টক হিসাব • ${stockResults.length}টি "${searchQuery}" পাওয়া গেছে`
+                              : 'মাছের স্টক হিসাব',
+                            stockResults.length,
+                            isStockContext
                           )}
+                          {stockResults.map((item, idx) => {
+                            const isOut = item.status === 'out_of_stock';
+                            const isLow = item.status === 'low_stock';
+                            const statusColor = isOut ? '#ff5252' : isLow ? '#ff9800' : '#72be44';
+                            const statusText = isOut ? 'স্টক শেষ' : isLow ? 'কম স্টক' : 'স্টকে আছে';
+
+                            return (
+                              <div
+                                key={`stock_${item.lotNumber}_${item.serialNo}_${idx}`}
+                                style={{
+                                  padding: '0.65rem 1rem',
+                                  cursor: 'pointer',
+                                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: '8px',
+                                  transition: 'background 0.15s'
+                                }}
+                                onMouseDown={() => handleSelectStock(item)}
+                                onClick={() => handleSelectStock(item)}
+                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(114, 190, 68, 0.15)')}
+                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                              >
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.92rem' }}>
+                                      {item.fishName}
+                                    </span>
+                                    <span style={{
+                                      fontSize: '0.72rem',
+                                      background: 'rgba(255,255,255,0.1)',
+                                      color: '#ffb74d',
+                                      padding: '1px 6px',
+                                      borderRadius: '4px',
+                                      fontWeight: 600
+                                    }}>
+                                      লট {item.lotNumber < 10 ? `০${item.lotNumber}` : item.lotNumber}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '2px' }}>
+                                    অবশিষ্ট: <b style={{ color: item.remainingKg > 0 ? '#72be44' : '#ff5252' }}>{item.remainingKg.toFixed(2)} কেজি</b>
+                                    {item.supplierName && <span> • আড়ত: {item.supplierName}</span>}
+                                  </div>
+                                </div>
+
+                                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 'bold',
+                                    color: statusColor,
+                                    background: `${statusColor}22`,
+                                    border: `1px solid ${statusColor}55`,
+                                    padding: '2px 7px',
+                                    borderRadius: '10px'
+                                  }}>
+                                    {statusText}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      );
-                    })
+                      )}
+
+                      {/* ---------------- 2. CURRENT PURCHASE MEMO FISH ---------------- */}
+                      {currentPurchaseItems.length > 0 && (
+                        <div>
+                          {renderSectionHeader('বর্তমান ক্রয় মেমোর মাছ', currentPurchaseItems.length, true)}
+                          {currentPurchaseItems.map((item, idx) => (
+                            <div
+                              key={`cur_pur_${item.entryId}_${idx}`}
+                              style={{
+                                padding: '0.6rem 1rem',
+                                cursor: 'pointer',
+                                borderBottom: '1px solid rgba(255,255,255,0.06)'
+                              }}
+                              onMouseDown={() => handleSelectPurchaseItem(item)}
+                              onClick={() => handleSelectPurchaseItem(item)}
+                              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(234, 179, 8, 0.15)')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                            >
+                              <div style={{ fontWeight: 'bold', color: '#facc15' }}>{item.fishName}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '2px' }}>
+                                ক্রমিক: #{item.serialNo} • পরিমাণ: {item.totalKg} কেজি • দর: ৳{item.rate}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* ---------------- 3. CURRENT SALES MEMO FISH ---------------- */}
+                      {currentSalesItems.length > 0 && (
+                        <div>
+                          {renderSectionHeader('বর্তমান বিক্রয় মেমোর মাছ', currentSalesItems.length, true)}
+                          {currentSalesItems.map((item, idx) => (
+                            <div
+                              key={`cur_sales_${item.entryId}_${idx}`}
+                              style={{
+                                padding: '0.6rem 1rem',
+                                cursor: 'pointer',
+                                borderBottom: '1px solid rgba(255,255,255,0.06)'
+                              }}
+                              onMouseDown={() => handleSelectSalesItem(item)}
+                              onClick={() => handleSelectSalesItem(item)}
+                              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(96, 165, 250, 0.15)')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                            >
+                              <div style={{ fontWeight: 'bold', color: '#60a5fa' }}>{item.fishName}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '2px' }}>
+                                পরিমাণ: {item.weightKg} কেজি • দর: ৳{item.saleRate}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* ---------------- 4. SALES MEMOS ---------------- */}
+                      {salesMemoResults.length > 0 && (
+                        <div>
+                          {renderSectionHeader('বিক্রয় মেমোসমূহ', salesMemoResults.length, isSalesLotsContext)}
+                          {salesMemoResults.map((memo, idx) => {
+                            let catLabel = 'সাধারণ ক্রেতা';
+                            if (memo.customerType === 'permanent') catLabel = 'আড়তদার';
+                            else if (memo.customerType === 'reseller') catLabel = 'রিসেলার';
+                            else if (memo.lotNumber !== null) catLabel = `লট ${memo.lotNumber}`;
+
+                            return (
+                              <div
+                                key={`sales_memo_${memo.memoId}_${idx}`}
+                                style={{
+                                  padding: '0.6rem 1rem',
+                                  cursor: 'pointer',
+                                  borderBottom: '1px solid rgba(255,255,255,0.06)'
+                                }}
+                                onMouseDown={() => handleSelectSalesMemo(memo)}
+                                onClick={() => handleSelectSalesMemo(memo)}
+                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: 'bold', color: '#fff' }}>
+                                    {memo.name}
+                                  </span>
+                                  <span style={{ fontSize: '0.72rem', color: '#60a5fa' }}>
+                                    #{memo.memoId}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '2px' }}>
+                                  {catLabel} • ৳{memo.amount.toLocaleString()} {memo.isDue ? '(বকেয়া)' : ''}
+                                  {memo.matchedFish && <span style={{ color: '#4ade80' }}> • মাছ: {memo.matchedFish}</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* ---------------- 5. PURCHASE LOTS ---------------- */}
+                      {purchaseLotResults.length > 0 && (
+                        <div>
+                          {renderSectionHeader('ক্রয় হিসাব (লট)', purchaseLotResults.length, isPurchaseMemoContext)}
+                          {purchaseLotResults.map((lot, idx) => (
+                            <div
+                              key={`pur_lot_${lot.lotNumber}_${idx}`}
+                              style={{
+                                padding: '0.6rem 1rem',
+                                cursor: 'pointer',
+                                borderBottom: '1px solid rgba(255,255,255,0.06)'
+                              }}
+                              onMouseDown={() => handleSelectPurchaseLot(lot)}
+                              onClick={() => handleSelectPurchaseLot(lot)}
+                              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                            >
+                              <div style={{ fontWeight: 'bold', color: '#fff' }}>
+                                লট {lot.lotNumber} — {lot.supplierName}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '2px' }}>
+                                ক্রয় হিসাব {lot.matchedFish ? `• মাছ: ${lot.matchedFish}` : ''}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* ---------------- 6. DUE MEMOS ---------------- */}
+                      {dueMemoResults.length > 0 && (
+                        <div>
+                          {renderSectionHeader('বকেয়া মেমোসমূহ', dueMemoResults.length, isDueContext)}
+                          {dueMemoResults.map((due, idx) => (
+                            <div
+                              key={`due_${due.dueId}_${idx}`}
+                              style={{
+                                padding: '0.6rem 1rem',
+                                cursor: 'pointer',
+                                borderBottom: '1px solid rgba(255,255,255,0.06)'
+                              }}
+                              onMouseDown={() => handleSelectDueMemo(due)}
+                              onClick={() => handleSelectDueMemo(due)}
+                              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                            >
+                              <div style={{ fontWeight: 'bold', color: '#fff' }}>
+                                {due.name} ({due.typeLabel})
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '2px' }}>
+                                বকেয়া মেমো • ID: {due.dueId}
+                                {due.matchedFish && <span style={{ color: '#4ade80' }}> • মাছ: {due.matchedFish}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               );

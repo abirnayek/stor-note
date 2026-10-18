@@ -148,6 +148,46 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, onBack, dueTy
   const [showAutoMessageModal, setShowAutoMessageModal] = useState(false);
   const [msgTimeframe, setMsgTimeframe] = useState<'24h' | '7d' | 'custom'>('7d');
   const [msgCustomDate, setMsgCustomDate] = useState<string>('');
+
+  // Search highlight & blinking animation state
+  const [highlightedEntryId, setHighlightedEntryId] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<any>(null);
+
+  useEffect(() => {
+    const handleHighlightDueItem = (e: any) => {
+      const { entryId, fishName } = e.detail || {};
+      let targetId = entryId;
+      if (!targetId && fishName) {
+        const found = memoState.entries.find(entry =>
+          entry.name && entry.name.toLowerCase().includes(fishName.toLowerCase())
+        );
+        if (found) targetId = found.id;
+      }
+      if (targetId) {
+        setHighlightedEntryId(targetId);
+        const attemptScroll = () => {
+          const rowEl = document.getElementById(`due-memo-entry-${targetId}`) ||
+                        (document.querySelector(`tr[data-entry-id="${targetId}"]`) as HTMLElement);
+          if (rowEl) {
+            rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        };
+        setTimeout(attemptScroll, 60);
+        setTimeout(attemptScroll, 200);
+
+        if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+        highlightTimeoutRef.current = setTimeout(() => {
+          setHighlightedEntryId(null);
+        }, 6000);
+      }
+    };
+
+    window.addEventListener('highlight_due_memo_item', handleHighlightDueItem);
+    return () => {
+      window.removeEventListener('highlight_due_memo_item', handleHighlightDueItem);
+      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+    };
+  }, [memoState.entries]);
   const [msgType, setMsgType] = useState<'whatsapp' | 'sms'>('whatsapp');
 
   const isMounted = useRef(false);
@@ -720,7 +760,13 @@ const DueMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, onBack, dueTy
                   const isLastRow = index === memoState.entries.length - 1;
 
                   return (
-                    <tr key={entry.id}>
+                    <tr
+                      key={entry.id}
+                      id={`due-memo-entry-${entry.id}`}
+                      data-entry-id={entry.id}
+                      data-fish-name={(entry.name || '').toLowerCase()}
+                      className={highlightedEntryId === entry.id ? 'search-highlight-blink' : ''}
+                    >
                       <td data-label="Sl No.">
                         <DebouncedInput 
                           placeholder="1"

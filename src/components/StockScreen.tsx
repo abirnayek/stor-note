@@ -32,6 +32,60 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
   // Admin permission state
   const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('device_permission') === 'admin');
 
+  // Search highlight & blinking animation state
+  const [highlightedRowKey, setHighlightedRowKey] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<any>(null);
+
+  useEffect(() => {
+    const handleHighlightStock = (e: any) => {
+      const { fishName, lotNumber, serialNo } = e.detail || {};
+      if (!fishName && !lotNumber) return;
+
+      // 1. Ensure detail table view is active
+      setViewMode('detail');
+
+      // 2. If a single lot is selected that doesn't match this lot, show all lots
+      setSelectedLot(prev => {
+        if (prev !== 'all' && prev !== lotNumber) {
+          return 'all';
+        }
+        return prev;
+      });
+
+      // 3. Reset filters so the row is definitely rendered
+      setStatusFilter('all');
+      setSearchQuery('');
+
+      const targetKey = `${lotNumber}-${serialNo}`;
+      setHighlightedRowKey(targetKey);
+
+      // 4. Smoothly scroll directly to that fish row
+      const attemptScroll = () => {
+        const rowEl = document.getElementById(`stock-fish-row-${lotNumber}-${serialNo}`) ||
+                      (document.querySelector(`tr[data-lot="${lotNumber}"][data-serial="${serialNo}"]`) as HTMLElement) ||
+                      (document.querySelector(`tr[data-fish-name="${(fishName || '').toLowerCase()}"][data-lot="${lotNumber}"]`) as HTMLElement);
+        if (rowEl) {
+          rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      };
+
+      setTimeout(attemptScroll, 60);
+      setTimeout(attemptScroll, 180);
+      setTimeout(attemptScroll, 380);
+
+      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = setTimeout(() => {
+        setHighlightedRowKey(null);
+      }, 6000);
+    };
+
+    window.addEventListener('highlight_stock_item', handleHighlightStock);
+    return () => {
+      window.removeEventListener('highlight_stock_item', handleHighlightStock);
+      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     const checkAdmin = () => {
       setIsAdmin(localStorage.getItem('device_permission') === 'admin');
@@ -1044,6 +1098,11 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                       return (
                         <tr
                           key={`${item.lotNumber}-${item.id}`}
+                          id={`stock-fish-row-${item.lotNumber}-${item.serialNo}`}
+                          data-lot={item.lotNumber}
+                          data-serial={item.serialNo}
+                          data-fish-name={(item.name || '').toLowerCase()}
+                          className={highlightedRowKey === `${item.lotNumber}-${item.serialNo}` ? 'search-highlight-blink' : ''}
                           style={{
                             borderBottom: '1px solid rgba(255,255,255,0.06)',
                             background: isLow 

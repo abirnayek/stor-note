@@ -158,6 +158,47 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   const [showBusinessCallMenu2, setShowBusinessCallMenu2] = useState(false);
   const [showDueModal, setShowDueModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+  // Search highlight & blinking animation state
+  const [highlightedEntryId, setHighlightedEntryId] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<any>(null);
+
+  useEffect(() => {
+    const handleHighlightItem = (e: any) => {
+      const { entryId, fishName } = e.detail || {};
+      let targetId = entryId;
+      if (!targetId && fishName) {
+        const found = memoState.entries.find(entry =>
+          entry.name && entry.name.toLowerCase().includes(fishName.toLowerCase())
+        );
+        if (found) targetId = found.id;
+      }
+
+      if (targetId) {
+        setHighlightedEntryId(targetId);
+        const attemptScroll = () => {
+          const rowEl = document.getElementById(`purchase-memo-row-${targetId}`) ||
+                        (document.querySelector(`tr[data-entry-id="${targetId}"]`) as HTMLElement);
+          if (rowEl) {
+            rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        };
+        setTimeout(attemptScroll, 60);
+        setTimeout(attemptScroll, 200);
+
+        if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+        highlightTimeoutRef.current = setTimeout(() => {
+          setHighlightedEntryId(null);
+        }, 6000);
+      }
+    };
+
+    window.addEventListener('highlight_purchase_memo_item', handleHighlightItem);
+    return () => {
+      window.removeEventListener('highlight_purchase_memo_item', handleHighlightItem);
+      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+    };
+  }, [memoState.entries]);
   const [newPassword, setNewPassword] = useState('');
   const [lotStock, setLotStock] = useState<LotStockSummary | null>(null);
 
@@ -914,7 +955,13 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                   const isLastRow = index === memoState.entries.length - 1;
 
                   return (
-                    <tr key={entry.id}>
+                    <tr
+                      key={entry.id}
+                      id={`purchase-memo-row-${entry.id}`}
+                      data-entry-id={entry.id}
+                      data-fish-name={(entry.name || '').toLowerCase()}
+                      className={highlightedEntryId === entry.id ? 'search-highlight-blink' : ''}
+                    >
                       <td data-label="#" style={{ textAlign: 'center', opacity: 0.7 }}>{formatNumber(index + 1)}</td>
                       <td data-label={t('fishName')}>
                         <DebouncedInput

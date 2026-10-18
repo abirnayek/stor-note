@@ -330,6 +330,46 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const [showCustomerCallMenu, setShowCustomerCallMenu] = useState(false);
   const [currentLotStock, setCurrentLotStock] = useState<LotStockSummary | null>(null);
 
+  // Search highlight & blinking animation state
+  const [highlightedEntryId, setHighlightedEntryId] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<any>(null);
+
+  useEffect(() => {
+    const handleHighlightSalesItem = (e: any) => {
+      const { entryId, fishName } = e.detail || {};
+      let targetId = entryId;
+      if (!targetId && fishName) {
+        const found = memoState.entries.find(entry =>
+          entry.name && entry.name.toLowerCase().includes(fishName.toLowerCase())
+        );
+        if (found) targetId = found.id;
+      }
+      if (targetId) {
+        setHighlightedEntryId(targetId);
+        const attemptScroll = () => {
+          const rowEl = document.getElementById(`sales-memo-entry-${targetId}`) ||
+                        (document.querySelector(`tr[data-entry-id="${targetId}"]`) as HTMLElement);
+          if (rowEl) {
+            rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        };
+        setTimeout(attemptScroll, 60);
+        setTimeout(attemptScroll, 200);
+
+        if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+        highlightTimeoutRef.current = setTimeout(() => {
+          setHighlightedEntryId(null);
+        }, 6000);
+      }
+    };
+
+    window.addEventListener('highlight_sales_memo_item', handleHighlightSalesItem);
+    return () => {
+      window.removeEventListener('highlight_sales_memo_item', handleHighlightSalesItem);
+      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+    };
+  }, [memoState.entries]);
+
   useEffect(() => {
     const rawLot = memoState.lotNumberInput ? parseInt(memoState.lotNumberInput, 10) : lotNumber;
     if (rawLot && !isNaN(rawLot) && rawLot > 0) {
@@ -1967,7 +2007,10 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                   return (
                     <tr 
                       key={entry.id}
+                      id={`sales-memo-entry-${entry.id}`}
                       data-entry-id={entry.id}
+                      data-fish-name={(entry.name || '').toLowerCase()}
+                      className={highlightedEntryId === entry.id ? 'search-highlight-blink' : ''}
                       style={{
                         backgroundColor: activePalette ? activePalette.bg : undefined,
                         boxShadow: activePalette ? `inset 4px 0 0 ${activePalette.border}` : undefined,
