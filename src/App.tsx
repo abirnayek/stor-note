@@ -36,6 +36,7 @@ export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category'
 
 export interface NavSnapshot {
   screen: Screen;
+  folderId?: string | null;
   lot?: number | null;
   salesLot?: number | null;
   salesMemoId?: string | null;
@@ -55,33 +56,39 @@ export interface NavSnapshot {
 const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
   switch (current.screen) {
     case 'reseller':
-      return { screen: current.resellerReturnScreen === 'dashboard' ? 'dashboard' : 'sales-lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', resellerReturnScreen: current.resellerReturnScreen, dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      if (current.folderId) {
+        return { screen: 'reseller', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', resellerReturnScreen: current.resellerReturnScreen, dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
+      return { screen: current.resellerReturnScreen === 'dashboard' ? 'dashboard' : 'sales-lots', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', resellerReturnScreen: current.resellerReturnScreen, dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'aratdar':
-      return { screen: 'sales-lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      if (current.folderId) {
+        return { screen: 'aratdar', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
+      return { screen: 'sales-lots', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'memo':
-      return { screen: 'lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      return { screen: 'lots', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'lots':
     case 'password':
-      return { screen: 'dashboard', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      return { screen: 'dashboard', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'sales-memo':
       if (current.salesMemoReturnScreen === 'reseller') {
-        return { screen: 'reseller', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'reseller', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+        return { screen: 'reseller', folderId: current.folderId || null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'reseller', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
       if (current.salesMemoReturnScreen === 'aratdar') {
-        return { screen: 'aratdar', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'aratdar', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+        return { screen: 'aratdar', folderId: current.folderId || null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'aratdar', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
       if (current.salesMemoReturnScreen === 'sales-memo-list') {
-        return { screen: 'sales-memo-list', lot: null, salesLot: current.salesLot || 1, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+        return { screen: 'sales-memo-list', folderId: null, lot: null, salesLot: current.salesLot || 1, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
       if (current.salesMemoReturnScreen === 'sales-month-memos' && current.selectedMonth !== null && current.selectedMonth !== undefined) {
-        return { screen: 'sales-month-memos', selectedMonth: current.selectedMonth, selectedYear: current.selectedYear, lot: null, salesLot: current.salesLot, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+        return { screen: 'sales-month-memos', folderId: null, selectedMonth: current.selectedMonth, selectedYear: current.selectedYear, lot: null, salesLot: current.salesLot, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
-      return { screen: 'sales-lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      return { screen: 'sales-lots', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'sales-month-memos':
     case 'sales-memo-list':
-      return { screen: 'sales-lots', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      return { screen: 'sales-lots', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'sales-lots':
-      return { screen: 'dashboard', lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      return { screen: 'dashboard', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'due-sales-memo':
     case 'due-memo':
       if (current.isPaidDue) {
@@ -396,6 +403,7 @@ function App() {
   }, [session]);
   
   const [currentScreen, setCurrentScreen] = useState<Screen>('dashboard');
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [currentLot, setCurrentLot] = useState<number | null>(null);
   const [currentSalesLot, setCurrentSalesLot] = useState<number | null>(null);
   const [currentSalesMemoId, setCurrentSalesMemoId] = useState<string | null>(null);
@@ -471,6 +479,7 @@ function App() {
 
   const navStackRef = useRef<NavSnapshot[]>([{
     screen: 'dashboard',
+    folderId: null,
     lot: null,
     salesLot: null,
     salesMemoId: null,
@@ -486,6 +495,7 @@ function App() {
 
   const applySnapshot = (snapshot: NavSnapshot) => {
     setCurrentScreen(snapshot.screen);
+    setCurrentFolderId(snapshot.folderId ?? null);
     setCurrentLot(snapshot.lot ?? null);
     setCurrentSalesLot(snapshot.salesLot ?? null);
     setCurrentSalesMemoId(snapshot.salesMemoId ?? null);
@@ -591,8 +601,15 @@ function App() {
     // 2. If stack has history, pop exactly 1 step
     if (navStackRef.current.length > 1) {
       navStackRef.current.pop();
-      // Skip duplicate entries of same screen if any
-      while (navStackRef.current.length > 1 && navStackRef.current[navStackRef.current.length - 1].screen === currentScreen) {
+      // Skip duplicate entries of exact same screen and folder state if any
+      while (
+        navStackRef.current.length > 1 && 
+        navStackRef.current[navStackRef.current.length - 1].screen === currentScreen &&
+        (navStackRef.current[navStackRef.current.length - 1].folderId ?? null) === (currentFolderId ?? null) &&
+        (navStackRef.current[navStackRef.current.length - 1].salesLot ?? null) === (currentSalesLot ?? null) &&
+        (navStackRef.current[navStackRef.current.length - 1].salesMemoId ?? null) === (currentSalesMemoId ?? null) &&
+        (navStackRef.current[navStackRef.current.length - 1].selectedMonth ?? null) === (selectedMonth ?? null)
+      ) {
         navStackRef.current.pop();
       }
       const targetSnapshot = navStackRef.current[navStackRef.current.length - 1];
@@ -610,6 +627,7 @@ function App() {
     // 3. Fallback if at root of navStack (e.g. refreshed page or deep-link)
     const currentTop = navStackRef.current[0] || {
       screen: currentScreen,
+      folderId: currentFolderId,
       lot: currentLot,
       salesLot: currentSalesLot,
       salesMemoId: currentSalesMemoId,
@@ -628,6 +646,11 @@ function App() {
     if (fallbackScreen) {
       targetSnapshot = {
         screen: fallbackScreen,
+        folderId: fallbackParams?.folderId !== undefined 
+          ? fallbackParams.folderId 
+          : (fallbackScreen === currentScreen 
+              ? currentFolderId 
+              : ((fallbackScreen === 'aratdar' || fallbackScreen === 'reseller') ? (currentTop.folderId ?? null) : null)),
         lot: fallbackParams?.lot !== undefined ? fallbackParams.lot : (fallbackScreen === 'memo' ? currentLot : null),
         salesLot: fallbackParams?.salesLot !== undefined ? fallbackParams.salesLot : (fallbackScreen.startsWith('sales-') ? currentSalesLot : null),
         salesMemoId: fallbackParams?.salesMemoId !== undefined ? fallbackParams.salesMemoId : null,
@@ -656,7 +679,16 @@ function App() {
     replace: boolean = false
   ) => {
     const currentTop = navStackRef.current[navStackRef.current.length - 1];
-    if (nextScreen === currentTop?.screen && !params && !replace) return;
+    if (
+      nextScreen === currentTop?.screen &&
+      !replace &&
+      (!params || (
+        (params.folderId ?? null) === (currentTop.folderId ?? null) &&
+        (params.salesLot ?? null) === (currentTop.salesLot ?? null) &&
+        (params.salesMemoId ?? null) === (currentTop.salesMemoId ?? null) &&
+        (params.selectedMonth ?? null) === (currentTop.selectedMonth ?? null)
+      ))
+    ) return;
 
     // Prevent viewer from accessing restricted sections
     const currentPerm = localStorage.getItem('device_permission') || 'admin';
@@ -691,6 +723,9 @@ function App() {
 
     const nextSnapshot: NavSnapshot = {
       screen: nextScreen,
+      folderId: params?.folderId !== undefined 
+        ? params.folderId 
+        : (nextScreen === currentScreen || nextScreen === 'sales-memo' ? currentFolderId : null),
       lot: params?.lot !== undefined ? params.lot : (nextScreen === 'memo' ? currentLot : null),
       salesLot: params?.salesLot !== undefined ? params.salesLot : (nextScreen.startsWith('sales-') ? currentSalesLot : null),
       salesMemoId: params?.salesMemoId !== undefined ? params.salesMemoId : (nextScreen === 'sales-memo' ? currentSalesMemoId : null),
@@ -731,6 +766,7 @@ function App() {
   useEffect(() => {
     const rootSnapshot: NavSnapshot = {
       screen: 'dashboard',
+      folderId: null,
       lot: null,
       salesLot: null,
       salesMemoId: null,
@@ -1428,7 +1464,10 @@ function App() {
           {currentScreen === 'sales-memo' && currentSalesMemoId !== null && (
             <SalesMemoScreen 
               onNavigate={handleNavigate} 
-              onBack={() => navigateBack(salesMemoReturnScreen, { salesLot: currentSalesLot ?? undefined })}
+              onBack={() => navigateBack(salesMemoReturnScreen, { 
+                salesLot: currentSalesLot ?? undefined,
+                folderId: currentFolderId ?? undefined
+              })}
               lotNumber={currentSalesLot} 
               memoId={currentSalesMemoId}
               onLotChange={(lot) => {
@@ -1449,13 +1488,28 @@ function App() {
           {currentScreen === 'reseller' && (
             <ResellerScreen
               onNavigate={handleNavigate}
-              onBack={() => navigateBack(resellerReturnScreen === 'dashboard' ? 'dashboard' : 'sales-lots')}
-              onSelectMemo={(memoId, lotNumber) => {
+              onBack={() => {
+                if (currentFolderId) {
+                  navigateBack('reseller', { folderId: null });
+                } else {
+                  navigateBack(resellerReturnScreen === 'dashboard' ? 'dashboard' : 'sales-lots');
+                }
+              }}
+              initialFolderId={currentFolderId}
+              onFolderChange={(folderId) => {
+                if (folderId) {
+                  navigateTo('reseller', { folderId });
+                } else {
+                  navigateBack('reseller', { folderId: null });
+                }
+              }}
+              onSelectMemo={(memoId, lotNumber, folderId) => {
                 navigateTo('sales-memo', {
                   salesLot: lotNumber,
                   salesMemoId: memoId,
                   salesMemoReturnScreen: 'reseller',
-                  resellerReturnScreen: resellerReturnScreen
+                  resellerReturnScreen: resellerReturnScreen,
+                  folderId: folderId || currentFolderId
                 });
               }}
             />
@@ -1463,12 +1517,27 @@ function App() {
           {currentScreen === 'aratdar' && (
             <AratdarScreen
               onNavigate={handleNavigate}
-              onBack={() => navigateBack('sales-lots')}
-              onSelectMemo={(memoId, lotNumber) => {
+              onBack={() => {
+                if (currentFolderId) {
+                  navigateBack('aratdar', { folderId: null });
+                } else {
+                  navigateBack('sales-lots');
+                }
+              }}
+              initialFolderId={currentFolderId}
+              onFolderChange={(folderId) => {
+                if (folderId) {
+                  navigateTo('aratdar', { folderId });
+                } else {
+                  navigateBack('aratdar', { folderId: null });
+                }
+              }}
+              onSelectMemo={(memoId, lotNumber, folderId) => {
                 navigateTo('sales-memo', {
                   salesLot: lotNumber,
                   salesMemoId: memoId,
-                  salesMemoReturnScreen: 'aratdar'
+                  salesMemoReturnScreen: 'aratdar',
+                  folderId: folderId || currentFolderId
                 });
               }}
             />

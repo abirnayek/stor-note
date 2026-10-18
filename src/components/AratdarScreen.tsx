@@ -12,8 +12,10 @@ import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 
 interface AratdarScreenProps {
   onNavigate: (screen: Screen) => void;
-  onSelectMemo: (memoId: string, lotNumber: number | null) => void;
+  onSelectMemo: (memoId: string, lotNumber: number | null, folderId?: string | null) => void;
   onBack?: () => void;
+  initialFolderId?: string | null;
+  onFolderChange?: (folderId: string | null) => void;
 }
 
 export interface MemoFolder {
@@ -26,10 +28,10 @@ export interface MemoFolder {
 
 const ARATDAR_FOLDERS_KEY = 'aratdar_folders';
 
-const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo, onBack }) => {
+const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo, onBack, initialFolderId, onFolderChange }) => {
   const [memos, setMemos] = useState<SalesMemoGlobalItem[]>([]);
   const [folders, setFolders] = useState<MemoFolder[]>([]);
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(initialFolderId || null);
   const [activeTab, setActiveTab] = useState<'folders' | 'all'>('folders');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'due' | 'paid'>('all');
@@ -80,6 +82,10 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
     window.addEventListener('storage', handleSync);
     return () => window.removeEventListener('storage', handleSync);
   }, []);
+
+  useEffect(() => {
+    setSelectedFolderId(initialFolderId || null);
+  }, [initialFolderId]);
 
   const saveFoldersToStorage = (updated: MemoFolder[]) => {
     setFolders(updated);
@@ -186,6 +192,7 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
 
       if (selectedFolderId === folder.id) {
         setSelectedFolderId(null);
+        onFolderChange?.(null);
       }
       loadMemos();
     }
@@ -243,7 +250,7 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
     } catch (e) {}
 
     window.dispatchEvent(new Event('storage'));
-    onSelectMemo(nextId, null);
+    onSelectMemo(nextId, null, activeFolder ? activeFolder.id : selectedFolderId);
   };
 
   const handleDeleteMemo = (memo: SalesMemoGlobalItem, e: React.MouseEvent) => {
@@ -331,7 +338,12 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
             onClick={(e) => {
               e.stopPropagation();
               if (selectedFolderId) {
-                setSelectedFolderId(null);
+                if (onBack) {
+                  onBack();
+                } else {
+                  setSelectedFolderId(null);
+                  onFolderChange?.(null);
+                }
               } else if (onBack) {
                 onBack();
               } else {
@@ -548,7 +560,14 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
         {selectedFolderId ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
-              onClick={() => setSelectedFolderId(null)}
+              onClick={() => {
+                if (onBack) {
+                  onBack();
+                } else {
+                  setSelectedFolderId(null);
+                  onFolderChange?.(null);
+                }
+              }}
               style={{
                 background: 'rgba(171, 71, 188, 0.15)',
                 color: '#e1bee7',
@@ -716,7 +735,10 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                     passwordKey={folderPwdKey}
                     name={folder.name}
                     type="folder"
-                    onAccessGranted={() => setSelectedFolderId(folder.id)}
+                    onAccessGranted={() => {
+                      setSelectedFolderId(folder.id);
+                      onFolderChange?.(folder.id);
+                    }}
                     onDragOver={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -937,7 +959,7 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                       passwordKey={`memo_password_sales_memo_${memo.id}`}
                       name={memo.name || `মেমো #${memo.id}`}
                       type="memo"
-                      onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}
+                      onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber, selectedFolderId)}
                     >
                       <div
                         className="lot-card action-card"
@@ -1167,7 +1189,7 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
                     passwordKey={`memo_password_sales_memo_${memo.id}`}
                     name={memo.name || `মেমো #${memo.id}`}
                     type="memo"
-                    onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}
+                    onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber, selectedFolderId)}
                   >
                     <div
                       className="lot-card action-card"
