@@ -1216,28 +1216,14 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     }
   }
 
-  // Net Profit & Loss after Commission
-  let totalProfitAmount = 0;
-  let totalLossAmount = 0;
+  // Net Profit & Loss after Deductions and Commission
+  // 1. Gross Profit & Loss from fish entries
+  const totalProfitAmount = Math.round(grossProfit * 100) / 100;
+  const totalLossAmount = Math.round(grossLoss * 100) / 100;
 
-  if (commOp === 'subtract') {
-    const netProfit = grossProfit - commissionAmount;
-    if (netProfit >= 0) {
-      totalProfitAmount = Math.round(netProfit * 100) / 100;
-      totalLossAmount = Math.round(grossLoss * 100) / 100;
-    } else {
-      // Commission exceeds profit: difference becomes a real loss!
-      totalProfitAmount = 0;
-      totalLossAmount = Math.round((grossLoss + Math.abs(netProfit)) * 100) / 100;
-    }
-  } else {
-    // Commission is added: increases profit
-    totalProfitAmount = Math.round((grossProfit + commissionAmount) * 100) / 100;
-    totalLossAmount = Math.round(grossLoss * 100) / 100;
-  }
-
-  // Net Profit (মোট লাভ - মোট লস)
-  const netProfitOrLoss = Math.round((totalProfitAmount - totalLossAmount) * 100) / 100;
+  // 2. Net Profit = Gross Profit - Gross Loss - Deductions/Expenses (গাড়ি ভাড়া, বরফ কেনা ইত্যাদি) - Subtracted Commission (or + Added Commission)
+  const commDelta = commOp === 'subtract' ? -commissionAmount : commissionAmount;
+  const netProfitOrLoss = Math.round((grossProfit - grossLoss - totalDeductions + commDelta) * 100) / 100;
 
   let grandTotal = 0;
   if (commOp === 'subtract') {
@@ -1476,22 +1462,27 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 )}
               </div>
 
-              {/* Box 4: নিট লাভ (মোট লাভ - মোট লস) */}
-              <div style={{
-                background: netProfitOrLoss >= 0 
-                  ? 'linear-gradient(145deg, rgba(20, 83, 45, 0.6) 0%, rgba(6, 46, 24, 0.9) 100%)'
-                  : 'linear-gradient(145deg, rgba(127, 29, 29, 0.45) 0%, rgba(69, 10, 10, 0.9) 100%)',
-                border: netProfitOrLoss >= 0 
-                  ? '1.5px solid rgba(74, 222, 128, 0.7)' 
-                  : '1.5px solid rgba(248, 113, 113, 0.8)',
-                borderRadius: '8px',
-                padding: '4px 10px',
-                minWidth: '95px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
-              }}>
+              {/* Box 4: নিট লাভ (মোট লাভ - খরচ/কর্তন - মোট লস) */}
+              <div 
+                style={{
+                  background: netProfitOrLoss >= 0 
+                    ? 'linear-gradient(145deg, rgba(20, 83, 45, 0.6) 0%, rgba(6, 46, 24, 0.9) 100%)'
+                    : 'linear-gradient(145deg, rgba(127, 29, 29, 0.45) 0%, rgba(69, 10, 10, 0.9) 100%)',
+                  border: netProfitOrLoss >= 0 
+                    ? '1.5px solid rgba(74, 222, 128, 0.7)' 
+                    : '1.5px solid rgba(248, 113, 113, 0.8)',
+                  borderRadius: '8px',
+                  padding: '4px 10px',
+                  minWidth: '95px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
+                }}
+                title={language === 'bn' 
+                  ? `নিট লাভ = মোট লাভ (৳${grossProfit.toFixed(2)}) - মোট লস (৳${grossLoss.toFixed(2)})${totalDeductions > 0 ? ` - খরচ/কর্তন (৳${totalDeductions.toFixed(2)})` : ''}${commissionAmount > 0 ? (commOp === 'subtract' ? ` - কমিশন (৳${commissionAmount.toFixed(2)})` : ` + কমিশন (৳${commissionAmount.toFixed(2)})`) : ''}`
+                  : `Net Profit = Profit - Loss - Deductions`}
+              >
                 <span style={{ 
                   fontSize: '0.72rem', 
                   color: netProfitOrLoss >= 0 ? '#86efac' : '#fca5a5', 
