@@ -1462,6 +1462,42 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 )}
               </div>
 
+              {/* Box 3.5: মোট খরচ (গাড়ি ভাড়া, বরফ ইত্যাদি কর্তন) */}
+              <div style={{
+                background: totalDeductions > 0 
+                  ? 'linear-gradient(145deg, rgba(180, 83, 9, 0.45) 0%, rgba(120, 53, 15, 0.85) 100%)' 
+                  : 'linear-gradient(145deg, rgba(40, 40, 40, 0.35) 0%, rgba(20, 20, 20, 0.8) 100%)',
+                border: totalDeductions > 0 
+                  ? '1.5px solid rgba(245, 158, 11, 0.7)' 
+                  : '1.5px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: '8px',
+                padding: '4px 10px',
+                minWidth: '90px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
+              }}
+              title={language === 'bn' ? `মেমোর মোট কর্তন ও খরচ (গাড়ি ভাড়া, বরফ ইত্যাদি): ৳ ${totalDeductions.toFixed(2)}` : `Total Memo Expenses & Deductions: ৳ ${totalDeductions.toFixed(2)}`}
+              >
+                <span style={{ 
+                  fontSize: '0.72rem', 
+                  color: totalDeductions > 0 ? '#fde68a' : '#94a3b8', 
+                  fontWeight: 600, 
+                  whiteSpace: 'nowrap' 
+                }}>
+                  {language === 'bn' ? 'মোট খরচ' : 'Total Expense'}
+                </span>
+                <span style={{ 
+                  fontSize: '0.96rem', 
+                  color: totalDeductions > 0 ? '#fbbf24' : '#94a3b8', 
+                  fontWeight: 700, 
+                  whiteSpace: 'nowrap' 
+                }}>
+                  {totalDeductions > 0 ? `- ৳ ${totalDeductions.toFixed(2)}` : '৳ 0.00'}
+                </span>
+              </div>
+
               {/* Box 4: নিট লাভ (মোট লাভ - খরচ/কর্তন - মোট লস) */}
               <div 
                 style={{
