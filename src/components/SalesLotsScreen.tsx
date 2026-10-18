@@ -46,25 +46,40 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
 
   const triggerHighlightMemo = (memoId: string) => {
     if (!memoId) return;
+    const cleanId = String(memoId).replace(/^sales_memo_/, '').replace(/^due_memo_/, '').trim();
     setMemoFilter('all');
-    setHighlightedMemoId(memoId);
+    setHighlightedMemoId(cleanId);
 
     if (highlightTimeoutRef.current) {
       clearTimeout(highlightTimeoutRef.current);
     }
 
-    // Scroll smoothly to memo card
-    setTimeout(() => {
-      const el = document.getElementById(`sales-memo-card-${memoId}`) || document.getElementById(`memo-card-${memoId}`);
+    const scrollToCard = () => {
+      const el = document.getElementById(`sales-memo-card-${cleanId}`) || 
+                 document.getElementById(`sales-memo-card-${memoId}`) || 
+                 (document.querySelector(`[data-memo-id="${cleanId}"]`) as HTMLElement) ||
+                 (document.querySelector(`[data-memo-id="${memoId}"]`) as HTMLElement);
+
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 150);
 
-    // Keep highlighted for 5 seconds so user has plenty of time to recognize
+        const contentEl = document.querySelector('.content') as HTMLElement;
+        if (contentEl) {
+          const contentRect = contentEl.getBoundingClientRect();
+          const cardRect = el.getBoundingClientRect();
+          const targetTop = contentEl.scrollTop + (cardRect.top - contentRect.top) - (contentRect.height / 2) + (cardRect.height / 2);
+          contentEl.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+        }
+      }
+    };
+
+    setTimeout(scrollToCard, 60);
+    setTimeout(scrollToCard, 200);
+    setTimeout(scrollToCard, 450);
+
     highlightTimeoutRef.current = setTimeout(() => {
-      setHighlightedMemoId((prev) => (prev === memoId ? null : prev));
-    }, 5000);
+      setHighlightedMemoId((prev) => (prev === cleanId || prev === memoId ? null : prev));
+    }, 7000);
   };
 
   useEffect(() => {
@@ -138,11 +153,21 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
 
   const lotMemosCount = globalMemos.filter(m => m.lotNumber !== null).length;
 
-  const filteredGlobalMemos = globalMemos.filter(m => {
+  const filteredGlobalMemos = [...globalMemos].filter(m => {
     if (memoFilter === 'lots') return m.lotNumber !== null;
     if (memoFilter === 'aratdar') return m.customerType === 'permanent';
     if (memoFilter === 'reseller') return m.customerType === 'reseller';
     return true;
+  }).sort((a, b) => {
+    if (highlightedMemoId) {
+      const cleanA = String(a.id).replace(/^sales_memo_/, '').replace(/^due_memo_/, '');
+      const cleanB = String(b.id).replace(/^sales_memo_/, '').replace(/^due_memo_/, '');
+      const matchA = a.id === highlightedMemoId || cleanA === highlightedMemoId || cleanA.includes(highlightedMemoId);
+      const matchB = b.id === highlightedMemoId || cleanB === highlightedMemoId || cleanB.includes(highlightedMemoId);
+      if (matchA && !matchB) return -1;
+      if (!matchA && matchB) return 1;
+    }
+    return 0;
   });
 
   const getMonthStats = (mIndex: number, yr: number) => {
@@ -901,33 +926,46 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
             type="memo"
             onAccessGranted={() => onSelectMemo(memo.id, memo.lotNumber)}
           >
-            <div 
-              className={`lot-card ${highlightedMemoId === memo.id ? 'highlighted-memo-card' : ''}`}
-              id={`sales-memo-card-${memo.id}`}
-              draggable={true}
-              onDragStart={(e) => {
-                e.stopPropagation();
-                e.dataTransfer.setData('text/plain', memo.id);
-                e.dataTransfer.setData('application/memo-id', memo.id);
-                e.dataTransfer.effectAllowed = 'move';
-                setDraggedMemoId(memo.id);
-                (window as any).__draggedMemoId = memo.id;
-              }}
-              onDragEnd={() => {
-                setDraggedMemoId(null);
-                setDragOverLotNumber(null);
-                (window as any).__draggedMemoId = null;
-              }}
-              style={{
-                cursor: 'grab',
-                opacity: draggedMemoId === memo.id ? 0.35 : 1,
-                boxShadow: highlightedMemoId === memo.id 
-                  ? '0 0 25px #ffd700, 0 0 10px #ffb300, inset 0 0 15px rgba(255, 215, 0, 0.3)' 
-                  : (draggedMemoId === memo.id ? '0 0 16px rgba(255, 183, 77, 0.5)' : undefined),
-                borderColor: highlightedMemoId === memo.id ? '#ffd700' : undefined,
-                transition: 'all 0.25s ease'
-              }}
-            >
+            {(() => {
+              const cleanId = String(memo.id).replace(/^sales_memo_/, '').replace(/^due_memo_/, '');
+              const isHighlighted = Boolean(
+                highlightedMemoId && (
+                  highlightedMemoId === memo.id || 
+                  highlightedMemoId === cleanId || 
+                  cleanId.includes(highlightedMemoId) || 
+                  highlightedMemoId.includes(cleanId)
+                )
+              );
+
+              return (
+                <div 
+                  className={`lot-card ${isHighlighted ? 'highlighted-memo-card' : ''}`}
+                  id={`sales-memo-card-${memo.id}`}
+                  data-memo-id={memo.id}
+                  draggable={true}
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    e.dataTransfer.setData('text/plain', memo.id);
+                    e.dataTransfer.setData('application/memo-id', memo.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                    setDraggedMemoId(memo.id);
+                    (window as any).__draggedMemoId = memo.id;
+                  }}
+                  onDragEnd={() => {
+                    setDraggedMemoId(null);
+                    setDragOverLotNumber(null);
+                    (window as any).__draggedMemoId = null;
+                  }}
+                  style={{
+                    cursor: 'grab',
+                    opacity: draggedMemoId === memo.id ? 0.35 : 1,
+                    boxShadow: isHighlighted 
+                      ? '0 0 25px #ffd700, 0 0 10px #ffb300, inset 0 0 15px rgba(255, 215, 0, 0.3)' 
+                      : (draggedMemoId === memo.id ? '0 0 16px rgba(255, 183, 77, 0.5)' : undefined),
+                    borderColor: isHighlighted ? '#ffd700' : undefined,
+                    transition: 'all 0.25s ease'
+                  }}
+                >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1000,8 +1038,10 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                 </span>
               </div>
             </div>
-          </ProtectedMemoWrapper>
-        ))}
+          );
+        })()}
+      </ProtectedMemoWrapper>
+    ))}
       </div>
 
 

@@ -1064,45 +1064,52 @@ function App() {
                   {results.length === 0 ? (
                     <p style={{ padding: '0.5rem', opacity: 0.7 }}>{t('noResults')} "{searchQuery}"</p>
                   ) : (
-                    results.map((r, i) => (
-                      <div
-                        key={i}
-                        style={{ 
-                          padding: '0.55rem 1rem', 
-                          cursor: 'pointer', 
-                          borderBottom: '1px solid rgba(255,255,255,0.08)', 
-                          fontSize: '0.9rem',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '2px',
-                          textAlign: 'left'
-                        }}
-                        onClick={() => {
-                          setSearchQuery('');
-                          if (r.isSalesMemo || r.screen === 'sales-lots') {
-                            const targetId = r.memoId || r.id;
-                            if (currentScreen === 'sales-lots') {
-                              window.dispatchEvent(new CustomEvent('highlight_sales_memo', { 
-                                detail: { memoId: targetId, lotNumber: r.lotNumber } 
-                              }));
-                            } else {
-                              navigateTo('sales-lots', { targetMemoId: targetId });
-                            }
-                          } else if (r.screen === 'due-memo' && r.id) {
-                            navigateTo('due-memo', { dueId: r.id, isPaidDue: false, dueType: 'purchase' });
-                          } else if (r.screen === 'memo' && r.lotNumber) {
-                            navigateTo('memo', { lot: r.lotNumber });
+                    results.map((r, i) => {
+                      const handleSelect = (e: React.MouseEvent) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSearchQuery('');
+                        if (r.isSalesMemo || r.screen === 'sales-lots') {
+                          const targetId = r.memoId || r.id;
+                          if (currentScreen === 'sales-lots') {
+                            window.dispatchEvent(new CustomEvent('highlight_sales_memo', { 
+                              detail: { memoId: targetId, lotNumber: r.lotNumber } 
+                            }));
+                          } else {
+                            navigateTo('sales-lots', { targetMemoId: targetId });
                           }
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <div style={{ fontWeight: 600 }}>{r.label}</div>
-                        {r.subtext && (
-                          <div style={{ fontSize: '0.75rem', opacity: 0.65 }}>{r.subtext}</div>
-                        )}
-                      </div>
-                    ))
+                        } else if (r.screen === 'due-memo' && r.id) {
+                          navigateTo('due-memo', { dueId: r.id, isPaidDue: false, dueType: 'purchase' });
+                        } else if (r.screen === 'memo' && r.lotNumber) {
+                          navigateTo('memo', { lot: r.lotNumber });
+                        }
+                      };
+
+                      return (
+                        <div
+                          key={i}
+                          style={{ 
+                            padding: '0.6rem 1rem', 
+                            cursor: 'pointer', 
+                            borderBottom: '1px solid rgba(255,255,255,0.08)', 
+                            fontSize: '0.9rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '2px',
+                            textAlign: 'left'
+                          }}
+                          onMouseDown={handleSelect}
+                          onClick={handleSelect}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <div style={{ fontWeight: 600 }}>{r.label}</div>
+                          {r.subtext && (
+                            <div style={{ fontSize: '0.75rem', opacity: 0.65 }}>{r.subtext}</div>
+                          )}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               );

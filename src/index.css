@@ -180,12 +180,12 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   margin-top: 0.5rem;
-  box-shadow: var(--shadow);
-  padding: 0.5rem;
-  display: none;
-}
-.search-input:focus + .search-results {
-  display: block; /* Very basic mock */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65);
+  padding: 0.35rem 0;
+  display: block;
+  z-index: 1000;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 /* User Info */
