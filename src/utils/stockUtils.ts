@@ -1,4 +1,5 @@
 import { isMemoDeleted } from './syncEngine';
+import { getMemoExactTimestamp } from './dateUtils';
 
 export interface FishStockItem {
   id: string;
@@ -52,7 +53,32 @@ export const matchesFish = (soldName: string, purchaseName: string): boolean => 
   const pNorm = normalizeFishKey(p);
   if (sNorm === pNorm) return true;
 
+  // Check Jhatka (জাটকা) distinction
+  const isJhatkaS = sNorm.includes('jhatka') || sNorm.includes('zatka') || sNorm.includes('jatka') || s.includes('জাটকা');
+  const isJhatkaP = pNorm.includes('jhatka') || pNorm.includes('zatka') || pNorm.includes('jatka') || p.includes('জাটকা');
+  if (isJhatkaS !== isJhatkaP) return false;
+
+  // Size/number digits distinction (e.g. 4-5 vs 2 vs 1)
+  const sDigits = (s.match(/\d+[\-\/]?\d*/g) || []).join('');
+  const pDigits = (p.match(/\d+[\-\/]?\d*/g) || []).join('');
+  if (sDigits && pDigits && sDigits !== pDigits) return false;
+  if ((sDigits && !pDigits) || (!sDigits && pDigits)) {
+    // If one specifies size/grade and the other does not, they are distinct grades
+    if (sNorm.includes('elish') || pNorm.includes('elish') || sNorm.includes('tuna') || pNorm.includes('tuna') || sNorm.includes('koral') || pNorm.includes('koral')) {
+      return false;
+    }
+  }
+
   // 2. Specific seafood aliases & root synonyms
+  // Elish (ইলিশ)
+  const isElishS = sNorm.includes('elish') || sNorm.includes('ilish') || sNorm.includes('hilsha') || sNorm.includes('hilsa') || s.includes('ইলিশ');
+  const isElishP = pNorm.includes('elish') || pNorm.includes('ilish') || pNorm.includes('hilsha') || pNorm.includes('hilsa') || p.includes('ইলিশ');
+  if (isElishS && isElishP) {
+    if (isJhatkaS && isJhatkaP) return true;
+    if (!isJhatkaS && !isJhatkaP && sDigits === pDigits) return true;
+    return false;
+  }
+
   // Blue swimmer crab (blue swem / blur kakra / kakra blue / blue swimmer)
   const isBlueCrabS = (sNorm.includes('blue') || sNorm.includes('blur')) && (sNorm.includes('kakra') || sNorm.includes('swem') || sNorm.includes('crab'));
   const isBlueCrabP = (pNorm.includes('blue') || pNorm.includes('blur')) || (pNorm.includes('swem'));
@@ -101,7 +127,10 @@ export const matchesFish = (soldName: string, purchaseName: string): boolean => 
   if (isChingriS && isChingriP) return true;
 
   // Tuna
-  if (sNorm.includes('tuna') && pNorm.includes('tuna')) return true;
+  if (sNorm.includes('tuna') && pNorm.includes('tuna')) {
+    if (sDigits === pDigits) return true;
+    return false;
+  }
 
   // Surma
   if (sNorm.includes('surma') && pNorm.includes('surma')) return true;
@@ -130,9 +159,14 @@ export const matchesFish = (soldName: string, purchaseName: string): boolean => 
   // Squid / Qatl
   if ((sNorm.includes('squi') || sNorm.includes('qatl')) && (pNorm.includes('squi') || pNorm.includes('qatl'))) return true;
 
-  // Fallback: substring matching if length >= 4
-  if (sNorm.length >= 4 && pNorm.includes(sNorm)) return true;
-  if (pNorm.length >= 4 && sNorm.includes(pNorm)) return true;
+  // Word token matching: only if all meaningful words match
+  const sWords = s.split(/[\s\-_,\.\/]+/).filter(w => w.length >= 3);
+  const pWords = p.split(/[\s\-_,\.\/]+/).filter(w => w.length >= 3);
+  if (sWords.length > 0 && pWords.length > 0 && sWords.length === pWords.length) {
+    if (sWords.every((w, i) => pWords[i] === w || pWords[i].includes(w) || w.includes(pWords[i]))) {
+      return true;
+    }
+  }
 
   return false;
 };
@@ -140,6 +174,8 @@ export const matchesFish = (soldName: string, purchaseName: string): boolean => 
 interface ActiveSalesMemo {
   id: string;
   lotNumber: number | null;
+  timestamp: number;
+  date: string;
   entries: Array<{
     name: string;
     totalKg: number | string;
@@ -176,6 +212,9 @@ export const getAllActiveSalesMemos = (): ActiveSalesMemo[] => {
 
     const entries = Array.isArray(inner.entries) ? inner.entries : [];
 
+    const timestamp = getMemoExactTimestamp(rawObj);
+    const date = inner.createdAt || inner.date || rawObj.date || '';
+
     if (memosMap.has(memoId)) {
       const existing = memosMap.get(memoId)!;
       if (existing.lotNumber === null && lotNumber !== null) {
@@ -184,12 +223,17 @@ export const getAllActiveSalesMemos = (): ActiveSalesMemo[] => {
       if (entries.length > existing.entries.length) {
         existing.entries = entries;
       }
+      if (!existing.timestamp && timestamp) {
+        existing.timestamp = timestamp;
+      }
       return;
     }
 
     memosMap.set(memoId, {
       id: memoId,
       lotNumber,
+      timestamp,
+      date,
       entries
     });
   };
@@ -298,6 +342,7 @@ export const getAllLotsStock = (): LotStockSummary[] => {
     lotNumber: number;
     supplierName: string;
     date: string;
+    timestamp: number;
     items: LotInternalItem[];
   }
 
@@ -307,6 +352,7 @@ export const getAllLotsStock = (): LotStockSummary[] => {
     const purchaseData = getRawPurchaseData(normLot);
     const supplierName = purchaseData?.supplierName || purchaseData?.name || '';
     const date = purchaseData?.createdAt || purchaseData?.date || '';
+    const timestamp = getMemoExactTimestamp(purchaseData);
     const purchaseEntries: any[] = Array.isArray(purchaseData?.entries) ? purchaseData.entries : [];
 
     const items: LotInternalItem[] = purchaseEntries.map((entry, index) => {
@@ -335,6 +381,7 @@ export const getAllLotsStock = (): LotStockSummary[] => {
       lotNumber: normLot,
       supplierName,
       date,
+      timestamp,
       items
     });
   });
@@ -373,12 +420,17 @@ export const getAllLotsStock = (): LotStockSummary[] => {
         if (weight <= 0 || !name) return;
 
         // Find candidate items across lots in FIFO order
+        // STRICT TEMPORAL GUARD: Unassigned sales can ONLY deduct from lots that existed on or before the sale date!
         const candidateItems: LotInternalItem[] = [];
         sortedLotNums.forEach(lNum => {
           const lObj = lotsMap.get(lNum)!;
-          const found = lObj.items.find(item => matchesFish(name, item.name));
-          if (found) {
-            candidateItems.push(found);
+          // If memo has timestamp and lot has timestamp, past sale cannot consume from a future lot!
+          const isLotExisting = !memo.timestamp || !lObj.timestamp || memo.timestamp >= (lObj.timestamp - 24 * 60 * 60 * 1000);
+          if (isLotExisting) {
+            const found = lObj.items.find(item => matchesFish(name, item.name));
+            if (found) {
+              candidateItems.push(found);
+            }
           }
         });
 
@@ -394,11 +446,7 @@ export const getAllLotsStock = (): LotStockSummary[] => {
             if (weightToDeduct <= 0.0001) break;
           }
         }
-
-        // If all candidate lots are depleted, allocate any remaining overflow to the last lot
-        if (weightToDeduct > 0.0001) {
-          candidateItems[candidateItems.length - 1].soldKg += weightToDeduct;
-        }
+        // Do not force overflow onto lots if stock was not available
       });
     }
   });
