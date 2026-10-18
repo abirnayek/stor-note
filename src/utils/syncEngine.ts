@@ -321,18 +321,18 @@ export const initSyncEngine = () => {
     }
 
     // IF THIS KEY WAS MARKED AS DELETED:
-    // DO NOT allow background scripts/sync to silently recreate it!
-    if (isKeyDeleted(key)) {
+    // Only block recreating it during background cloud restoration
+    if (isRestoring && isKeyDeleted(key)) {
       return;
     }
+
+    // If re-saving or creating a genuine key locally, clear any stale tombstone and pending delete marker
+    removeDeletedTombstone(key);
+    removePendingKey(`__DELETE__:${key}`);
 
     originalSetItem.apply(this, [key, value] as any);
 
     if (prevValue === value) return;
-    
-    // If re-saving or creating a genuine key, clear any tombstone and pending delete marker
-    removeDeletedTombstone(key);
-    removePendingKey(`__DELETE__:${key}`);
 
     updateLocalTimestamp(key);
 

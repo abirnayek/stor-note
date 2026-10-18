@@ -18,13 +18,39 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
   useEffect(() => {
     runLotRecovery();
     const loadLots = () => {
+      const lotNumbersSet = new Set<number>();
       const saved = localStorage.getItem('purchase_lots_list');
       try {
         const parsed = saved ? JSON.parse(saved) : [1];
-        setLots(Array.isArray(parsed) ? parsed : [1]);
-      } catch (e) {
-        setLots([1]);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(num => {
+            const n = parseInt(String(num), 10);
+            if (!isNaN(n) && n > 0) lotNumbersSet.add(n);
+          });
+        }
+      } catch (e) {}
+
+      // Discover any existing purchase memos in localStorage (e.g. memo_lot_3, due_memo_purchase_lot_3)
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('memo_lot_') || key.startsWith('due_memo_purchase_lot_'))) {
+          const lotStr = key.replace('memo_lot_', '').replace('due_memo_purchase_lot_', '');
+          const n = parseInt(lotStr, 10);
+          if (!isNaN(n) && n > 0) {
+            lotNumbersSet.add(n);
+          }
+        }
       }
+
+      if (lotNumbersSet.size === 0) {
+        lotNumbersSet.add(1);
+      }
+
+      const sortedLots = Array.from(lotNumbersSet).sort((a, b) => a - b);
+      setLots(sortedLots);
+      try {
+        localStorage.setItem('purchase_lots_list', JSON.stringify(sortedLots));
+      } catch (e) {}
     };
     loadLots();
     window.addEventListener('storage', loadLots);
@@ -35,8 +61,8 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
   const [newLotNumber, setNewLotNumber] = useState('');
   const [newLotPassword, setNewLotPassword] = useState('');
   const { t, language } = useLanguage();
-  const devicePermission = localStorage.getItem('device_permission');
-  const hasEditPermission = devicePermission === 'admin';
+  const devicePermission = localStorage.getItem('device_permission') || 'admin';
+  const hasEditPermission = devicePermission !== 'view';
   
   const today = new Date().toLocaleDateString(language === 'bn' ? 'bn-BD' : 'en-US', {
     month: 'short',
@@ -61,6 +87,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
       const newLots = [...lots, targetLot].sort((a, b) => a - b);
       setLots(newLots);
       localStorage.setItem('purchase_lots_list', JSON.stringify(newLots));
+      window.dispatchEvent(new Event('storage'));
     }
     
     if (!skipPassword && newLotPassword.trim() !== '') {

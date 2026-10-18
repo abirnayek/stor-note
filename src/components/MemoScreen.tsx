@@ -274,6 +274,21 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
       const key = `memo_lot_${lotNumber}`;
       const finalState = { ...memoState };
       localStorage.setItem(key, JSON.stringify(finalState));
+      localStorage.setItem(`memo_lot_${String(lotNumber).padStart(2, '0')}`, JSON.stringify(finalState));
+
+      // Ensure lotNumber is recorded in purchase_lots_list
+      if (lotNumber) {
+        const num = parseInt(String(lotNumber), 10);
+        if (!isNaN(num) && num > 0) {
+          const pLotsStr = localStorage.getItem('purchase_lots_list');
+          const pLots: number[] = pLotsStr ? JSON.parse(pLotsStr) : [];
+          if (!pLots.includes(num)) {
+            const updated = [...pLots, num].sort((a, b) => a - b);
+            localStorage.setItem('purchase_lots_list', JSON.stringify(updated));
+          }
+        }
+      }
+      window.dispatchEvent(new Event('storage'));
     } catch(e) {}
     if (onBack) {
       onBack();
@@ -393,6 +408,21 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
       const memoPayload = { ...memoState, totalPriceMain: totalBill, status: currentStatus, updatedAt: effectiveUpdatedAt };
       localStorage.setItem(`memo_lot_${lotNumber}`, JSON.stringify(memoPayload));
       localStorage.setItem(`memo_lot_${String(lotNumber).padStart(2, '0')}`, JSON.stringify(memoPayload));
+
+      // Ensure lotNumber is present in purchase_lots_list
+      if (lotNumber) {
+        const num = parseInt(String(lotNumber), 10);
+        if (!isNaN(num) && num > 0) {
+          const pLotsStr = localStorage.getItem('purchase_lots_list');
+          const pLots: number[] = pLotsStr ? JSON.parse(pLotsStr) : [];
+          if (!pLots.includes(num)) {
+            const updated = [...pLots, num].sort((a, b) => a - b);
+            localStorage.setItem('purchase_lots_list', JSON.stringify(updated));
+            window.dispatchEvent(new Event('storage'));
+          }
+        }
+      }
+
       setSaveStatus('Saved');
     }, 350);
 
@@ -410,8 +440,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   const mainPrice = Number(memoState.totalPriceMain || 0);
   const isPriceMatched = tableTotalPrice > 0 && tableTotalPrice >= mainPrice;
 
-  const devicePermission = localStorage.getItem('device_permission');
-  const hasEditPermission = devicePermission === 'admin';
+  const devicePermission = localStorage.getItem('device_permission') || 'admin';
+  const hasEditPermission = devicePermission !== 'view';
 
   const updateMemoState = (field: keyof MemoState, value: any) => {
     if (!hasEditPermission) return;
