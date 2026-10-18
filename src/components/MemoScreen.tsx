@@ -1,6 +1,6 @@
 import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput, DebouncedInput, parseMathOrNumber, focusNewTableRow } from './MathInput';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { type Screen } from '../App';
 import { Share2, Download, Plus, Trash2, Phone, Undo, Redo, MessageCircle, Mail, ChevronLeft, Lock, X, Package, CheckCircle2, AlertTriangle, XCircle, Calendar } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -10,7 +10,7 @@ import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
 import { getLotStock, type LotStockSummary } from '../utils/stockUtils';
 import { bnToEnDigits, parseMemoMonthYear } from '../utils/dateUtils';
-import { runLotRecovery, isMemoEmpty } from '../utils/lotRecovery';
+import { isMemoEmpty, RECOVERED_LOT_2_MEMO } from '../utils/lotRecovery';
 
 // Helper to convert date strings to YYYY-MM-DD for native <input type="date">
 const getIsoDateForPicker = (dateStr?: string): string => {
@@ -104,21 +104,13 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
       }
     }
 
-    // If still missing or empty, trigger auto-recovery (e.g. for Lot 2)
-    if (!saved || (() => { try { return isMemoEmpty(JSON.parse(saved!)); } catch(e) { return true; } })()) {
-      runLotRecovery();
-      saved = localStorage.getItem(`memo_lot_${lotNumber}`) || localStorage.getItem(`memo_lot_${String(lotNumber).padStart(2, '0')}`);
-      if (!saved && lotNumber) {
-        const dueSaved = localStorage.getItem(`due_memo_purchase_lot_${lotNumber}`) || localStorage.getItem(`due_memo_purchase_lot_${String(lotNumber).padStart(2, '0')}`);
-        if (dueSaved) {
-          try {
-            const parsedDue = JSON.parse(dueSaved);
-            if (parsedDue.memoState) {
-              saved = JSON.stringify(parsedDue.memoState);
-            }
-          } catch(e) {}
-        }
-      }
+    // Fallback specifically for Lot 2 only if missing
+    if (lotNumber === 2 && (!saved || (() => { try { return isMemoEmpty(JSON.parse(saved!)); } catch(e) { return true; } })())) {
+      return {
+        ...RECOVERED_LOT_2_MEMO,
+        receiverSignature: (RECOVERED_LOT_2_MEMO as any).receiverSignature || '',
+        sellerSignature: (RECOVERED_LOT_2_MEMO as any).sellerSignature || localStorage.getItem('default_seller_signature') || ''
+      } as MemoState;
     }
 
     if (saved) {
@@ -145,7 +137,7 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   };
 
   const storageKey = `memo_lot_${lotNumber}`;
-  const [memoState, setMemoState, undo, redo, canUndo, canRedo] = useHistory<MemoState>(getInitialState(), storageKey);
+  const [memoState, setMemoState, undo, redo, canUndo, canRedo] = useHistory<MemoState>(() => getInitialState(), storageKey);
   const datePickerInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -169,17 +161,21 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   const [newPassword, setNewPassword] = useState('');
   const [lotStock, setLotStock] = useState<LotStockSummary | null>(null);
 
-  const refreshLotStock = () => {
+  const refreshLotStock = useCallback(() => {
     if (lotNumber) {
-      setLotStock(getLotStock(lotNumber));
+      const newStock = getLotStock(lotNumber);
+      setLotStock(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(newStock)) return prev;
+        return newStock;
+      });
     }
-  };
+  }, [lotNumber]);
 
   useEffect(() => {
     refreshLotStock();
     window.addEventListener('storage', refreshLotStock);
     return () => window.removeEventListener('storage', refreshLotStock);
-  }, [lotNumber, memoState]);
+  }, [refreshLotStock]);
 
 
 
@@ -293,11 +289,6 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
       return;
     }
 
-    if (memoState.createdAt && memoState.createdAt !== today && memoState.updatedAt !== today) {
-      setMemoState(prev => ({ ...prev, updatedAt: today }), { recordHistory: false });
-      return;
-    }
-
     setSaveStatus('Saving...');
 
     const timer = setTimeout(() => {
@@ -398,7 +389,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
         }
       }
 
-      const memoPayload = { ...memoState, totalPriceMain: totalBill, status: currentStatus };
+      const effectiveUpdatedAt = (memoState.createdAt && memoState.createdAt !== today) ? today : memoState.updatedAt;
+      const memoPayload = { ...memoState, totalPriceMain: totalBill, status: currentStatus, updatedAt: effectiveUpdatedAt };
       localStorage.setItem(`memo_lot_${lotNumber}`, JSON.stringify(memoPayload));
       localStorage.setItem(`memo_lot_${String(lotNumber).padStart(2, '0')}`, JSON.stringify(memoPayload));
       setSaveStatus('Saved');

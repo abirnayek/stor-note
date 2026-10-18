@@ -10,9 +10,9 @@ export type SetWithHistory<T> = (
   options?: SetHistoryOptions
 ) => void;
 
-export function useHistory<T>(initialState: T, storageKey?: string, maxHistory: number = 100) {
+export function useHistory<T>(initialState: T | (() => T), storageKey?: string, maxHistory: number = 100) {
   const [state, setState] = useState<T>(initialState);
-  const stateRef = useRef<T>(initialState);
+  const stateRef = useRef<T>(state);
   stateRef.current = state;
 
   const historyRef = useRef<T[]>([]); // Past states stack for Undo
