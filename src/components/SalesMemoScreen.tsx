@@ -236,7 +236,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
               totalKg: e.totalKg !== undefined ? e.totalKg : (e.kg !== undefined ? e.kg : ''),
               weightUnit: e.weightUnit || 'kg',
               buyRate: e.buyRate !== undefined ? e.buyRate : '',
-              profitPercent: e.profitPercent !== undefined ? e.profitPercent : '',
+              profitPercent: (e.profitPercent !== undefined && e.profitPercent !== '' && Number(e.profitPercent) !== 0) ? e.profitPercent : '',
               manualSaleRate: saleRateVal,
               highlightColor: e.highlightColor
             };
@@ -404,7 +404,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           name: item.name,
           buyRate: item.effectiveCostRate,
           manualSaleRate: item.suggestedSaleRate > 0 ? item.suggestedSaleRate : item.effectiveCostRate,
-          profitPercent: (item.profitPercent > 0 ? item.profitPercent : (typeof e.profitPercent === 'number' ? e.profitPercent : '')) as (number | '')
+          profitPercent: (e.profitPercent !== undefined && e.profitPercent !== '' && Number(e.profitPercent) !== 0 ? e.profitPercent : '') as (number | '')
         };
       });
       return { ...prev, entries: updated };
@@ -922,9 +922,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                 manualSaleRate: (e.manualSaleRate !== undefined && e.manualSaleRate !== '')
                   ? e.manualSaleRate
                   : (matched.suggestedSaleRate > 0 ? matched.suggestedSaleRate : matched.effectiveCostRate),
-                profitPercent: (e.profitPercent !== undefined && e.profitPercent !== '')
+                profitPercent: (e.profitPercent !== undefined && e.profitPercent !== '' && Number(e.profitPercent) !== 0)
                   ? e.profitPercent
-                  : (matched.profitPercent > 0 ? matched.profitPercent : '')
+                  : ''
               };
             });
           }
@@ -2348,8 +2348,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                       <td data-label={t('profitPercent')} data-html2canvas-ignore>
                         <MathInput 
                           className="highlight-input"
-                          placeholder="0" 
-                          value={entry.profitPercent !== undefined ? entry.profitPercent : ''}
+                          placeholder="" 
+                          value={entry.profitPercent !== undefined && entry.profitPercent !== '' && Number(entry.profitPercent) !== 0 ? entry.profitPercent : ''}
                           onChange={e => updateEntry(entry.id, 'profitPercent', parseMathOrNumber(e.target.value))}
                           onAddRow={handleAddRow}
                           isLastRow={isLastRow}
