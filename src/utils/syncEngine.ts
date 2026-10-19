@@ -626,8 +626,8 @@ export const setupRealtimeSync = () => {
         if (myDeviceId === payload.device_id) {
           localStorage.removeItem('cached_is_authenticated');
           localStorage.removeItem('cached_user_session');
+          localStorage.removeItem('device_permission');
           try { await supabase.auth.signOut(); } catch(e) {}
-          localStorage.clear();
           window.location.reload();
         }
       }
@@ -654,7 +654,6 @@ export const setupRealtimeSync = () => {
       localStorage.removeItem('cached_user_session');
       localStorage.removeItem('device_permission');
       try { await supabase.auth.signOut(); } catch(e) {}
-      localStorage.clear();
       window.location.reload();
     })
     .on('postgres_changes', { 
@@ -752,7 +751,6 @@ export const forceLogoutEverywhere = async (exceptCurrentDevice: boolean = true)
     localStorage.removeItem('cached_user_session');
     localStorage.removeItem('device_permission');
     try { await supabase.auth.signOut(); } catch(e) {}
-    localStorage.clear();
     window.location.reload();
   }
 };

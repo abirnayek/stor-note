@@ -288,21 +288,14 @@ function App() {
                   localStorage.removeItem('cached_user_session');
                   localStorage.removeItem('device_permission');
                   try { await supabase.auth.signOut(); } catch(e) {}
-                  localStorage.clear();
                   window.location.reload();
                   return;
                 }
 
-                const currentId = localStorage.getItem('device_id');
+                let currentId = localStorage.getItem('device_id');
                 if (!currentId) {
-                  // If logged in on phone but no deviceId recorded, clear and re-login with valid tracking
-                  localStorage.removeItem('cached_is_authenticated');
-                  localStorage.removeItem('cached_user_session');
-                  localStorage.removeItem('device_permission');
-                  try { await supabase.auth.signOut(); } catch(e) {}
-                  localStorage.clear();
-                  window.location.reload();
-                  return;
+                  currentId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
+                  localStorage.setItem('device_id', currentId);
                 }
 
                 const { data, error } = await supabase
@@ -311,19 +304,28 @@ function App() {
                   .eq('device_id', currentId)
                   .maybeSingle();
 
-                // If cloud explicitly says revoked OR if device was removed/deleted from active_sessions by admin:
-                if (!error && (!data || data.status === 'revoked')) {
-                  console.warn('[DeviceCheck] Device session is revoked or removed. Logging out immediately...');
+                if (!error && data?.status === 'revoked') {
+                  console.warn('[DeviceCheck] Device session is revoked. Logging out...');
                   localStorage.removeItem('cached_is_authenticated');
                   localStorage.removeItem('cached_user_session');
                   localStorage.removeItem('device_permission');
                   try { await supabase.auth.signOut(); } catch(e) {}
-                  localStorage.clear();
                   window.location.reload();
                   return;
                 }
 
-                if (data && data.permission) {
+                // If device is not yet registered in active_sessions, self-register it so it appears in Manage Devices
+                if (!data && currentId && activeUser) {
+                  await supabase.from('active_sessions').upsert({
+                    device_id: currentId,
+                    user_id: activeUser.id,
+                    device_name: navigator.userAgent,
+                    status: 'active',
+                    permission: 'admin',
+                    last_active: new Date().toISOString()
+                  }, { onConflict: 'device_id' });
+                  localStorage.setItem('device_permission', 'admin');
+                } else if (data && data.permission) {
                   localStorage.setItem('device_permission', data.permission);
                   window.dispatchEvent(new Event('settingsChange'));
                 }
@@ -340,12 +342,11 @@ function App() {
               if (!alreadySubscribed) {
                 supabase.channel(channelName)
                   .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions', filter: `device_id=eq.${deviceId}` }, async (payload) => {
-                    if (payload.eventType === 'DELETE' || (payload.eventType === 'UPDATE' && payload.new.status === 'revoked')) {
+                    if (payload.eventType === 'UPDATE' && payload.new.status === 'revoked') {
                       localStorage.removeItem('cached_is_authenticated');
                       localStorage.removeItem('cached_user_session');
                       localStorage.removeItem('device_permission');
                       try { await supabase.auth.signOut(); } catch(e) {}
-                      localStorage.clear();
                       window.location.reload();
                     } else if (payload.eventType === 'UPDATE' && payload.new.permission) {
                       localStorage.setItem('device_permission', payload.new.permission);
@@ -873,8 +874,8 @@ function App() {
   const handleLogout = async () => {
     localStorage.removeItem('cached_is_authenticated');
     localStorage.removeItem('cached_user_session');
-    await supabase.auth.signOut();
-    localStorage.clear();
+    localStorage.removeItem('device_permission');
+    try { await supabase.auth.signOut(); } catch(e) {}
     window.location.reload();
   };
 
