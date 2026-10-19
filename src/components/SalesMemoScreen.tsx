@@ -911,7 +911,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       if (field === 'name') {
         const valStr = String(value || '').trim().toLowerCase();
         if (valStr) {
-          const matched = lotPurchaseItems.find(it => it.name.trim().toLowerCase() === valStr);
+          const matched = lotPurchaseItems.find(it => it.name.trim().toLowerCase() === valStr && (it.remainingKg || 0) > 0.001)
+            || lotPurchaseItems.find(it => it.name.trim().toLowerCase() === valStr);
           if (matched) {
             updatedEntries = updatedEntries.map(e => {
               if (e.id !== id) return e;
@@ -2052,9 +2053,10 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                           const matchedLotItem = findLotItemByName(entry.name);
                           const isExtra = !matchedLotItem && (entry.name || '').trim() !== '';
                           const inputVal = (entry.name || '').trim().toLowerCase();
+                          const availableLotItems = lotPurchaseItems.filter(it => (it.remainingKg || 0) > 0.001);
                           const filteredSuggestions = inputVal
-                            ? lotPurchaseItems.filter(it => it.name.toLowerCase().includes(inputVal))
-                            : lotPurchaseItems;
+                            ? availableLotItems.filter(it => it.name.toLowerCase().includes(inputVal))
+                            : availableLotItems;
 
                           return (
                             <div className="fish-name-input-container" style={{ position: 'relative' }}>
