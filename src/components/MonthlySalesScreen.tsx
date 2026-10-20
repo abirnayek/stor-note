@@ -4,7 +4,7 @@ import { ChevronLeft, Calendar, FileText, Trash2, Search, Filter, TrendingUp, Tr
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { MONTHS, parseMemoMonthYear, getMemoExactTimestamp, enToBnDigits } from '../utils/dateUtils';
-import { deleteSalesMemoCompletely } from '../utils/dueSyncUtils';
+import { deleteSalesMemoCompletely, isPurchaseMemoData, purgeCorruptedPurchaseMemosFromSales } from '../utils/dueSyncUtils';
 import { getLotPurchaseItems, getAllPurchaseItems } from '../utils/stockUtils';
 
 interface MonthlySalesScreenProps {
@@ -50,6 +50,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
   const displayYear = language === 'bn' ? enToBnDigits(year) : year.toString();
 
   const loadMonthMemos = () => {
+    purgeCorruptedPurchaseMemosFromSales();
     const foundMemosMap = new Map<string, MonthlyMemo>();
 
     let localTimestamps: Record<string, number> = {};
@@ -68,24 +69,14 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
 
     const processItem = (id: string, rawData: any, sourceKey?: string) => {
       if (!id || !rawData) return;
-      const memo = rawData.memoState || rawData;
 
       // STRICT FILTER: Monthly Sales Screen is strictly for SALES memos.
       // Purchase memos belong strictly to purchase lots and dues_purchase, NEVER sales.
-      const isPurchase =
-        purchaseDueIds.has(String(id)) ||
-        rawData.type === 'purchase' ||
-        memo.type === 'purchase' ||
-        rawData.customerType === 'purchase' ||
-        memo.customerType === 'purchase' ||
-        (sourceKey && sourceKey.startsWith('due_memo_purchase_')) ||
-        id.startsWith('purchase_') ||
-        (memo.totalPriceMain !== undefined && memo.totalCostMain !== undefined && !memo.customerName) ||
-        (Boolean(memo.supplierName) && !memo.customerName && rawData.type !== 'regular' && rawData.type !== 'permanent' && rawData.type !== 'reseller');
-
-      if (isPurchase) {
+      if (isPurchaseMemoData(id, rawData, sourceKey) || purchaseDueIds.has(String(id))) {
         return;
       }
+
+      const memo = rawData.memoState || rawData;
 
       const fallbackLocalTs = (sourceKey && localTimestamps[sourceKey])
         ? Number(localTimestamps[sourceKey])
@@ -106,7 +97,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         ? Number(rawLot)
         : null;
 
-      let name = memo.customerName || memo.name || memo.supplierName || `Memo ${id}`;
+      let name = memo.customerName || memo.name || (language === 'bn' ? `মেমো #${id}` : `Memo ${id}`);
       let totalBill = 0;
       let memoProfit = 0;
       let memoLoss = 0;
@@ -317,8 +308,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         if (purchaseDueIds.has(id)) continue;
         try {
           const raw = JSON.parse(localStorage.getItem(key) || '{}');
-          const inner = raw.memoState || raw;
-          if (raw.type === 'purchase' || inner.type === 'purchase' || raw.customerType === 'purchase' || inner.customerType === 'purchase') {
+          if (isPurchaseMemoData(id, raw, key)) {
             continue;
           }
           processItem(id, raw, key);

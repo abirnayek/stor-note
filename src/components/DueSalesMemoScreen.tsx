@@ -2,7 +2,7 @@ import React from 'react';
 import { type Screen } from '../App';
 import SalesMemoScreen from './SalesMemoScreen';
 import MemoScreen from './MemoScreen';
-import { getNormalizedMemo } from '../utils/dueSyncUtils';
+import { getNormalizedMemo, isPurchaseMemoData } from '../utils/dueSyncUtils';
 
 interface DueMemoScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -29,7 +29,7 @@ const DueSalesMemoScreen: React.FC<DueMemoScreenProps> = ({ onNavigate, onBack, 
   };
 
   // Strict guard: If this is a purchase memo/due, NEVER open SalesMemoScreen!
-  if (dueType === 'purchase' || normMemo.customerType === 'purchase' || dueId.startsWith('purchase_')) {
+  if (dueType === 'purchase' || normMemo.customerType === 'purchase' || dueId.startsWith('purchase_') || isPurchaseMemoData(dueId, normMemo.raw)) {
     let lotNum = targetLotNumber || 1;
     if (dueId.startsWith('purchase_lot_')) {
       lotNum = parseInt(dueId.replace('purchase_lot_', ''), 10) || lotNum;
