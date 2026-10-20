@@ -538,6 +538,78 @@ export const purgeCorruptedPurchaseMemosFromSales = (force = false): void => {
 };
 
 /**
+ * Purges ghost / empty memos that have no customer name, no entries, and 0 amounts.
+ */
+let lastGhostPurgeTime = 0;
+export const purgeEmptyGhostMemos = (force = false): void => {
+  const now = Date.now();
+  if (!force && now - lastGhostPurgeTime < 5000) return;
+  lastGhostPurgeTime = now;
+
+  try {
+    const ghostIdsToRemove: string[] = [];
+    const keysToRemove: string[] = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if ((key.startsWith('due_memo_') && !key.startsWith('due_memo_purchase_')) || 
+          (key.startsWith('sales_memo_') && !key.startsWith('sales_memo_list_'))) {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          const inner = parsed.memoState || parsed;
+          const entries = inner.entries || parsed.entries || [];
+          const hasEntries = Array.isArray(entries) && entries.some((e: any) => (e.name && e.name.trim() !== '') || (Number(e.totalKg) > 0) || (Number(e.rate) > 0));
+          const name = (inner.customerName || inner.name || parsed.customerName || parsed.name || '').trim();
+          const hasValidName = name !== '' && name.toLowerCase() !== 'unknown' && !name.toLowerCase().startsWith('memo undefined');
+          const { totalBill, paidAmount, dueAmount } = calculateMemoTotals(parsed);
+
+          if (!hasValidName && !hasEntries && totalBill === 0 && paidAmount === 0 && dueAmount === 0) {
+            keysToRemove.push(key);
+            const id = key.replace('due_memo_', '').replace('sales_memo_', '').replace(/^lot_\d+_memo_/, '').replace(/^lot_unassigned_memo_/, '');
+            if (id) ghostIdsToRemove.push(id);
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (keysToRemove.length > 0) {
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+    }
+
+    if (ghostIdsToRemove.length > 0) {
+      const listsToClean = [
+        'dues_regular', 'dues_permanent', 'dues_purchase', 'dues_reseller',
+        'paid_dues_regular', 'paid_dues_permanent', 'paid_dues_purchase', 'paid_dues_reseller',
+        'sales_memo_list_unassigned'
+      ];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('sales_memo_list_')) listsToClean.push(k);
+      }
+      listsToClean.forEach(listKey => {
+        try {
+          const raw = localStorage.getItem(listKey);
+          if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              const cleaned = list.filter(id => !ghostIdsToRemove.includes(String(id)));
+              if (cleaned.length !== list.length) {
+                localStorage.setItem(listKey, JSON.stringify(cleaned));
+              }
+            }
+          }
+        } catch (e) {}
+      });
+    }
+  } catch (err) {
+    console.error('Error in purgeEmptyGhostMemos:', err);
+  }
+};
+
+/**
  * Detects and repairs memos mistakenly saved under invalid IDs (such as 'lot_unassigned', 'unassigned', 'undefined', etc.).
  * If actual memo data is found (e.g. Osman Hotel), it automatically migrates the memo to a clean valid numeric ID,
  * updates all lists (dues, global sales, unassigned list), and removes the corrupt keys.
@@ -863,9 +935,15 @@ export const syncAllDueAccounts = (): {
 
     const memo = getNormalizedMemo(id);
 
-    // If completely empty draft with no entries, no name and 0 total, check if it was in user's active dues
-    const isEmptyDraft = memo.totalBill === 0 && memo.paidAmount === 0 && (!memo.name || memo.name === 'Unknown');
-    if (isEmptyDraft && !curRegular.includes(id) && !curPermanent.includes(id) && !curPurchase.includes(id)) {
+    // If completely empty draft with no entries, no name and 0 total, do NOT track as due or paid due!
+    const rawEntries = memo.raw?.entries || memo.raw?.memoState?.entries || [];
+    const hasEntries = Array.isArray(rawEntries) && rawEntries.some((e: any) => (e.name && e.name.trim() !== '') || (Number(e.totalKg) > 0) || (Number(e.rate) > 0));
+    const rawName = (memo.name || '').trim();
+    const hasName = rawName !== '' && rawName.toLowerCase() !== 'unknown' && !rawName.toLowerCase().startsWith('memo undefined');
+
+    if (!hasName && !hasEntries && memo.totalBill === 0 && memo.paidAmount === 0 && memo.dueAmount === 0) {
+      localStorage.removeItem(`due_memo_${id}`);
+      localStorage.removeItem(`due_memo_regular_${id}`);
       return;
     }
 
@@ -1305,6 +1383,7 @@ export interface SalesMemoGlobalItem {
 
 export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
   purgeCorruptedPurchaseMemosFromSales();
+  purgeEmptyGhostMemos();
   healInvalidMemoIds();
   let localTimestamps: Record<string, number> = {};
   try {
@@ -1362,8 +1441,21 @@ export const getAllGlobalSalesMemos = (): SalesMemoGlobalItem[] => {
       }
     }
 
-    const name = inner.customerName || inner.name || memoObj.customerName || memoObj.name || `Memo ${memoId}`;
+    const rawEntries = inner.entries || memoObj.entries || [];
+    const hasEntries = Array.isArray(rawEntries) && rawEntries.some((e: any) => (e.name && e.name.trim() !== '') || (Number(e.totalKg) > 0) || (Number(e.rate) > 0));
+    const rawCustomerName = (inner.customerName || inner.name || memoObj.customerName || memoObj.name || '').trim();
+    const hasValidName = rawCustomerName !== '' && rawCustomerName.toLowerCase() !== 'unknown' && !rawCustomerName.toLowerCase().startsWith('memo undefined');
+
     const { totalBill, paidAmount, dueAmount } = calculateMemoTotals(memoObj);
+
+    // Completely exclude empty ghost drafts (no name, no fish entries, 0 total, 0 paid, 0 due)
+    if (!hasValidName && !hasEntries && totalBill === 0 && paidAmount === 0 && dueAmount === 0) {
+      return;
+    }
+
+    const name = hasValidName 
+      ? rawCustomerName 
+      : (effectiveLot !== null ? `লট ${effectiveLot} মেমো` : `মেমো #${memoId}`);
 
     let status: 'paid' | 'due' | 'draft' = inner.status || memoObj.status || 'draft';
     let statusText = 'Draft';

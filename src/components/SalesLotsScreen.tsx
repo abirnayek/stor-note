@@ -476,9 +476,10 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                     className="lot-card add-lot-card"
                     onClick={handleAddLot}
                     style={{
-                      flex: '0 0 165px',
-                      minWidth: '165px',
-                      height: '142px',
+                      flex: '0 0 175px',
+                      minWidth: '175px',
+                      width: '175px',
+                      height: '155px',
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'center',
@@ -487,9 +488,9 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                       boxSizing: 'border-box'
                     }}
                   >
-                    <div className="add-lot-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
-                      <Package size={36} />
-                      <h3 style={{ margin: 0, fontSize: '0.96rem', whiteSpace: 'nowrap', fontWeight: 700 }}>ক্রিয়েট লট</h3>
+                    <div className="add-lot-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                      <Package size={40} />
+                      <h3 style={{ margin: 0, fontSize: '1.02rem', whiteSpace: 'nowrap', fontWeight: 700 }}>ক্রিয়েট লট</h3>
                     </div>
                   </div>
                 )}
@@ -503,6 +504,7 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                       name={`লট নং ${lot}`}
                       type="lot"
                       onAccessGranted={() => onSelectLot(lot)}
+                      style={{ flex: '0 0 auto', width: 'auto' }}
                       onDragOver={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -532,10 +534,11 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                       <div
                         className="lot-card"
                         style={{
-                          flex: '0 0 165px',
-                          minWidth: '165px',
-                          height: '142px',
-                          padding: '0.85rem',
+                          flex: '0 0 175px',
+                          minWidth: '175px',
+                          width: '175px',
+                          height: '155px',
+                          padding: '1rem',
                           display: 'flex',
                           flexDirection: 'column',
                           justifyContent: 'space-between',
@@ -563,49 +566,39 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                             pointerEvents: 'none',
                             backdropFilter: 'blur(3px)'
                           }}>
-                            <Package size={32} style={{ color: '#fff' }} />
+                            <Package size={36} style={{ color: '#fff' }} />
                             <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.85rem', textAlign: 'center', padding: '0 4px' }}>
                               {language === 'bn' ? `লট ${lot}-এ ড্রপ করুন` : `Drop to Lot ${lot}`}
                             </span>
                           </div>
                         )}
-                        <div className="lot-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <div style={{
-                              background: 'rgba(114, 190, 68, 0.15)',
-                              borderRadius: '8px',
-                              padding: '5px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#72be44'
-                            }}>
-                              <Package size={18} />
-                            </div>
-                            <span className="lot-status" style={{ fontSize: '0.68rem', padding: '2px 6px', whiteSpace: 'nowrap' }}>
-                              {t('activeLot')}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
-                            <MemoLockIcon passwordKey={`sales_lot_password_${lot}`} />
-                            {hasEditPermission && (
-                              <button
-                                className="btn-icon delete-btn"
-                                onClick={(e) => handleDeleteLot(lot, e)}
-                                style={{ padding: '3px', margin: 0, color: '#ff5252' }}
-                                title="লট মুছুন"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            )}
-                          </div>
+                        <div className="lot-card-header" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%', paddingRight: '28px' }}>
+                          <Package size={34} className="lot-icon" style={{ flexShrink: 0 }} />
+                          <span className="lot-status" style={{ fontSize: '0.74rem', padding: '3px 7px', whiteSpace: 'nowrap' }}>
+                            {t('activeLot')}
+                          </span>
                         </div>
-                        <div className="lot-card-body" style={{ marginTop: 'auto' }}>
-                          <h3 style={{ margin: '0 0 2px', fontSize: '0.96rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {hasEditPermission && (
+                          <div className="card-top-actions" style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 10 }}>
+                            <button
+                              className="btn-icon delete-btn"
+                              onClick={(e) => handleDeleteLot(lot, e)}
+                              style={{ padding: '4px', margin: 0, color: '#ff5252' }}
+                              title="লট মুছুন"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        )}
+                        <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', bottom: '10px', right: '10px', zIndex: 10 }}>
+                          <MemoLockIcon passwordKey={`sales_lot_password_${lot}`} />
+                        </div>
+                        <div className="lot-card-body" style={{ marginTop: 'auto', paddingRight: '26px' }}>
+                          <h3 style={{ margin: '0 0 4px', fontSize: '1.02rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             লট নাম্বার {lot.toString().padStart(2, '0')}
                           </h3>
-                          <div className="lot-date" style={{ fontSize: '0.74rem', display: 'flex', alignItems: 'center', gap: '4px', color: '#aaa', margin: 0 }}>
-                            <Calendar size={12} />
+                          <div className="lot-date" style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px', color: '#aaa', margin: 0 }}>
+                            <Calendar size={13} />
                             <span>{today}</span>
                           </div>
                         </div>
@@ -660,10 +653,11 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                   className="lot-card"
                   onClick={() => onNavigate('aratdar')}
                   style={{
-                    flex: '0 0 165px',
-                    minWidth: '165px',
-                    height: '142px',
-                    padding: '0.85rem',
+                    flex: '0 0 175px',
+                    minWidth: '175px',
+                    width: '175px',
+                    height: '155px',
+                    padding: '1rem',
                     background: 'linear-gradient(135deg, rgba(48, 22, 68, 0.85), rgba(22, 12, 38, 0.95))',
                     border: '1px solid rgba(171, 71, 188, 0.5)',
                     boxShadow: '0 4px 15px rgba(171, 71, 188, 0.2)',
@@ -703,10 +697,10 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                     </div>
                   </div>
                   <div className="lot-card-body" style={{ marginTop: 'auto' }}>
-                    <h3 style={{ margin: '0 0 2px', fontSize: '0.96rem', color: '#f3e5f5', whiteSpace: 'nowrap', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <h3 style={{ margin: '0 0 2px', fontSize: '1rem', color: '#f3e5f5', whiteSpace: 'nowrap', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       আড়তদারের মেমো
                     </h3>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
                       <span style={{ color: '#ce93d8', fontWeight: 'bold' }}>
                         ৳{Math.round(aratdarTotal).toLocaleString()}
                       </span>
@@ -724,10 +718,11 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                   className="lot-card"
                   onClick={() => onNavigate('reseller')}
                   style={{
-                    flex: '0 0 165px',
-                    minWidth: '165px',
-                    height: '142px',
-                    padding: '0.85rem',
+                    flex: '0 0 175px',
+                    minWidth: '175px',
+                    width: '175px',
+                    height: '155px',
+                    padding: '1rem',
                     background: 'linear-gradient(135deg, rgba(16, 46, 74, 0.85), rgba(9, 24, 42, 0.95))',
                     border: '1px solid rgba(33, 150, 243, 0.5)',
                     boxShadow: '0 4px 15px rgba(33, 150, 243, 0.2)',
@@ -767,10 +762,10 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
                     </div>
                   </div>
                   <div className="lot-card-body" style={{ marginTop: 'auto' }}>
-                    <h3 style={{ margin: '0 0 2px', fontSize: '0.96rem', color: '#e3f2fd', whiteSpace: 'nowrap', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <h3 style={{ margin: '0 0 2px', fontSize: '1rem', color: '#e3f2fd', whiteSpace: 'nowrap', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       রিসেলার
                     </h3>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
                       <span style={{ color: '#90caf9', fontWeight: 'bold' }}>
                         ৳{Math.round(resellerTotal).toLocaleString()}
                       </span>
@@ -1074,24 +1069,34 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
               </div>
 
               {/* Drag indicator chip */}
-              <div style={{ marginTop: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '6px' }}>
+              <div style={{ 
+                marginTop: '0.7rem', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between', 
+                gap: '6px',
+                flexWrap: 'wrap',
+                borderTop: '1px solid rgba(255,255,255,0.06)', 
+                paddingTop: '6px' 
+              }}>
                 <span style={{ 
-                  fontSize: '0.74rem', 
+                  fontSize: '0.7rem', 
                   color: '#ffb74d', 
-                  display: 'flex', 
+                  display: 'inline-flex', 
                   alignItems: 'center', 
                   gap: '4px',
                   background: 'rgba(255, 152, 0, 0.12)',
-                  padding: '2px 8px',
+                  padding: '2px 6px',
                   borderRadius: '6px',
-                  border: '1px dashed rgba(255, 152, 0, 0.35)'
+                  border: '1px dashed rgba(255, 152, 0, 0.35)',
+                  whiteSpace: 'nowrap'
                 }}>
                   <Package size={12} />
-                  {language === 'bn' ? '+ ড্র্যাগ করে লটে রাখুন' : '+ Drag to Lot'}
+                  {language === 'bn' ? '+ লটে রাখুন' : '+ To Lot'}
                 </span>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
                   {memo.lotNumber !== null 
-                    ? (language === 'bn' ? `বর্তমান: লট ${memo.lotNumber}` : `Current: Lot ${memo.lotNumber}`)
+                    ? (language === 'bn' ? `লট ${memo.lotNumber}` : `Lot ${memo.lotNumber}`)
                     : (language === 'bn' ? 'লটবিহীন' : 'No Lot')}
                 </span>
               </div>

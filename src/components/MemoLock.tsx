@@ -96,6 +96,8 @@ export interface ProtectedMemoWrapperProps {
    type?: 'folder' | 'memo' | 'lot';
    children: React.ReactNode;
    draggable?: boolean;
+   style?: React.CSSProperties;
+   className?: string;
    onDragStart?: (e: React.DragEvent) => void;
    onDragEnd?: (e: React.DragEvent) => void;
    onDragOver?: (e: React.DragEvent) => void;
@@ -111,6 +113,8 @@ export const ProtectedMemoWrapper: React.FC<ProtectedMemoWrapperProps> = ({
    type,
    children,
    draggable,
+   style,
+   className,
    onDragStart,
    onDragEnd,
    onDragOver,
@@ -192,13 +196,15 @@ export const ProtectedMemoWrapper: React.FC<ProtectedMemoWrapperProps> = ({
 
     return (
         <div 
+            className={className}
             style={{ 
                 position: 'relative', 
                 width: '100%', 
                 height: '100%', 
                 cursor: 'pointer',
                 borderRadius: '14px',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                ...style
             }}
             onClick={handleClick}
             draggable={draggable}

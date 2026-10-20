@@ -2037,6 +2037,16 @@ tr.search-highlight-blink > td:last-child {
 }
 
 
+.card-top-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .card-bottom-actions {
   position: absolute;
   bottom: 8px;
@@ -2226,56 +2236,64 @@ body.view-only-mode .weight-unit-toggle {
 }
 
 /* Scoped styles for SalesLotsScreen horizontal slider cards */
+.custom-h-scrollbar > * {
+  flex: 0 0 auto !important;
+  width: auto !important;
+}
+
 .custom-h-scrollbar .lot-card {
-  min-height: 142px !important;
-  max-height: 142px !important;
-  height: 142px !important;
-  flex: 0 0 165px !important;
-  min-width: 165px !important;
-  width: 165px !important;
-  padding: 0.85rem !important;
-  border-radius: 12px !important;
+  min-height: 155px !important;
+  max-height: 155px !important;
+  height: 155px !important;
+  flex: 0 0 175px !important;
+  min-width: 175px !important;
+  width: 175px !important;
+  padding: 1rem !important;
+  border-radius: 14px !important;
   box-sizing: border-box !important;
   display: flex !important;
   flex-direction: column !important;
   justify-content: space-between !important;
+  position: relative !important;
 }
 
 .custom-h-scrollbar .lot-card .lot-card-header {
   padding-right: 0 !important;
   display: flex !important;
   align-items: center !important;
-  justify-content: space-between !important;
+  justify-content: flex-start !important;
   width: 100% !important;
-  gap: 0.35rem !important;
+  gap: 0.5rem !important;
 }
 
 .custom-h-scrollbar .lot-card .lot-card-body {
-  padding-right: 0 !important;
+  padding-right: 28px !important;
   margin-top: auto !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 0.2rem !important;
+  gap: 0.25rem !important;
 }
 
 .custom-h-scrollbar .lot-card h3 {
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  font-size: 0.96rem !important;
+  font-size: 0.98rem !important;
   margin: 0 !important;
   line-height: 1.25 !important;
   word-break: normal !important;
 }
 
 .custom-h-scrollbar .add-lot-card {
-  min-height: 142px !important;
-  max-height: 142px !important;
-  height: 142px !important;
-  flex: 0 0 165px !important;
-  min-width: 165px !important;
-  width: 165px !important;
-  padding: 0.85rem !important;
+  min-height: 155px !important;
+  max-height: 155px !important;
+  height: 155px !important;
+  flex: 0 0 175px !important;
+  min-width: 175px !important;
+  width: 175px !important;
+  padding: 1rem !important;
+  border-radius: 14px !important;
+  box-sizing: border-box !important;
 }
 
 @media (max-width: 600px) {
