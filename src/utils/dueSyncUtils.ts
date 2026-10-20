@@ -333,8 +333,8 @@ export const isPurchaseMemoData = (id: string, rawData: any, sourceKey?: string)
   const memo = rawData?.memoState || rawData || {};
   const raw = rawData || {};
 
-  const cleanId = String(id || '').toLowerCase();
-  const src = String(sourceKey || '').toLowerCase();
+  const cleanId = String(id || '').toLowerCase().trim();
+  const src = String(sourceKey || '').toLowerCase().trim();
 
   // 1. Explicit ID or key markers
   if (
@@ -343,7 +343,8 @@ export const isPurchaseMemoData = (id: string, rawData: any, sourceKey?: string)
     src.startsWith('due_memo_purchase_') ||
     src.startsWith('memo_lot_') ||
     src.includes('_memo_purchase_') ||
-    cleanId.includes('purchase_')
+    cleanId.includes('purchase_') ||
+    src.includes('purchase_lot_')
   ) {
     return true;
   }
@@ -360,31 +361,42 @@ export const isPurchaseMemoData = (id: string, rawData: any, sourceKey?: string)
 
   // 3. Purchase memo-specific data fields:
   // totalPriceMain / totalCostMain / globalProfitPercent ONLY exist on purchase memos!
-  const hasTotalPriceMain = raw.totalPriceMain !== undefined && raw.totalPriceMain !== null && raw.totalPriceMain !== '';
-  const hasMemoTotalPriceMain = memo.totalPriceMain !== undefined && memo.totalPriceMain !== null && memo.totalPriceMain !== '';
-  const hasTotalCostMain = raw.totalCostMain !== undefined && raw.totalCostMain !== null && raw.totalCostMain !== '';
-  const hasMemoTotalCostMain = memo.totalCostMain !== undefined && memo.totalCostMain !== null && memo.totalCostMain !== '';
-  const hasGlobalProfit = raw.globalProfitPercent !== undefined && raw.globalProfitPercent !== null && raw.globalProfitPercent !== '';
-  const hasMemoGlobalProfit = memo.globalProfitPercent !== undefined && memo.globalProfitPercent !== null && memo.globalProfitPercent !== '';
+  const hasTotalPriceMain = (raw.totalPriceMain !== undefined && raw.totalPriceMain !== null && raw.totalPriceMain !== '') ||
+                            (memo.totalPriceMain !== undefined && memo.totalPriceMain !== null && memo.totalPriceMain !== '');
+  const hasTotalCostMain = (raw.totalCostMain !== undefined && raw.totalCostMain !== null && raw.totalCostMain !== '') ||
+                           (memo.totalCostMain !== undefined && memo.totalCostMain !== null && memo.totalCostMain !== '');
+  const hasGlobalProfit = (raw.globalProfitPercent !== undefined && raw.globalProfitPercent !== null && raw.globalProfitPercent !== '') ||
+                          (memo.globalProfitPercent !== undefined && memo.globalProfitPercent !== null && memo.globalProfitPercent !== '');
 
-  if (hasTotalPriceMain || hasMemoTotalPriceMain || hasTotalCostMain || hasMemoTotalCostMain || hasGlobalProfit || hasMemoGlobalProfit) {
+  if (hasTotalPriceMain || hasTotalCostMain || hasGlobalProfit) {
     return true;
   }
 
-  // 4. Supplier markers:
-  const supplier = memo.supplierName || raw.supplierName;
-  const supplierPhone = memo.supplierPhone || raw.supplierPhone;
+  // 4. Any presence of supplierName or supplierPhone!
+  // Sales memos NEVER have a supplierName or supplierPhone!
+  const supplier = (memo.supplierName || raw.supplierName || '').trim();
+  const supplierPhone = (memo.supplierPhone || raw.supplierPhone || '').trim();
   if (supplier || supplierPhone) {
-    if (
-      raw.type !== 'regular' && raw.type !== 'permanent' && raw.type !== 'reseller' &&
-      memo.type !== 'regular' && memo.type !== 'permanent' && memo.type !== 'reseller' &&
-      raw.customerType !== 'regular' && raw.customerType !== 'permanent' && raw.customerType !== 'reseller' &&
-      memo.customerType !== 'regular' && memo.customerType !== 'permanent' && memo.customerType !== 'reseller'
-    ) {
-      return true;
-    }
-    if (hasTotalPriceMain || hasMemoTotalPriceMain || hasTotalCostMain || hasMemoTotalCostMain) {
-      return true;
+    return true;
+  }
+
+  // 5. Match against known purchase lot suppliers (e.g. Arif v, Emon v)
+  const nameToCheck = (memo.customerName || raw.customerName || memo.name || raw.name || '').trim().toLowerCase();
+  if (nameToCheck) {
+    for (let l = 1; l <= 50; l++) {
+      try {
+        const pStr = localStorage.getItem(`memo_lot_${l}`);
+        if (pStr) {
+          const pData = JSON.parse(pStr);
+          const sName = (pData.supplierName || pData.customerName || '').trim().toLowerCase();
+          if (sName && sName === nameToCheck) {
+            const rawLot = raw.lotNumber ?? memo.lotNumber ?? raw.lotNumberInput ?? memo.lotNumberInput;
+            if (!rawLot || Number(rawLot) === l) {
+              return true;
+            }
+          }
+        }
+      } catch (e) {}
     }
   }
 
@@ -419,6 +431,7 @@ export const purgeCorruptedPurchaseMemosFromSales = (force = false): void => {
           if (isPurchaseMemoData(memoId, parsed, key)) {
             keysToRemove.push(key);
             badSalesIdsToRemoveFromLists.push(memoId);
+            badSalesIdsToRemoveFromLists.push(key.replace('sales_memo_', ''));
 
             // Ensure if it's lot data, it's saved in memo_lot_ or due_memo_purchase_
             const lot = parsed.lotNumber || parsed.memoState?.lotNumber || parsed.lotNumberInput || parsed.memoState?.lotNumberInput;
@@ -433,34 +446,41 @@ export const purgeCorruptedPurchaseMemosFromSales = (force = false): void => {
         } catch (e) {}
       }
 
-      // 2. Check due_memo_lot_* keys that lack 'purchase_' prefix
-      if (key.startsWith('due_memo_lot_') && !key.startsWith('due_memo_purchase_')) {
+      // 2. Check due_memo_* keys that lack 'purchase_' prefix
+      if (key.startsWith('due_memo_') && !key.startsWith('due_memo_purchase_')) {
         const raw = localStorage.getItem(key);
         if (!raw) continue;
         try {
           const parsed = JSON.parse(raw);
-          const lotPart = key.replace('due_memo_lot_', '');
-          if (isPurchaseMemoData(lotPart, parsed, key)) {
+          const memoId = key.replace('due_memo_', '').replace(/^(regular|permanent|reseller)_/, '').replace(/^lot_/, '');
+          if (isPurchaseMemoData(memoId, parsed, key)) {
             keysToRemove.push(key);
-            const properKey = `due_memo_purchase_lot_${lotPart}`;
-            if (!localStorage.getItem(properKey)) {
-              localStorage.setItem(properKey, JSON.stringify({
-                ...parsed,
-                id: `purchase_lot_${lotPart}`,
-                type: 'purchase',
-                customerType: 'purchase'
-              }));
-            }
-            // Ensure in dues_purchase list
-            try {
-              const dpStr = localStorage.getItem('dues_purchase');
-              let dpList: string[] = dpStr ? JSON.parse(dpStr) : [];
-              const targetId = `purchase_lot_${lotPart}`;
-              if (!dpList.includes(targetId)) {
-                dpList.push(targetId);
-                localStorage.setItem('dues_purchase', JSON.stringify(dpList));
+            badSalesIdsToRemoveFromLists.push(memoId);
+            badSalesIdsToRemoveFromLists.push(key.replace('due_memo_', ''));
+
+            const lot = parsed.lotNumber || parsed.memoState?.lotNumber || parsed.lotNumberInput || parsed.memoState?.lotNumberInput;
+            if (lot && !isNaN(Number(lot))) {
+              const lotNum = Number(lot);
+              const properKey = `due_memo_purchase_lot_${lotNum}`;
+              if (!localStorage.getItem(properKey)) {
+                localStorage.setItem(properKey, JSON.stringify({
+                  ...parsed,
+                  id: `purchase_lot_${lotNum}`,
+                  type: 'purchase',
+                  customerType: 'purchase'
+                }));
               }
-            } catch (e) {}
+              // Ensure in dues_purchase list
+              try {
+                const dpStr = localStorage.getItem('dues_purchase');
+                let dpList: string[] = dpStr ? JSON.parse(dpStr) : [];
+                const targetId = `purchase_lot_${lotNum}`;
+                if (!dpList.includes(targetId)) {
+                  dpList.push(targetId);
+                  localStorage.setItem('dues_purchase', JSON.stringify(dpList));
+                }
+              } catch (e) {}
+            }
           }
         } catch (e) {}
       }
@@ -491,6 +511,26 @@ export const purgeCorruptedPurchaseMemosFromSales = (force = false): void => {
           } catch (e) {}
         }
       }
+
+      // Clean up sales dues lists
+      const salesDuesLists = [
+        'dues_regular', 'dues_permanent', 'dues_reseller',
+        'paid_dues_regular', 'paid_dues_permanent', 'paid_dues_reseller'
+      ];
+      salesDuesLists.forEach(listKey => {
+        try {
+          const raw = localStorage.getItem(listKey);
+          if (raw) {
+            const list: string[] = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              const cleaned = list.filter(id => !badSalesIdsToRemoveFromLists.includes(id) && !badSalesIdsToRemoveFromLists.includes(String(id)));
+              if (cleaned.length !== list.length) {
+                localStorage.setItem(listKey, JSON.stringify(cleaned));
+              }
+            }
+          }
+        } catch (e) {}
+      });
     }
   } catch (err) {
     console.error('Error in purgeCorruptedPurchaseMemosFromSales:', err);

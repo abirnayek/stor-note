@@ -10,6 +10,7 @@ import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
 import { getLotStock, getLotPurchaseItems, getAllPurchaseItems, type LotStockSummary, type LotPurchaseFishItem } from '../utils/stockUtils';
 import { parseMemoMonthYear, getMemoExactTimestamp, MONTHS, enToBnDigits, bnToEnDigits } from '../utils/dateUtils';
+import { isPurchaseMemoData } from '../utils/dueSyncUtils';
 
 // Helper to convert date strings to YYYY-MM-DD for native <input type="date">
 const getIsoDateForPicker = (dateStr?: string): string => {
@@ -169,7 +170,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       try { 
         const parsed = JSON.parse(dueStr);
         // STRICT GUARD: Never import a purchase memo into sales memo!
-        const isPurchaseDue = parsed.type === 'purchase' || parsed.customerType === 'purchase' || memoId.startsWith('purchase_') || (parsed.supplierName && !parsed.customerName);
+        const isPurchaseDue = isPurchaseMemoData(memoId, parsed) || parsed.type === 'purchase' || parsed.customerType === 'purchase' || memoId.startsWith('purchase_') || Boolean(parsed.supplierName);
         if (!isPurchaseDue) {
           dueData = parsed;
         }
@@ -178,7 +179,14 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
     let parsed: any = null;
     if (saved) {
-      try { parsed = JSON.parse(saved); } catch(e) {}
+      try {
+        const testParsed = JSON.parse(saved);
+        if (isPurchaseMemoData(memoId, testParsed)) {
+          saved = null;
+        } else {
+          parsed = testParsed;
+        }
+      } catch(e) {}
     }
 
     if (parsed || dueData) {
@@ -195,7 +203,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         });
       }
 
-      const finalCustomerName = src.customerName || src.name || src.supplierName || dueData?.customerName || dueData?.name || '';
+      const finalCustomerName = (src.customerType !== 'purchase' && !src.supplierName)
+        ? (src.customerName || src.name || dueData?.customerName || dueData?.name || '')
+        : '';
       const finalAddress = src.address || dueData?.address || '';
       const finalMobile = src.mobile || dueData?.mobile || '';
       const finalLotNumber = src.lotNumberInput || (src.lotNumber ? src.lotNumber.toString() : '') || (dueData?.lotNumber ? dueData.lotNumber.toString() : '') || (lotNumber ? lotNumber.toString() : '');

@@ -50,7 +50,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
   const displayYear = language === 'bn' ? enToBnDigits(year) : year.toString();
 
   const loadMonthMemos = () => {
-    purgeCorruptedPurchaseMemosFromSales();
+    purgeCorruptedPurchaseMemosFromSales(true);
     const foundMemosMap = new Map<string, MonthlyMemo>();
 
     let localTimestamps: Record<string, number> = {};
@@ -66,6 +66,12 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
       const pdp = localStorage.getItem('paid_dues_purchase');
       if (pdp) JSON.parse(pdp).forEach((x: string) => purchaseDueIds.add(String(x)));
     } catch (e) {}
+
+    for (let l = 1; l <= 50; l++) {
+      purchaseDueIds.add(String(l));
+      purchaseDueIds.add(`lot_${l}`);
+      purchaseDueIds.add(`purchase_lot_${l}`);
+    }
 
     const processItem = (id: string, rawData: any, sourceKey?: string) => {
       if (!id || !rawData) return;
