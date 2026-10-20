@@ -72,6 +72,9 @@ const getParentSnapshot = (current: NavSnapshot): NavSnapshot => {
     case 'password':
       return { screen: 'dashboard', folderId: null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'sales-lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
     case 'sales-memo':
+      if (current.salesMemoReturnScreen === 'memo') {
+        return { screen: 'memo', folderId: null, lot: current.lot || null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'lots', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
+      }
       if (current.salesMemoReturnScreen === 'reseller') {
         return { screen: 'reseller', folderId: current.folderId || null, lot: null, salesLot: null, salesMemoId: null, salesMemoReturnScreen: 'reseller', dueType: 'regular', dueId: null, isPaidDue: false, investorId: null, investorMemoId: null };
       }
@@ -1776,6 +1779,14 @@ function App() {
               onNavigate={handleNavigate} 
               onBack={() => navigateBack('lots')}
               lotNumber={currentLot ?? 1} 
+              onSelectSalesMemo={(memoId, salesLot) => {
+                navigateTo('sales-memo', {
+                  salesLot: salesLot,
+                  salesMemoId: memoId,
+                  salesMemoReturnScreen: 'memo',
+                  lot: currentLot
+                });
+              }}
             />
           )}
           {currentScreen === 'due-category' && (

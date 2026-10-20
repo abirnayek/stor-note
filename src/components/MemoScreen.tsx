@@ -2,15 +2,16 @@ import { MemoSignatureBox } from './MemoSignatureBox';
 import { MathInput, DebouncedInput, parseMathOrNumber, focusNewTableRow } from './MathInput';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { type Screen } from '../App';
-import { Share2, Download, Plus, Trash2, Phone, Undo, Redo, MessageCircle, Mail, ChevronLeft, Lock, X, Package, CheckCircle2, AlertTriangle, XCircle, Calendar } from 'lucide-react';
+import { Share2, Download, Plus, Trash2, Phone, Undo, Redo, MessageCircle, Mail, ChevronLeft, Lock, X, Package, CheckCircle2, AlertTriangle, XCircle, Calendar, FileText } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
-import { getLotStock, type LotStockSummary } from '../utils/stockUtils';
+import { getLotStock, getFishSalesBreakdown, type LotStockSummary, type FishSalesSummary } from '../utils/stockUtils';
 import { bnToEnDigits, parseMemoMonthYear } from '../utils/dateUtils';
 import { isMemoEmpty, RECOVERED_LOT_2_MEMO } from '../utils/lotRecovery';
+import { FishSalesModal } from './FishSalesModal';
 
 // Helper to convert date strings to YYYY-MM-DD for native <input type="date">
 const getIsoDateForPicker = (dateStr?: string): string => {
@@ -54,6 +55,7 @@ interface MemoScreenProps {
   onNavigate: (screen: Screen) => void;
   lotNumber: number | null;
   onBack?: () => void;
+  onSelectSalesMemo?: (memoId: string, lotNumber: number | null) => void;
 }
 
 interface FishEntry {
@@ -80,7 +82,7 @@ interface MemoState {
   entries: FishEntry[];
 }
 
-const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }) => {
+const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack, onSelectSalesMemo }) => {
   const { t, language, formatNumber } = useLanguage();
   const memoRef = useRef<HTMLDivElement>(null);
 
@@ -201,6 +203,13 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
   }, [memoState.entries]);
   const [newPassword, setNewPassword] = useState('');
   const [lotStock, setLotStock] = useState<LotStockSummary | null>(null);
+  const [selectedFishSales, setSelectedFishSales] = useState<FishSalesSummary | null>(null);
+
+  const handleOpenFishSales = (fishName: string) => {
+    if (!fishName || !fishName.trim() || !lotNumber) return;
+    const summary = getFishSalesBreakdown(fishName.trim(), lotNumber);
+    setSelectedFishSales(summary);
+  };
 
   const refreshLotStock = useCallback(() => {
     if (lotNumber) {
@@ -929,6 +938,25 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                       <span>স্টক স্থিতি</span>
                     </span>
                   </th>
+                  <th style={{ minWidth: '120px', textAlign: 'center' }}>
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      color: '#60a5fa',
+                      background: 'rgba(59, 130, 246, 0.12)',
+                      padding: '4px 10px',
+                      borderRadius: '14px',
+                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                      fontSize: '0.82rem',
+                      fontWeight: 'bold',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      <FileText size={13} style={{ color: '#60a5fa' }} />
+                      <span>{language === 'bn' ? 'বিক্রয় দেখুন' : 'View Sales'}</span>
+                    </span>
+                  </th>
                   <th></th>
                 </tr>
               </thead>
@@ -1118,6 +1146,46 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
                             </div>
                           );
                         })()}
+                      </td>
+                      <td data-label="বিক্রয় দেখুন" style={{ textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                        {entry.name && entry.name.trim() !== '' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenFishSales(entry.name)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '5px',
+                              padding: '5px 12px',
+                              borderRadius: '8px',
+                              border: '1px solid rgba(59, 130, 246, 0.45)',
+                              background: 'rgba(59, 130, 246, 0.15)',
+                              color: '#93c5fd',
+                              fontWeight: 'bold',
+                              fontSize: '0.8rem',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              whiteSpace: 'nowrap'
+                            }}
+                            onMouseEnter={e => {
+                              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.35)';
+                              e.currentTarget.style.color = '#ffffff';
+                              e.currentTarget.style.transform = 'translateY(-1px)';
+                            }}
+                            onMouseLeave={e => {
+                              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)';
+                              e.currentTarget.style.color = '#93c5fd';
+                              e.currentTarget.style.transform = 'none';
+                            }}
+                            title={language === 'bn' ? `${entry.name}-এর সকল বিক্রয় ও লাভ-লস হিসাব দেখুন` : `View sales breakdown for ${entry.name}`}
+                          >
+                            <FileText size={14} />
+                            <span>{language === 'bn' ? 'বিক্রয় দেখুন' : 'View Sales'}</span>
+                          </button>
+                        ) : (
+                          <span style={{ color: '#666', fontSize: '0.85rem' }}>—</span>
+                        )}
                       </td>
                       <td data-label="">
                         <button className="btn-icon delete-btn" onClick={() => handleDeleteRow(entry.id)}>
@@ -1501,6 +1569,15 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack }
           </div>
         </div>
       )}
+
+      {/* Fish Sales Breakdown Modal */}
+      <FishSalesModal
+        salesSummary={selectedFishSales}
+        onClose={() => setSelectedFishSales(null)}
+        onSelectSalesMemo={onSelectSalesMemo || (() => {
+          onNavigate('sales-memo');
+        })}
+      />
 
     </div>
   );
