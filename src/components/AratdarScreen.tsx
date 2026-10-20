@@ -459,12 +459,13 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
       </div>
 
       {/* Statistics Cards */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: '1rem',
-        marginTop: '1.5rem'
-      }}>
+      <div className="screen-sub-container">
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '1rem',
+          marginTop: '1.5rem'
+        }}>
         {!selectedFolderId && (
           <div style={{
             background: 'rgba(18, 48, 32, 0.75)',
@@ -1436,6 +1437,7 @@ const AratdarScreen: React.FC<AratdarScreenProps> = ({ onNavigate, onSelectMemo,
           )}
         </div>
       )}
+      </div>
 
       {/* MODAL 1: Create New Folder */}
       {showCreateModal && (

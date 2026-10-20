@@ -350,18 +350,19 @@ export const initSyncEngine = () => {
           const activeUser = currentUser || getStoredUserCached();
           if (!activeUser || !navigator.onLine) return;
           
-          supabase.from('user_backups').upsert({
-            user_id: activeUser.id,
-            key: key,
-            value: value,
-            updated_at: new Date().toISOString()
-          }).then(({ error }) => {
-            if (!error) {
-              removePendingKey(key);
-            } else {
-              console.error('[SyncEngine] Upsert error, key retained in offline queue:', error);
-            }
-          });
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            if (!session || !session.user || session.user.id !== activeUser.id) return;
+            supabase.from('user_backups').upsert({
+              user_id: activeUser.id,
+              key: key,
+              value: value,
+              updated_at: new Date().toISOString()
+            }).then(({ error }) => {
+              if (!error) {
+                removePendingKey(key);
+              }
+            });
+          }).catch(() => {});
 
           if (realtimeChannel) {
             try {
@@ -760,6 +761,12 @@ export const pushUnsyncedLocalData = async (forceAll: boolean = false) => {
     if (!navigator.onLine) return;
     const user = currentUser || getStoredUserCached();
     if (!user) return;
+
+    // Verify active valid Supabase auth session to avoid 401 Unauthorized / RLS violation
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session || !session.user || session.user.id !== user.id) {
+      return;
+    }
 
     const originalGetItem = localStorage.getItem;
     const originalSetItem = localStorage.setItem;

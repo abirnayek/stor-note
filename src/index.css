@@ -2225,5 +2225,73 @@ body.view-only-mode .weight-unit-toggle {
   transition: all 0.3s ease !important;
 }
 
+/* Scoped styles for SalesLotsScreen horizontal slider cards */
+.custom-h-scrollbar .lot-card {
+  min-height: 142px !important;
+  max-height: 142px !important;
+  height: 142px !important;
+  flex: 0 0 165px !important;
+  min-width: 165px !important;
+  width: 165px !important;
+  padding: 0.85rem !important;
+  border-radius: 12px !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+}
 
+.custom-h-scrollbar .lot-card .lot-card-header {
+  padding-right: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  gap: 0.35rem !important;
+}
 
+.custom-h-scrollbar .lot-card .lot-card-body {
+  padding-right: 0 !important;
+  margin-top: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.2rem !important;
+}
+
+.custom-h-scrollbar .lot-card h3 {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  font-size: 0.96rem !important;
+  margin: 0 !important;
+  line-height: 1.25 !important;
+  word-break: normal !important;
+}
+
+.custom-h-scrollbar .add-lot-card {
+  min-height: 142px !important;
+  max-height: 142px !important;
+  height: 142px !important;
+  flex: 0 0 165px !important;
+  min-width: 165px !important;
+  width: 165px !important;
+  padding: 0.85rem !important;
+}
+
+@media (max-width: 600px) {
+  .sales-view-switcher {
+    display: flex !important;
+    width: 100% !important;
+    gap: 0.25rem !important;
+  }
+  .sales-view-switcher button {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    padding: 7px 3px !important;
+    font-size: 0.76rem !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+}

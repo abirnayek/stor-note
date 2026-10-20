@@ -315,436 +315,477 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
 
       {/* Drop Success Notification Banner */}
       {dropSuccessMsg && (
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(46, 125, 50, 0.95), rgba(76, 175, 80, 0.95))',
-          color: '#fff',
-          padding: '12px 18px',
-          borderRadius: '12px',
-          margin: '1rem 0 0.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          boxShadow: '0 4px 15px rgba(46, 125, 50, 0.4)',
-          animation: 'fadeIn 0.3s ease'
-        }}>
-          <CheckCircle2 size={20} />
-          <span style={{ fontWeight: 600 }}>{dropSuccessMsg}</span>
+        <div className="screen-sub-container">
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(46, 125, 50, 0.95), rgba(76, 175, 80, 0.95))',
+            color: '#fff',
+            padding: '12px 18px',
+            borderRadius: '12px',
+            margin: '1rem 0 0.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            boxShadow: '0 4px 15px rgba(46, 125, 50, 0.4)',
+            animation: 'fadeIn 0.3s ease'
+          }}>
+            <CheckCircle2 size={20} />
+            <span style={{ fontWeight: 600 }}>{dropSuccessMsg}</span>
+          </div>
         </div>
       )}
 
       {/* Top Section View Switcher Pills */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '1.25rem 0 0.8rem', flexWrap: 'wrap', gap: '0.6rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(255, 255, 255, 0.05)', padding: '3px 4px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+      <div className="screen-sub-container" style={{ margin: '1rem 0 0.8rem' }}>
+        <div className="sales-view-switcher" style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.35rem',
+          background: 'rgba(255, 255, 255, 0.05)',
+          padding: '4px',
+          borderRadius: '12px',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          width: '100%',
+          boxSizing: 'border-box'
+        }}>
           <button
             onClick={() => setViewMode('both')}
             style={{
-              padding: '6px 14px',
+              flex: 1,
+              padding: '7px 6px',
               borderRadius: '8px',
               border: 'none',
               background: viewMode === 'both' ? 'var(--primary-color)' : 'transparent',
               color: viewMode === 'both' ? '#fff' : '#aaa',
               fontWeight: 'bold',
-              fontSize: '0.85rem',
+              fontSize: '0.82rem',
               cursor: 'pointer',
-              transition: 'all 0.2s ease'
+              transition: 'all 0.2s ease',
+              textAlign: 'center',
+              whiteSpace: 'nowrap'
             }}
           >
-            সব (উভয়টি পাশাপাশি)
+            {language === 'bn' ? 'উভয়টি' : 'Both'}
           </button>
           <button
             onClick={() => setViewMode('lots')}
             style={{
-              padding: '6px 14px',
+              flex: 1.1,
+              padding: '7px 6px',
               borderRadius: '8px',
               border: 'none',
               background: viewMode === 'lots' ? 'var(--primary-color)' : 'transparent',
               color: viewMode === 'lots' ? '#fff' : '#aaa',
               fontWeight: 'bold',
-              fontSize: '0.85rem',
+              fontSize: '0.82rem',
               cursor: 'pointer',
-              transition: 'all 0.2s ease'
+              transition: 'all 0.2s ease',
+              textAlign: 'center',
+              whiteSpace: 'nowrap'
             }}
           >
-            ফোল্ডার / লটসমূহ ({lots.length})
+            {language === 'bn' ? `লটসমূহ (${enToBnDigits(lots.length)})` : `Lots (${lots.length})`}
           </button>
           <button
             onClick={() => setViewMode('aratdar')}
             style={{
-              padding: '6px 14px',
+              flex: 1.25,
+              padding: '7px 6px',
               borderRadius: '8px',
               border: 'none',
               background: viewMode === 'aratdar' ? 'var(--primary-color)' : 'transparent',
               color: viewMode === 'aratdar' ? '#fff' : '#aaa',
               fontWeight: 'bold',
-              fontSize: '0.85rem',
+              fontSize: '0.82rem',
               cursor: 'pointer',
-              transition: 'all 0.2s ease'
+              transition: 'all 0.2s ease',
+              textAlign: 'center',
+              whiteSpace: 'nowrap'
             }}
           >
-            আড়তদার / রিসেলার ({aratdarCount + resellerCount})
+            {language === 'bn' ? `আড়ত/রিসেলার (${enToBnDigits(aratdarCount + resellerCount)})` : `Aratdar/Reseller (${aratdarCount + resellerCount})`}
           </button>
         </div>
       </div>
 
       {/* Side-by-Side Section with Vertical Glowing Red Divider */}
-      <div className="sales-lots-split-container">
-        {/* Left Column: ফোল্ডার / লটসমূহ (Horizontal Slider) */}
-        {(viewMode === 'both' || viewMode === 'lots') && (
-          <div style={{
-            flex: viewMode === 'both' ? '1 1 58%' : '1 1 100%',
-            minWidth: 0,
-            display: 'flex',
-            flexDirection: 'column'
-          }}>
-            {/* Lots Column Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Package size={20} style={{ color: '#72be44' }} />
-                <h3 style={{ margin: 0, opacity: 0.9, fontSize: '1.1rem', fontWeight: 'bold' }}>
-                  ফোল্ডার / লটসমূহ
-                </h3>
-                <span style={{ fontSize: '0.8rem', color: '#72be44', background: 'rgba(114, 190, 68, 0.15)', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
-                  {language === 'bn' ? enToBnDigits(lots.length) : lots.length} টি লট
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <button
-                  className="btn-icon"
-                  onClick={() => scrollLots('left')}
-                  title="বামে স্লাইড করুন"
-                  style={{ padding: '3px 8px', margin: 0 }}
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <button
-                  className="btn-icon"
-                  onClick={() => scrollLots('right')}
-                  title="ডানে স্লাইড করুন"
-                  style={{ padding: '3px 8px', margin: 0 }}
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </div>
-            </div>
-
-            {/* Lots Horizontal Sliding Track */}
-            <div
-              ref={lotScrollRef}
-              className="custom-h-scrollbar"
-              onMouseDown={handleMouseDown}
-              onMouseLeave={handleMouseLeaveOrUp}
-              onMouseUp={handleMouseLeaveOrUp}
-              onMouseMove={handleMouseMove}
-              style={{
-                display: 'flex',
-                gap: '1rem',
-                overflowX: 'auto',
-                flexWrap: 'nowrap',
-                paddingBottom: '0.8rem',
-                paddingTop: '0.2rem',
-                WebkitOverflowScrolling: 'touch',
-                scrollBehavior: isDragging ? 'auto' : 'smooth',
-                cursor: isDragging ? 'grabbing' : 'grab',
-                userSelect: isDragging ? 'none' : 'auto'
-              }}
-            >
-              {hasEditPermission && (
-                <div
-                  className="lot-card add-lot-card"
-                  onClick={handleAddLot}
-                  style={{
-                    flex: '0 0 170px',
-                    minWidth: '170px',
-                    height: '160px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div className="add-lot-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                    <Package size={44} />
-                    <h3 style={{ margin: 0, fontSize: '1.05rem', whiteSpace: 'nowrap' }}>ক্রিয়েট লট</h3>
-                  </div>
+      <div className="screen-sub-container">
+        <div className="sales-lots-split-container">
+          {/* Left Column: ফোল্ডার / লটসমূহ (Horizontal Slider) */}
+          {(viewMode === 'both' || viewMode === 'lots') && (
+            <div style={{
+              flex: viewMode === 'both' ? '1 1 58%' : '1 1 100%',
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              {/* Lots Column Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Package size={20} style={{ color: '#72be44' }} />
+                  <h3 style={{ margin: 0, opacity: 0.9, fontSize: '1.1rem', fontWeight: 'bold' }}>
+                    ফোল্ডার / লটসমূহ
+                  </h3>
+                  <span style={{ fontSize: '0.8rem', color: '#72be44', background: 'rgba(114, 190, 68, 0.15)', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
+                    {language === 'bn' ? enToBnDigits(lots.length) : lots.length} টি লট
+                  </span>
                 </div>
-              )}
 
-              {lots.map((lot, idx) => {
-                const isDragOver = dragOverLotNumber === lot;
-                return (
-                  <ProtectedMemoWrapper 
-                    key={`sales_lot_${lot}_${idx}`} 
-                    passwordKey={`sales_lot_password_${lot}`} 
-                    name={`লট নং ${lot}`}
-                    type="lot"
-                    onAccessGranted={() => onSelectLot(lot)}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.dataTransfer.dropEffect = 'move';
-                      if (dragOverLotNumber !== lot) setDragOverLotNumber(lot);
-                    }}
-                    onDragEnter={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDragOverLotNumber(lot);
-                    }}
-                    onDragLeave={(e) => {
-                      e.stopPropagation();
-                      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-                      if (dragOverLotNumber === lot) setDragOverLotNumber(null);
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const mId = e.dataTransfer.getData('application/memo-id') || e.dataTransfer.getData('text/plain') || draggedMemoId || (window as any).__draggedMemoId;
-                      setDragOverLotNumber(null);
-                      setDraggedMemoId(null);
-                      (window as any).__draggedMemoId = null;
-                      if (mId) handleMoveMemoToLot(mId, lot);
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <button
+                    className="btn-icon"
+                    onClick={() => scrollLots('left')}
+                    title="বামে স্লাইড করুন"
+                    style={{ padding: '3px 8px', margin: 0 }}
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    className="btn-icon"
+                    onClick={() => scrollLots('right')}
+                    title="ডানে স্লাইড করুন"
+                    style={{ padding: '3px 8px', margin: 0 }}
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Lots Horizontal Sliding Track */}
+              <div
+                ref={lotScrollRef}
+                className="custom-h-scrollbar"
+                onMouseDown={handleMouseDown}
+                onMouseLeave={handleMouseLeaveOrUp}
+                onMouseUp={handleMouseLeaveOrUp}
+                onMouseMove={handleMouseMove}
+                style={{
+                  display: 'flex',
+                  gap: '0.85rem',
+                  overflowX: 'auto',
+                  flexWrap: 'nowrap',
+                  paddingBottom: '0.6rem',
+                  paddingTop: '0.2rem',
+                  WebkitOverflowScrolling: 'touch',
+                  scrollBehavior: isDragging ? 'auto' : 'smooth',
+                  cursor: isDragging ? 'grabbing' : 'grab',
+                  userSelect: isDragging ? 'none' : 'auto'
+                }}
+              >
+                {hasEditPermission && (
+                  <div
+                    className="lot-card add-lot-card"
+                    onClick={handleAddLot}
+                    style={{
+                      flex: '0 0 165px',
+                      minWidth: '165px',
+                      height: '142px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      boxSizing: 'border-box'
                     }}
                   >
-                    <div
-                      className="lot-card"
-                      style={{
-                        flex: '0 0 175px',
-                        minWidth: '175px',
-                        height: '160px',
-                        padding: '1.1rem',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        boxSizing: 'border-box',
-                        position: 'relative',
-                        border: isDragOver ? '2px dashed #ffb74d' : undefined,
-                        boxShadow: isDragOver ? '0 0 20px rgba(255, 152, 0, 0.6)' : undefined,
-                        transform: isDragOver ? 'scale(1.03)' : 'none',
-                        transition: 'all 0.2s ease'
+                    <div className="add-lot-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
+                      <Package size={36} />
+                      <h3 style={{ margin: 0, fontSize: '0.96rem', whiteSpace: 'nowrap', fontWeight: 700 }}>ক্রিয়েট লট</h3>
+                    </div>
+                  </div>
+                )}
+
+                {lots.map((lot, idx) => {
+                  const isDragOver = dragOverLotNumber === lot;
+                  return (
+                    <ProtectedMemoWrapper 
+                      key={`sales_lot_${lot}_${idx}`} 
+                      passwordKey={`sales_lot_password_${lot}`} 
+                      name={`লট নং ${lot}`}
+                      type="lot"
+                      onAccessGranted={() => onSelectLot(lot)}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.dataTransfer.dropEffect = 'move';
+                        if (dragOverLotNumber !== lot) setDragOverLotNumber(lot);
+                      }}
+                      onDragEnter={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDragOverLotNumber(lot);
+                      }}
+                      onDragLeave={(e) => {
+                        e.stopPropagation();
+                        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                        if (dragOverLotNumber === lot) setDragOverLotNumber(null);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const mId = e.dataTransfer.getData('application/memo-id') || e.dataTransfer.getData('text/plain') || draggedMemoId || (window as any).__draggedMemoId;
+                        setDragOverLotNumber(null);
+                        setDraggedMemoId(null);
+                        (window as any).__draggedMemoId = null;
+                        if (mId) handleMoveMemoToLot(mId, lot);
                       }}
                     >
-                      {/* Drag Over Drop Indicator Overlay */}
-                      {isDragOver && (
-                        <div style={{
-                          position: 'absolute',
-                          inset: 0,
-                          borderRadius: '12px',
-                          background: 'rgba(230, 81, 0, 0.92)',
+                      <div
+                        className="lot-card"
+                        style={{
+                          flex: '0 0 165px',
+                          minWidth: '165px',
+                          height: '142px',
+                          padding: '0.85rem',
                           display: 'flex',
                           flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '6px',
-                          zIndex: 35,
-                          pointerEvents: 'none',
-                          backdropFilter: 'blur(3px)'
-                        }}>
-                          <Package size={36} style={{ color: '#fff' }} />
-                          <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.88rem', textAlign: 'center', padding: '0 4px' }}>
-                            {language === 'bn' ? `লট ${lot}-এ ড্রপ করুন` : `Drop to Lot ${lot}`}
-                          </span>
+                          justifyContent: 'space-between',
+                          boxSizing: 'border-box',
+                          position: 'relative',
+                          border: isDragOver ? '2px dashed #ffb74d' : undefined,
+                          boxShadow: isDragOver ? '0 0 20px rgba(255, 152, 0, 0.6)' : undefined,
+                          transform: isDragOver ? 'scale(1.03)' : 'none',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        {/* Drag Over Drop Indicator Overlay */}
+                        {isDragOver && (
+                          <div style={{
+                            position: 'absolute',
+                            inset: 0,
+                            borderRadius: '12px',
+                            background: 'rgba(230, 81, 0, 0.92)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            zIndex: 35,
+                            pointerEvents: 'none',
+                            backdropFilter: 'blur(3px)'
+                          }}>
+                            <Package size={32} style={{ color: '#fff' }} />
+                            <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.85rem', textAlign: 'center', padding: '0 4px' }}>
+                              {language === 'bn' ? `লট ${lot}-এ ড্রপ করুন` : `Drop to Lot ${lot}`}
+                            </span>
+                          </div>
+                        )}
+                        <div className="lot-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{
+                              background: 'rgba(114, 190, 68, 0.15)',
+                              borderRadius: '8px',
+                              padding: '5px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#72be44'
+                            }}>
+                              <Package size={18} />
+                            </div>
+                            <span className="lot-status" style={{ fontSize: '0.68rem', padding: '2px 6px', whiteSpace: 'nowrap' }}>
+                              {t('activeLot')}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
+                            <MemoLockIcon passwordKey={`sales_lot_password_${lot}`} />
+                            {hasEditPermission && (
+                              <button
+                                className="btn-icon delete-btn"
+                                onClick={(e) => handleDeleteLot(lot, e)}
+                                style={{ padding: '3px', margin: 0, color: '#ff5252' }}
+                                title="লট মুছুন"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    <div className="lot-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Package size={36} className="lot-icon" />
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span className="lot-status">{t('activeLot')}</span>
-                      </div>
-                      {hasEditPermission && (
-                        <div className="card-top-actions">
-                          <button className="btn-icon delete-btn" onClick={(e) => handleDeleteLot(lot, e)} style={{ padding: '4px', margin: 0, color: '#ff5252' }}>
-                            <Trash2 size={15} />
-                          </button>
+                        <div className="lot-card-body" style={{ marginTop: 'auto' }}>
+                          <h3 style={{ margin: '0 0 2px', fontSize: '0.96rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            লট নাম্বার {lot.toString().padStart(2, '0')}
+                          </h3>
+                          <div className="lot-date" style={{ fontSize: '0.74rem', display: 'flex', alignItems: 'center', gap: '4px', color: '#aaa', margin: 0 }}>
+                            <Calendar size={12} />
+                            <span>{today}</span>
+                          </div>
                         </div>
-                      )}
-                      <div className="card-bottom-actions" onClick={(e) => e.stopPropagation()}>
-                        <MemoLockIcon passwordKey={`sales_lot_password_${lot}`} />
                       </div>
-                    </div>
-                    <div className="lot-card-body" style={{ marginTop: 'auto' }}>
-                      <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', whiteSpace: 'nowrap' }}>
-                        লট নাম্বার {lot.toString().padStart(2, '0')}
-                      </h3>
-                      <div className="lot-date" style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px', color: '#aaa' }}>
-                        <Calendar size={13} />
-                        <span>{today}</span>
-                      </div>
-                    </div>
-                  </div>
-                </ProtectedMemoWrapper>
-              );
-            })}
-            </div>
-          </div>
-        )}
-
-        {/* Center Glowing Red Line Divider matching user sketch */}
-        {viewMode === 'both' && (
-          <div
-            className="split-divider"
-            title="বিভাগ রেখা (Lots | Aratdar/Reseller)"
-          />
-        )}
-
-        {/* Right Column: আড়তদার / রিসেলার */}
-        {(viewMode === 'both' || viewMode === 'aratdar') && (
-          <div style={{
-            flex: viewMode === 'both' ? '0 0 380px' : '1 1 100%',
-            minWidth: 0,
-            display: 'flex',
-            flexDirection: 'column'
-          }}>
-            {/* Aratdar/Reseller Column Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Store size={20} style={{ color: '#ce93d8' }} />
-                <h3 style={{ margin: 0, opacity: 0.9, fontSize: '1.1rem', fontWeight: 'bold' }}>
-                  আড়তদার / রিসেলার
-                </h3>
-                <span style={{ fontSize: '0.8rem', color: '#ffb74d', background: 'rgba(255, 152, 0, 0.15)', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
-                  {language === 'bn' ? enToBnDigits(aratdarCount + resellerCount) : aratdarCount + resellerCount} টি মেমো
-                </span>
+                    </ProtectedMemoWrapper>
+                  );
+                })}
               </div>
             </div>
+          )}
 
-            {/* Aratdar & Reseller Cards Track */}
+          {/* Center Glowing Red Line Divider matching user sketch */}
+          {viewMode === 'both' && (
+            <div
+              className="split-divider"
+              title="বিভাগ রেখা (Lots | Aratdar/Reseller)"
+            />
+          )}
+
+          {/* Right Column: আড়তদার / রিসেলার */}
+          {(viewMode === 'both' || viewMode === 'aratdar') && (
             <div style={{
+              flex: viewMode === 'both' ? '0 0 380px' : '1 1 100%',
+              minWidth: 0,
               display: 'flex',
-              gap: '1rem',
-              flexWrap: 'nowrap',
-              overflowX: 'auto',
-              paddingBottom: '0.8rem',
-              paddingTop: '0.2rem'
-            }} className="custom-h-scrollbar">
-              {/* Card 1: আড়তদারের মেমো */}
-              <div
-                className="lot-card"
-                onClick={() => onNavigate('aratdar')}
-                style={{
-                  flex: '1 1 175px',
-                  minWidth: '170px',
-                  height: '160px',
-                  padding: '1.1rem',
-                  background: 'linear-gradient(135deg, rgba(48, 22, 68, 0.85), rgba(22, 12, 38, 0.95))',
-                  border: '1px solid rgba(171, 71, 188, 0.5)',
-                  boxShadow: '0 4px 15px rgba(171, 71, 188, 0.2)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  boxSizing: 'border-box'
-                }}
-              >
-                <div className="lot-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{
-                    background: 'rgba(171, 71, 188, 0.25)',
-                    borderRadius: '10px',
-                    padding: '7px',
-                    color: '#ce93d8',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <Store size={22} />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <span style={{
-                      background: 'rgba(171, 71, 188, 0.3)',
-                      color: '#e1bee7',
-                      padding: '2px 7px',
-                      borderRadius: '10px',
-                      fontSize: '0.75rem',
-                      fontWeight: 'bold',
-                      border: '1px solid rgba(171, 71, 188, 0.4)'
-                    }}>
-                      {language === 'bn' ? enToBnDigits(aratdarCount) : aratdarCount} টি
-                    </span>
-                    <ArrowRight size={14} style={{ color: '#ce93d8' }} />
-                  </div>
-                </div>
-                <div className="lot-card-body" style={{ marginTop: 'auto' }}>
-                  <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', color: '#f3e5f5', whiteSpace: 'nowrap' }}>
-                    আড়তদারের মেমো
+              flexDirection: 'column'
+            }}>
+              {/* Aratdar/Reseller Column Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Store size={20} style={{ color: '#ce93d8' }} />
+                  <h3 style={{ margin: 0, opacity: 0.9, fontSize: '1.1rem', fontWeight: 'bold' }}>
+                    আড়তদার / রিসেলার
                   </h3>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem' }}>
-                    <span style={{ color: '#ce93d8', fontWeight: 'bold' }}>
-                      ৳{Math.round(aratdarTotal).toLocaleString()}
-                    </span>
-                    {aratdarDue > 0 && (
-                      <span style={{ color: '#ff8a80', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                        বাকি: ৳{Math.round(aratdarDue).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
+                  <span style={{ fontSize: '0.8rem', color: '#ffb74d', background: 'rgba(255, 152, 0, 0.15)', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
+                    {language === 'bn' ? enToBnDigits(aratdarCount + resellerCount) : aratdarCount + resellerCount} টি মেমো
+                  </span>
                 </div>
               </div>
 
-              {/* Card 2: রিসেলার */}
-              <div
-                className="lot-card"
-                onClick={() => onNavigate('reseller')}
-                style={{
-                  flex: '1 1 175px',
-                  minWidth: '170px',
-                  height: '160px',
-                  padding: '1.1rem',
-                  background: 'linear-gradient(135deg, rgba(16, 46, 74, 0.85), rgba(9, 24, 42, 0.95))',
-                  border: '1px solid rgba(33, 150, 243, 0.5)',
-                  boxShadow: '0 4px 15px rgba(33, 150, 243, 0.2)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  boxSizing: 'border-box'
-                }}
-              >
-                <div className="lot-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{
-                    background: 'rgba(33, 150, 243, 0.25)',
-                    borderRadius: '10px',
-                    padding: '7px',
-                    color: '#90caf9',
+              {/* Aratdar & Reseller Cards Track */}
+              <div style={{
+                display: 'flex',
+                gap: '0.85rem',
+                flexWrap: 'nowrap',
+                overflowX: 'auto',
+                paddingBottom: '0.6rem',
+                paddingTop: '0.2rem'
+              }} className="custom-h-scrollbar">
+                {/* Card 1: আড়তদারের মেমো */}
+                <div
+                  className="lot-card"
+                  onClick={() => onNavigate('aratdar')}
+                  style={{
+                    flex: '0 0 165px',
+                    minWidth: '165px',
+                    height: '142px',
+                    padding: '0.85rem',
+                    background: 'linear-gradient(135deg, rgba(48, 22, 68, 0.85), rgba(22, 12, 38, 0.95))',
+                    border: '1px solid rgba(171, 71, 188, 0.5)',
+                    boxShadow: '0 4px 15px rgba(171, 71, 188, 0.2)',
+                    cursor: 'pointer',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <Users size={22} />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <span style={{
-                      background: 'rgba(33, 150, 243, 0.3)',
-                      color: '#bbdefb',
-                      padding: '2px 7px',
-                      borderRadius: '10px',
-                      fontSize: '0.75rem',
-                      fontWeight: 'bold',
-                      border: '1px solid rgba(33, 150, 243, 0.4)'
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <div className="lot-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{
+                      background: 'rgba(171, 71, 188, 0.25)',
+                      borderRadius: '8px',
+                      padding: '5px',
+                      color: '#ce93d8',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
                     }}>
-                      {language === 'bn' ? enToBnDigits(resellerCount) : resellerCount} টি
-                    </span>
-                    <ArrowRight size={14} style={{ color: '#90caf9' }} />
+                      <Store size={18} />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <span style={{
+                        background: 'rgba(171, 71, 188, 0.3)',
+                        color: '#e1bee7',
+                        padding: '2px 6px',
+                        borderRadius: '8px',
+                        fontSize: '0.72rem',
+                        fontWeight: 'bold',
+                        border: '1px solid rgba(171, 71, 188, 0.4)',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {language === 'bn' ? enToBnDigits(aratdarCount) : aratdarCount} টি
+                      </span>
+                      <ArrowRight size={13} style={{ color: '#ce93d8' }} />
+                    </div>
+                  </div>
+                  <div className="lot-card-body" style={{ marginTop: 'auto' }}>
+                    <h3 style={{ margin: '0 0 2px', fontSize: '0.96rem', color: '#f3e5f5', whiteSpace: 'nowrap', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      আড়তদারের মেমো
+                    </h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
+                      <span style={{ color: '#ce93d8', fontWeight: 'bold' }}>
+                        ৳{Math.round(aratdarTotal).toLocaleString()}
+                      </span>
+                      {aratdarDue > 0 && (
+                        <span style={{ color: '#ff8a80', fontSize: '0.72rem', fontWeight: 'bold' }}>
+                          বাকি: ৳{Math.round(aratdarDue).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="lot-card-body" style={{ marginTop: 'auto' }}>
-                  <h3 style={{ margin: '0 0 4px', fontSize: '1.05rem', color: '#e3f2fd', whiteSpace: 'nowrap' }}>
-                    রিসেলার
-                  </h3>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem' }}>
-                    <span style={{ color: '#90caf9', fontWeight: 'bold' }}>
-                      ৳{Math.round(resellerTotal).toLocaleString()}
-                    </span>
-                    {resellerDue > 0 && (
-                      <span style={{ color: '#ff8a80', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                        বাকি: ৳{Math.round(resellerDue).toLocaleString()}
+
+                {/* Card 2: রিসেলার */}
+                <div
+                  className="lot-card"
+                  onClick={() => onNavigate('reseller')}
+                  style={{
+                    flex: '0 0 165px',
+                    minWidth: '165px',
+                    height: '142px',
+                    padding: '0.85rem',
+                    background: 'linear-gradient(135deg, rgba(16, 46, 74, 0.85), rgba(9, 24, 42, 0.95))',
+                    border: '1px solid rgba(33, 150, 243, 0.5)',
+                    boxShadow: '0 4px 15px rgba(33, 150, 243, 0.2)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <div className="lot-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{
+                      background: 'rgba(33, 150, 243, 0.25)',
+                      borderRadius: '8px',
+                      padding: '5px',
+                      color: '#90caf9',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <Users size={18} />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <span style={{
+                        background: 'rgba(33, 150, 243, 0.3)',
+                        color: '#bbdefb',
+                        padding: '2px 6px',
+                        borderRadius: '8px',
+                        fontSize: '0.72rem',
+                        fontWeight: 'bold',
+                        border: '1px solid rgba(33, 150, 243, 0.4)',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {language === 'bn' ? enToBnDigits(resellerCount) : resellerCount} টি
                       </span>
-                    )}
+                      <ArrowRight size={13} style={{ color: '#90caf9' }} />
+                    </div>
+                  </div>
+                  <div className="lot-card-body" style={{ marginTop: 'auto' }}>
+                    <h3 style={{ margin: '0 0 2px', fontSize: '0.96rem', color: '#e3f2fd', whiteSpace: 'nowrap', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      রিসেলার
+                    </h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
+                      <span style={{ color: '#90caf9', fontWeight: 'bold' }}>
+                        ৳{Math.round(resellerTotal).toLocaleString()}
+                      </span>
+                      {resellerDue > 0 && (
+                        <span style={{ color: '#ff8a80', fontSize: '0.72rem', fontWeight: 'bold' }}>
+                          বাকি: ৳{Math.round(resellerDue).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       
       {/* 12 Monthly Folders Ribbon/Grid */}
@@ -839,72 +880,89 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
       </div>
 
       {/* Global Memos Header & Category Filter Tabs */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '1.5rem 0 0.8rem', flexWrap: 'wrap', gap: '0.8rem' }}>
-        <h3 style={{ margin: 0, opacity: 0.9, fontSize: '1.15rem', fontWeight: 'bold' }}>
-          সকল মেমো (Global List)
-        </h3>
+      <div className="screen-sub-container" style={{ margin: '1.5rem 0 0.8rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.8rem' }}>
+          <h3 style={{ margin: 0, opacity: 0.9, fontSize: '1.15rem', fontWeight: 'bold' }}>
+            সকল মেমো (Global List)
+          </h3>
 
-        <div style={{ display: 'flex', gap: '0.4rem', background: 'rgba(255, 255, 255, 0.05)', padding: '3px 4px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.08)', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setMemoFilter('all')}
-            style={{
-              padding: '4px 10px',
-              borderRadius: '7px',
-              border: 'none',
-              background: memoFilter === 'all' ? 'var(--primary-color)' : 'transparent',
-              color: memoFilter === 'all' ? '#fff' : '#aaa',
-              fontWeight: 'bold',
-              fontSize: '0.8rem',
-              cursor: 'pointer'
-            }}
-          >
-            সব ({globalMemos.length})
-          </button>
-          <button
-            onClick={() => setMemoFilter('lots')}
-            style={{
-              padding: '4px 10px',
-              borderRadius: '7px',
-              border: 'none',
-              background: memoFilter === 'lots' ? 'var(--primary-color)' : 'transparent',
-              color: memoFilter === 'lots' ? '#fff' : '#aaa',
-              fontWeight: 'bold',
-              fontSize: '0.8rem',
-              cursor: 'pointer'
-            }}
-          >
-            লট ভিত্তিক ({lotMemosCount})
-          </button>
-          <button
-            onClick={() => setMemoFilter('aratdar')}
-            style={{
-              padding: '4px 10px',
-              borderRadius: '7px',
-              border: 'none',
-              background: memoFilter === 'aratdar' ? '#ab47bc' : 'transparent',
-              color: memoFilter === 'aratdar' ? '#fff' : '#aaa',
-              fontWeight: 'bold',
-              fontSize: '0.8rem',
-              cursor: 'pointer'
-            }}
-          >
-            আড়তদার ({aratdarCount})
-          </button>
-          <button
-            onClick={() => setMemoFilter('reseller')}
-            style={{
-              padding: '4px 10px',
-              borderRadius: '7px',
-              border: 'none',
-              background: memoFilter === 'reseller' ? '#2196f3' : 'transparent',
-              color: memoFilter === 'reseller' ? '#fff' : '#aaa',
-              fontWeight: 'bold',
-              fontSize: '0.8rem',
-              cursor: 'pointer'
-            }}
-          >
-            রিসেলার ({resellerCount})
-          </button>
+          <div style={{
+            display: 'flex',
+            gap: '0.35rem',
+            background: 'rgba(255, 255, 255, 0.05)',
+            padding: '3px 4px',
+            borderRadius: '10px',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            flexWrap: 'nowrap',
+            overflowX: 'auto',
+            maxWidth: '100%',
+            WebkitOverflowScrolling: 'touch'
+          }}>
+            <button
+              onClick={() => setMemoFilter('all')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '7px',
+                border: 'none',
+                background: memoFilter === 'all' ? 'var(--primary-color)' : 'transparent',
+                color: memoFilter === 'all' ? '#fff' : '#aaa',
+                fontWeight: 'bold',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              সব ({globalMemos.length})
+            </button>
+            <button
+              onClick={() => setMemoFilter('lots')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '7px',
+                border: 'none',
+                background: memoFilter === 'lots' ? 'var(--primary-color)' : 'transparent',
+                color: memoFilter === 'lots' ? '#fff' : '#aaa',
+                fontWeight: 'bold',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              লট ভিত্তিক ({lotMemosCount})
+            </button>
+            <button
+              onClick={() => setMemoFilter('aratdar')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '7px',
+                border: 'none',
+                background: memoFilter === 'aratdar' ? '#ab47bc' : 'transparent',
+                color: memoFilter === 'aratdar' ? '#fff' : '#aaa',
+                fontWeight: 'bold',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              আড়তদার ({aratdarCount})
+            </button>
+            <button
+              onClick={() => setMemoFilter('reseller')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '7px',
+                border: 'none',
+                background: memoFilter === 'reseller' ? '#2196f3' : 'transparent',
+                color: memoFilter === 'reseller' ? '#fff' : '#aaa',
+                fontWeight: 'bold',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              রিসেলার ({resellerCount})
+            </button>
+          </div>
         </div>
       </div>
       
