@@ -119,7 +119,11 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
   useEffect(() => {
     loadStockData();
     window.addEventListener('storage', loadStockData);
-    return () => window.removeEventListener('storage', loadStockData);
+    window.addEventListener('stock_updated', loadStockData);
+    return () => {
+      window.removeEventListener('storage', loadStockData);
+      window.removeEventListener('stock_updated', loadStockData);
+    };
   }, []);
 
   const handleDeleteLot = (lotNumber: number, e: React.MouseEvent) => {

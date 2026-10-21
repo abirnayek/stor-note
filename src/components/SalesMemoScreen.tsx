@@ -84,6 +84,7 @@ interface FishEntry {
   profitPercent?: number | '';
   manualSaleRate?: number | '';
   highlightColor?: string;
+  lotNumber?: number;
 }
 
 interface MemoState {
@@ -248,7 +249,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
               buyRate: e.buyRate !== undefined ? e.buyRate : '',
               profitPercent: (e.profitPercent !== undefined && e.profitPercent !== '' && Number(e.profitPercent) !== 0) ? e.profitPercent : '',
               manualSaleRate: saleRateVal,
-              highlightColor: e.highlightColor
+              highlightColor: e.highlightColor,
+              lotNumber: e.lotNumber !== undefined ? e.lotNumber : undefined
             };
           })
         : [{ id: Date.now().toString(), serialNo: '1', name: '', totalKg: '', weightUnit: 'kg', profitPercent: '', manualSaleRate: '' }];
@@ -339,6 +341,19 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const [showBusinessCallMenu2, setShowBusinessCallMenu2] = useState(false);
   const [showCustomerCallMenu, setShowCustomerCallMenu] = useState(false);
   const [currentLotStock, setCurrentLotStock] = useState<LotStockSummary | null>(null);
+  const [stockVersion, setStockVersion] = useState(0);
+
+  useEffect(() => {
+    const handleStockUpdate = () => {
+      setStockVersion(v => v + 1);
+    };
+    window.addEventListener('storage', handleStockUpdate);
+    window.addEventListener('stock_updated', handleStockUpdate);
+    return () => {
+      window.removeEventListener('storage', handleStockUpdate);
+      window.removeEventListener('stock_updated', handleStockUpdate);
+    };
+  }, []);
 
   // Search highlight & blinking animation state
   const [highlightedEntryId, setHighlightedEntryId] = useState<string | null>(null);
@@ -387,7 +402,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     } else {
       setCurrentLotStock(null);
     }
-  }, [memoState.lotNumberInput, lotNumber]);
+  }, [memoState.lotNumberInput, lotNumber, stockVersion]);
 
   const [activeSuggestRowId, setActiveSuggestRowId] = useState<string | null>(null);
 
@@ -397,11 +412,49 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       return getLotPurchaseItems(rawLot);
     }
     return getAllPurchaseItems();
-  }, [memoState.lotNumberInput, lotNumber]);
+  }, [memoState.lotNumberInput, lotNumber, stockVersion]);
 
-  const findLotItemByName = (name: string): LotPurchaseFishItem | null => {
-    if (!name || !name.trim()) return null;
-    const trimmed = name.trim().toLowerCase();
+  const findLotItemForEntry = (entry: FishEntry): LotPurchaseFishItem | null => {
+    if (!entry.name || !entry.name.trim()) return null;
+    const trimmed = entry.name.trim().toLowerCase();
+
+    // 1. If entry has explicit lotNumber, match that lot first
+    if (entry.lotNumber) {
+      const byLot = lotPurchaseItems.find(it => 
+        it.lotNumber === entry.lotNumber && 
+        it.name.trim().toLowerCase() === trimmed
+      );
+      if (byLot) return byLot;
+    }
+
+    // 2. If memo has global lotNumberInput / lotNumber prop, match that lot
+    const rawLot = memoState.lotNumberInput ? parseInt(memoState.lotNumberInput, 10) : lotNumber;
+    if (rawLot && !isNaN(rawLot) && rawLot > 0) {
+      const byMemoLot = lotPurchaseItems.find(it => 
+        it.lotNumber === rawLot && 
+        it.name.trim().toLowerCase() === trimmed
+      );
+      if (byMemoLot) return byMemoLot;
+    }
+
+    // 3. If entry has buyRate, match by effective cost rate
+    if (entry.buyRate && Number(entry.buyRate) > 0) {
+      const rateNum = Number(entry.buyRate);
+      const byRate = lotPurchaseItems.find(it => 
+        it.name.trim().toLowerCase() === trimmed && 
+        Math.abs(it.effectiveCostRate - rateNum) < 0.05
+      );
+      if (byRate) return byRate;
+    }
+
+    // 4. Prioritize candidate with stock > 0 in FIFO order
+    const inStock = lotPurchaseItems.find(it => 
+      it.name.trim().toLowerCase() === trimmed && 
+      (it.remainingKg || 0) > 0.001
+    );
+    if (inStock) return inStock;
+
+    // 5. Fallback: first match
     return lotPurchaseItems.find(it => it.name.trim().toLowerCase() === trimmed) || null;
   };
 
@@ -414,7 +467,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           name: item.name,
           buyRate: item.effectiveCostRate,
           manualSaleRate: item.suggestedSaleRate > 0 ? item.suggestedSaleRate : item.effectiveCostRate,
-          profitPercent: (e.profitPercent !== undefined && e.profitPercent !== '' && Number(e.profitPercent) !== 0 ? e.profitPercent : '') as (number | '')
+          profitPercent: (e.profitPercent !== undefined && e.profitPercent !== '' && Number(e.profitPercent) !== 0 ? e.profitPercent : '') as (number | ''),
+          lotNumber: item.lotNumber
         };
       });
       return { ...prev, entries: updated };
@@ -821,7 +875,8 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
             buyRate: e.buyRate || '',
             profitPercent: e.profitPercent,
             manualSaleRate: e.manualSaleRate,
-            highlightColor: e.highlightColor
+            highlightColor: e.highlightColor,
+            lotNumber: e.lotNumber
           }))
         };
 
@@ -888,6 +943,10 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
       syncMemoToLot(memoState.lotNumberInput, effectiveState || memoState);
       setSaveStatus('Saved');
+      try {
+        window.dispatchEvent(new CustomEvent('stock_updated'));
+        window.dispatchEvent(new Event('storage'));
+      } catch (e) {}
     }, 350);
 
     return () => clearTimeout(timer);
@@ -904,11 +963,6 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     }
     setMemoState(prev => {
       const newState = { ...prev, [field]: cleanVal };
-      if (field === 'lotNumberInput') {
-        if (!cleanVal) {
-          newState.entries = newState.entries.map(e => ({ ...e, buyRate: 0 }));
-        }
-      }
       return newState;
     });
   };
@@ -928,6 +982,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
               if (e.id !== id) return e;
               return {
                 ...e,
+                lotNumber: matched.lotNumber,
                 buyRate: matched.effectiveCostRate,
                 manualSaleRate: (e.manualSaleRate !== undefined && e.manualSaleRate !== '')
                   ? e.manualSaleRate
@@ -939,7 +994,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
             });
           }
         } else {
-          updatedEntries = updatedEntries.map(e => e.id === id ? { ...e, buyRate: 0 } : e);
+          updatedEntries = updatedEntries.map(e => e.id === id ? { ...e, buyRate: 0, lotNumber: undefined } : e);
         }
       }
 
@@ -1153,7 +1208,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   memoState.entries.forEach(entry => {
     let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
     
-    const matchedItem = findLotItemByName(entry.name);
+    const matchedItem = findLotItemForEntry(entry);
     const isExtra = !matchedItem && (entry.name || '').trim() !== '';
 
     let saleRate = 0;
@@ -2060,7 +2115,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                       </td>
                       <td data-label={t('fishName')} style={{ position: 'relative' }}>
                         {(() => {
-                          const matchedLotItem = findLotItemByName(entry.name);
+                          const matchedLotItem = findLotItemForEntry(entry);
                           const isExtra = !matchedLotItem && (entry.name || '').trim() !== '';
                           const inputVal = (entry.name || '').trim().toLowerCase();
                           const availableLotItems = lotPurchaseItems.filter(it => (it.remainingKg || 0) > 0.001);
@@ -2152,7 +2207,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                                     >
                                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.86rem' }}>{item.name}</span>
+                                        <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.86rem' }}>
+                                          {item.name} {item.lotNumber ? <span style={{ fontSize: '0.72rem', color: '#86efac', fontWeight: 600 }}> (লট {item.lotNumber})</span> : ''}
+                                        </span>
                                         <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
                                           ক্রয়+খরচ: ৳{item.effectiveCostRate}/kg
                                         </span>
@@ -2236,7 +2293,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
                                           boxShadow: `0 0 6px ${badgeColor}`,
                                           display: 'inline-block'
                                         }} />
-                                        <span>স্টক: {remKg} kg {remKg <= 0 ? '(শেষ)' : ''}</span>
+                                        <span>
+                                          স্টক: {remKg} kg {remKg <= 0 ? '(শেষ)' : (matchedLotItem?.lotNumber ? `(লট ${matchedLotItem.lotNumber})` : '')}
+                                        </span>
                                       </div>
                                       {matchedLotItem && matchedLotItem.effectiveCostRate > 0 && (
                                         <div style={{

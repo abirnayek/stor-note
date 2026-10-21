@@ -180,6 +180,7 @@ export interface ActiveSalesMemoEntry {
   buyRate?: number;
   profitPercent?: number | '';
   manualSaleRate?: number | '';
+  lotNumber?: number;
 }
 
 export interface ActiveSalesMemo {
@@ -446,6 +447,17 @@ export const getAllLotsStock = (): LotStockSummary[] => {
         let weight = Number(entry.totalKg) || 0;
         if (entry.weightUnit === 'g') weight /= 1000;
         if (weight <= 0 || !name) return;
+
+        // If entry has explicit lotNumber, deduct directly from that lot
+        const explicitEntryLot = normalizeLotNumber(entry.lotNumber);
+        if (explicitEntryLot !== null && lotsMap.has(explicitEntryLot)) {
+          const lObj = lotsMap.get(explicitEntryLot)!;
+          const found = lObj.items.find(item => matchesFish(name, item.name));
+          if (found) {
+            found.soldKg += weight;
+            return;
+          }
+        }
 
         // Find candidate items across lots in FIFO order
         // STRICT TEMPORAL GUARD: Unassigned sales can ONLY deduct from lots that existed on or before the sale date!
@@ -821,6 +833,21 @@ export const getFishSalesBreakdown = (targetFishName: string, targetLotNumber: n
         let weight = Number(entry.totalKg) || 0;
         if (entry.weightUnit === 'g') weight /= 1000;
         if (weight <= 0 || !name) return;
+
+        // If entry has explicit lotNumber, deduct directly from that lot
+        const explicitEntryLot = normalizeLotNumber(entry.lotNumber);
+        if (explicitEntryLot !== null && lotsMap.has(explicitEntryLot)) {
+          const lObj = lotsMap.get(explicitEntryLot)!;
+          const found = lObj.items.find(item => matchesFish(name, item.name));
+          if (found) {
+            found.soldKg += weight;
+            if (explicitEntryLot === normTargetLot && (matchesFish(name, cleanTargetName) || matchesFish(cleanTargetName, found.name))) {
+              const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : found.buyRate;
+              addMemoRecord(memo, entry, weight, cost, found.suggestedSaleRate);
+            }
+            return;
+          }
+        }
 
         // Find candidate items across lots
         const candidateItems: { lotNum: number; item: LotTrackItem }[] = [];
