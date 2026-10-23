@@ -51,11 +51,13 @@ export const checkAppVersionAndSync = async (isManual = false) => {
     const localBuildTime = Number(localStorage.getItem('app_build_time') || '0');
     const myLoginTs = Number(localStorage.getItem('device_login_timestamp') || '0');
 
+    const hasCachedAuth = localStorage.getItem('cached_is_authenticated') === 'true';
+
     let needsLogout = false;
     let needsUpdate = false;
 
-    // Check force logout requirement
-    if (data.forceLogoutBefore && data.forceLogoutBefore > 0) {
+    // Check force logout requirement ONLY IF user is currently authenticated
+    if (hasCachedAuth && data.forceLogoutBefore && data.forceLogoutBefore > 0) {
       if (myLoginTs < data.forceLogoutBefore) {
         console.warn('[VersionCheck] Force logout triggered by version policy.');
         needsLogout = true;
@@ -81,9 +83,11 @@ export const checkAppVersionAndSync = async (isManual = false) => {
       localStorage.removeItem('cached_user_session');
       localStorage.removeItem('device_permission');
       try { await supabase.auth.signOut(); } catch (e) {}
+      await forcePurgeCacheAndReload();
+      return;
     }
 
-    if (needsUpdate || needsLogout) {
+    if (needsUpdate) {
       await forcePurgeCacheAndReload();
       return;
     }

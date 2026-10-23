@@ -256,7 +256,7 @@ function App() {
       }
       setLoadingAuth(false);
 
-      if (navigator.onLine) {
+      if (navigator.onLine && activeUser) {
         // --- Device Validity Check & Auto-logout Heartbeat ---
         let deviceId = localStorage.getItem('device_id');
         if (!deviceId) {
@@ -305,7 +305,7 @@ function App() {
               .eq('device_id', currentId)
               .maybeSingle();
 
-            if (!error && data?.status === 'revoked') {
+            if (activeUser && !error && data?.status === 'revoked') {
               console.warn('[DeviceCheck] Device session is revoked. Logging out...');
               localStorage.removeItem('cached_is_authenticated');
               localStorage.removeItem('cached_user_session');
