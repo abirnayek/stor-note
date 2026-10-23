@@ -2141,7 +2141,29 @@ function App() {
             </div>
             <div className="setting-item">
               <span>{t('appVersion')}</span>
-              <span style={{ opacity: 0.7 }}>1.0.0 (PWA enabled)</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <span style={{ opacity: 0.7, fontSize: '0.85rem' }}>v1.0.0</span>
+                <button 
+                  className="btn btn-secondary"
+                  style={{ fontSize: '0.8rem', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  onClick={async () => {
+                    try {
+                      if ('serviceWorker' in navigator) {
+                        const reg = await navigator.serviceWorker.getRegistration();
+                        if (reg) await reg.update();
+                      }
+                      if ('caches' in window) {
+                        const names = await caches.keys();
+                        await Promise.all(names.map(name => caches.delete(name)));
+                      }
+                    } catch (e) {}
+                    window.location.reload();
+                  }}
+                  title="Check for newest updates and refresh"
+                >
+                  <RefreshCw size={12} /> আপডেট চেক
+                </button>
+              </div>
             </div>
             
           </div>

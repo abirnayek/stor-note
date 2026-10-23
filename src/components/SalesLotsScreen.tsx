@@ -186,13 +186,19 @@ const SalesLotsScreen: React.FC<SalesLotsScreenProps> = ({ onNavigate, onSelectL
     const loadGlobalMemos = () => {
       const allMemos = getAllGlobalSalesMemos();
       setGlobalMemos(allMemos);
+      try {
+        const savedLots = localStorage.getItem('sales_lots_list');
+        if (savedLots) {
+          setLots(JSON.parse(savedLots));
+        }
+      } catch (e) {}
     };
 
     loadGlobalMemos();
 
     window.addEventListener('storage', loadGlobalMemos);
     return () => window.removeEventListener('storage', loadGlobalMemos);
-  }, [lots]);
+  }, []);
 
   const handleMoveMemoToLot = (memoId: string, targetLot: number) => {
     const res = moveSalesMemoToLot(memoId, targetLot);
