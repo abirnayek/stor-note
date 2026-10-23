@@ -22,8 +22,14 @@ export const forcePurgeCacheAndReload = async () => {
   } catch (e) {
     console.error('[VersionCheck] Purge error:', e);
   }
-  // Hard reload without using cache
-  window.location.reload();
+  // Hard reload using cache-busting parameter to bypass any aggressive mobile HTTP cache
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('_v', Date.now().toString());
+    window.location.replace(url.toString());
+  } catch (e) {
+    window.location.reload();
+  }
 };
 
 let isChecking = false;
@@ -50,7 +56,6 @@ export const checkAppVersionAndSync = async (isManual = false) => {
     const data: VersionInfo = await res.json();
     const localBuildTime = Number(localStorage.getItem('app_build_time') || '0');
     const myLoginTs = Number(localStorage.getItem('device_login_timestamp') || '0');
-
     const hasCachedAuth = localStorage.getItem('cached_is_authenticated') === 'true';
 
     let needsLogout = false;
@@ -64,13 +69,13 @@ export const checkAppVersionAndSync = async (isManual = false) => {
       }
     }
 
-    // Check if new build is published
-    if (localBuildTime > 0 && data.buildTime && data.buildTime > localBuildTime) {
-      console.log(`[VersionCheck] New version detected: ${data.version} (remote: ${data.buildTime}, local: ${localBuildTime})`);
+    // Check if new build is published or if client doesn't have the current build
+    if (data.buildTime && localBuildTime !== data.buildTime) {
+      console.log(`[VersionCheck] New version/build detected: ${data.version} (remote: ${data.buildTime}, local: ${localBuildTime})`);
       needsUpdate = true;
     }
 
-    // Save latest build time in localStorage
+    // Save latest build time in localStorage BEFORE any reload so it never loops
     if (data.buildTime) {
       localStorage.setItem('app_build_time', data.buildTime.toString());
     }
@@ -87,7 +92,7 @@ export const checkAppVersionAndSync = async (isManual = false) => {
       return;
     }
 
-    if (needsUpdate) {
+    if (needsUpdate || isManual) {
       await forcePurgeCacheAndReload();
       return;
     }
