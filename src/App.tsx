@@ -255,7 +255,7 @@ function App() {
       }
       setLoadingAuth(false);
 
-      if (activeUser && navigator.onLine) {
+      if (navigator.onLine) {
         // --- Device Validity Check & Auto-logout Heartbeat ---
         let deviceId = localStorage.getItem('device_id');
         if (!deviceId) {
@@ -275,25 +275,27 @@ function App() {
             }
 
             // 1. Direct cloud check for force_logout_timestamp
-            const { data: forceLogoutData } = await supabase
-              .from('user_backups')
-              .select('value')
-              .eq('key', 'force_logout_timestamp')
-              .maybeSingle();
+            if (!isLocalhost && activeUser) {
+              const { data: forceLogoutData } = await supabase
+                .from('user_backups')
+                .select('value')
+                .eq('key', 'force_logout_timestamp')
+                .maybeSingle();
 
-            const cloudForceLogoutTs = forceLogoutData?.value ? Number(forceLogoutData.value) : 0;
-            const localForceLogoutTs = Number(localStorage.getItem('force_logout_timestamp') || '0');
-            const effectiveForceLogoutTs = Math.max(cloudForceLogoutTs, localForceLogoutTs);
-            const myLoginTs = Number(localStorage.getItem('device_login_timestamp') || '0');
+              const cloudForceLogoutTs = forceLogoutData?.value ? Number(forceLogoutData.value) : 0;
+              const localForceLogoutTs = Number(localStorage.getItem('force_logout_timestamp') || '0');
+              const effectiveForceLogoutTs = Math.max(cloudForceLogoutTs, localForceLogoutTs);
+              const myLoginTs = Number(localStorage.getItem('device_login_timestamp') || '0');
 
-            if (!isLocalhost && effectiveForceLogoutTs > 0 && myLoginTs < effectiveForceLogoutTs) {
-              console.warn('[Security] Device logged in before force_logout_timestamp. Logging out...');
-              localStorage.removeItem('cached_is_authenticated');
-              localStorage.removeItem('cached_user_session');
-              localStorage.removeItem('device_permission');
-              try { await supabase.auth.signOut(); } catch(e) {}
-              window.location.reload();
-              return;
+              if (effectiveForceLogoutTs > 0 && myLoginTs < effectiveForceLogoutTs) {
+                console.warn('[Security] Device logged in before force_logout_timestamp. Logging out...');
+                localStorage.removeItem('cached_is_authenticated');
+                localStorage.removeItem('cached_user_session');
+                localStorage.removeItem('device_permission');
+                try { await supabase.auth.signOut(); } catch(e) {}
+                window.location.reload();
+                return;
+              }
             }
 
             const { data, error } = await supabase
@@ -313,12 +315,13 @@ function App() {
             }
 
             // Self-register or update heartbeat in active_sessions so it reliably appears in Manage Devices
-            if (currentId && activeUser) {
+            if (currentId) {
               const devName = getReadableDeviceName();
+              const userIdToSave = activeUser?.id || (isLocalhost ? 'localhost' : null);
               if (!data) {
                 await supabase.from('active_sessions').upsert({
                   device_id: currentId,
-                  user_id: activeUser.id,
+                  user_id: userIdToSave,
                   device_name: devName,
                   status: 'active',
                   permission: 'admin',
@@ -330,7 +333,8 @@ function App() {
                 await supabase.from('active_sessions').update({
                   last_active: new Date().toISOString(),
                   device_name: devName,
-                  status: 'active'
+                  status: 'active',
+                  ...(userIdToSave ? { user_id: userIdToSave } : {})
                 }).eq('device_id', currentId);
 
                 if (data.permission) {
@@ -379,17 +383,19 @@ function App() {
         document.addEventListener('visibilitychange', handleVisibility);
         // --- End Device Check ---
 
-        (async () => {
-          try {
-            await restoreFromCloud();
-            runLotRecovery();
-            await pushUnsyncedLocalData(false);
-            setupRealtimeSync();
-            window.dispatchEvent(new Event('storage'));
-          } catch (e) {
-            console.error('Background sync/auth init error:', e);
-          }
-        })();
+        if (activeUser) {
+          (async () => {
+            try {
+              await restoreFromCloud();
+              runLotRecovery();
+              await pushUnsyncedLocalData(false);
+              setupRealtimeSync();
+              window.dispatchEvent(new Event('storage'));
+            } catch (e) {
+              console.error('Background sync/auth init error:', e);
+            }
+          })();
+        }
       }
     }).catch(err => {
       console.error('Auth session error:', err);

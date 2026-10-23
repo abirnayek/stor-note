@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { X, Trash2, Shield, ShieldAlert, Monitor, Smartphone } from 'lucide-react';
+import { X, Trash2, Shield, ShieldAlert, Monitor, Smartphone, RefreshCw } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
-import { broadcastDeviceKickout, broadcastDevicePermission, forceLogoutEverywhere } from '../utils/syncEngine';
+import { broadcastDeviceKickout, broadcastDevicePermission, forceLogoutEverywhere, getReadableDeviceName } from '../utils/syncEngine';
 
 interface DeviceManagerProps {
   onClose: () => void;
@@ -25,7 +25,31 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
   const isAdmin = isLocalhost || localStorage.getItem('device_permission') === 'admin';
 
   useEffect(() => {
-    fetchSessions();
+    // 1. Immediately ensure this current device is registered & active in Supabase
+    const registerCurrentDevice = async () => {
+      let devId = localStorage.getItem('device_id');
+      if (!devId) {
+        devId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
+        localStorage.setItem('device_id', devId);
+      }
+      const devPermission = (localStorage.getItem('device_permission') as any) || 'admin';
+      const devName = getReadableDeviceName();
+
+      try {
+        await supabase.from('active_sessions').upsert({
+          device_id: devId,
+          device_name: devName,
+          status: 'active',
+          permission: devPermission,
+          last_active: new Date().toISOString()
+        }, { onConflict: 'device_id' });
+      } catch (e) {}
+
+      await fetchSessions();
+    };
+
+    registerCurrentDevice();
+
     const channel = supabase.channel('active_sessions_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions' }, () => {
         fetchSessions();
@@ -99,9 +123,18 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
           <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Monitor size={24} /> Manage Devices
           </h2>
-          <button className="close-button" onClick={onClose}>
-            <X size={24} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button 
+              onClick={() => fetchSessions()} 
+              title="Refresh device list" 
+              style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '6px', cursor: 'pointer', color: '#fff', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <RefreshCw size={18} className={loading ? 'spin-icon' : ''} />
+            </button>
+            <button className="close-button" onClick={onClose}>
+              <X size={24} />
+            </button>
+          </div>
         </div>
 
         <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(255,152,0,0.1)', border: '1px solid rgba(255,152,0,0.3)', borderRadius: '8px', color: '#ff9800', fontSize: '0.9rem' }}>
@@ -113,7 +146,17 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {sessions.length === 0 ? (
-              <p>No active sessions found.</p>
+              <div style={{ textAlign: 'center', padding: '1.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+                <p style={{ margin: '0 0 0.5rem 0', fontWeight: 'bold' }}>কোনো সক্রিয় ডিভাইস পাওয়া যায়নি</p>
+                <p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.7 }}>ফোনের অ্যাপটি একবার ওপেন/রিফ্রেশ করুন এবং উপরের রিফ্রেশ বাটনে ক্লিক করুন।</p>
+                <button 
+                  onClick={() => fetchSessions()} 
+                  className="btn btn-primary" 
+                  style={{ marginTop: '1rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}
+                >
+                  <RefreshCw size={14} className={loading ? 'spin-icon' : ''} /> আবার চেক করুন
+                </button>
+              </div>
             ) : (
               <>
                 {sessions.map(session => (
