@@ -28,7 +28,7 @@ import LoginScreen from './components/LoginScreen';
 import DeviceManager from './components/DeviceManager';
 import { LotPasswordManager } from './components/LotPasswordManager';
 
-import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow } from './utils/syncEngine';
+import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow, getReadableDeviceName } from './utils/syncEngine';
 import { runLotRecovery } from './utils/lotRecovery';
 import { getAllGlobalSalesMemos } from './utils/dueSyncUtils';
 import { getAllLotsStock } from './utils/stockUtils';
@@ -256,6 +256,129 @@ function App() {
       setLoadingAuth(false);
 
       if (activeUser && navigator.onLine) {
+        // --- Device Validity Check & Auto-logout Heartbeat ---
+        let deviceId = localStorage.getItem('device_id');
+        if (!deviceId) {
+          deviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
+          localStorage.setItem('device_id', deviceId);
+        }
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+        const checkDeviceStatus = async () => {
+          if (!navigator.onLine) return;
+
+          try {
+            let currentId = localStorage.getItem('device_id');
+            if (!currentId) {
+              currentId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
+              localStorage.setItem('device_id', currentId);
+            }
+
+            // 1. Direct cloud check for force_logout_timestamp
+            const { data: forceLogoutData } = await supabase
+              .from('user_backups')
+              .select('value')
+              .eq('key', 'force_logout_timestamp')
+              .maybeSingle();
+
+            const cloudForceLogoutTs = forceLogoutData?.value ? Number(forceLogoutData.value) : 0;
+            const localForceLogoutTs = Number(localStorage.getItem('force_logout_timestamp') || '0');
+            const effectiveForceLogoutTs = Math.max(cloudForceLogoutTs, localForceLogoutTs);
+            const myLoginTs = Number(localStorage.getItem('device_login_timestamp') || '0');
+
+            if (!isLocalhost && effectiveForceLogoutTs > 0 && myLoginTs < effectiveForceLogoutTs) {
+              console.warn('[Security] Device logged in before force_logout_timestamp. Logging out...');
+              localStorage.removeItem('cached_is_authenticated');
+              localStorage.removeItem('cached_user_session');
+              localStorage.removeItem('device_permission');
+              try { await supabase.auth.signOut(); } catch(e) {}
+              window.location.reload();
+              return;
+            }
+
+            const { data, error } = await supabase
+              .from('active_sessions')
+              .select('status, permission')
+              .eq('device_id', currentId)
+              .maybeSingle();
+
+            if (!isLocalhost && !error && data?.status === 'revoked') {
+              console.warn('[DeviceCheck] Device session is revoked. Logging out...');
+              localStorage.removeItem('cached_is_authenticated');
+              localStorage.removeItem('cached_user_session');
+              localStorage.removeItem('device_permission');
+              try { await supabase.auth.signOut(); } catch(e) {}
+              window.location.reload();
+              return;
+            }
+
+            // Self-register or update heartbeat in active_sessions so it reliably appears in Manage Devices
+            if (currentId && activeUser) {
+              const devName = getReadableDeviceName();
+              if (!data) {
+                await supabase.from('active_sessions').upsert({
+                  device_id: currentId,
+                  user_id: activeUser.id,
+                  device_name: devName,
+                  status: 'active',
+                  permission: 'admin',
+                  last_active: new Date().toISOString()
+                }, { onConflict: 'device_id' });
+                localStorage.setItem('device_permission', 'admin');
+              } else {
+                // Heartbeat update
+                await supabase.from('active_sessions').update({
+                  last_active: new Date().toISOString(),
+                  device_name: devName,
+                  status: 'active'
+                }).eq('device_id', currentId);
+
+                if (data.permission) {
+                  localStorage.setItem('device_permission', data.permission);
+                  window.dispatchEvent(new Event('settingsChange'));
+                }
+              }
+            }
+          } catch (e) {
+            console.error('[DeviceCheck] Error:', e);
+          }
+        };
+
+        // Run device check immediately
+        checkDeviceStatus();
+
+        if (deviceId) {
+          // Setup realtime listener for this specific device to auto-logout if kicked
+          const channelName = `device_${deviceId}`;
+          const existingChannels = supabase.getChannels();
+          const alreadySubscribed = existingChannels.some((ch: any) => ch.topic === `realtime:${channelName}` || ch.topic === channelName);
+          if (!alreadySubscribed) {
+            supabase.channel(channelName)
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions', filter: `device_id=eq.${deviceId}` }, async (payload) => {
+                if (!isLocalhost && payload.eventType === 'UPDATE' && payload.new.status === 'revoked') {
+                  localStorage.removeItem('cached_is_authenticated');
+                  localStorage.removeItem('cached_user_session');
+                  localStorage.removeItem('device_permission');
+                  try { await supabase.auth.signOut(); } catch(e) {}
+                  window.location.reload();
+                } else if (payload.eventType === 'UPDATE' && payload.new.permission) {
+                  localStorage.setItem('device_permission', payload.new.permission);
+                  window.dispatchEvent(new Event('settingsChange'));
+                }
+              }).subscribe();
+          }
+        }
+
+        // Periodic heartbeat every 15 seconds & on tab focus
+        setInterval(checkDeviceStatus, 15000);
+        const handleVisibility = () => {
+          if (document.visibilityState === 'visible') {
+            checkDeviceStatus();
+          }
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+        // --- End Device Check ---
+
         (async () => {
           try {
             await restoreFromCloud();
@@ -263,111 +386,6 @@ function App() {
             await pushUnsyncedLocalData(false);
             setupRealtimeSync();
             window.dispatchEvent(new Event('storage'));
-            
-            // --- Device Validity Check & Auto-logout Heartbeat ---
-            let deviceId = localStorage.getItem('device_id');
-            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
-            const checkDeviceStatus = async () => {
-              if (!navigator.onLine) return;
-              if (isLocalhost) return; // Localhost development is always admin, never kicked out
-
-              try {
-                // 1. Direct cloud check for force_logout_timestamp
-                const { data: forceLogoutData } = await supabase
-                  .from('user_backups')
-                  .select('value')
-                  .eq('key', 'force_logout_timestamp')
-                  .maybeSingle();
-
-                const cloudForceLogoutTs = forceLogoutData?.value ? Number(forceLogoutData.value) : 0;
-                const localForceLogoutTs = Number(localStorage.getItem('force_logout_timestamp') || '0');
-                const effectiveForceLogoutTs = Math.max(cloudForceLogoutTs, localForceLogoutTs);
-                const myLoginTs = Number(localStorage.getItem('device_login_timestamp') || '0');
-
-                if (effectiveForceLogoutTs > 0 && myLoginTs < effectiveForceLogoutTs) {
-                  console.warn('[Security] Device logged in before force_logout_timestamp. Logging out...');
-                  localStorage.removeItem('cached_is_authenticated');
-                  localStorage.removeItem('cached_user_session');
-                  localStorage.removeItem('device_permission');
-                  try { await supabase.auth.signOut(); } catch(e) {}
-                  window.location.reload();
-                  return;
-                }
-
-                let currentId = localStorage.getItem('device_id');
-                if (!currentId) {
-                  currentId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
-                  localStorage.setItem('device_id', currentId);
-                }
-
-                const { data, error } = await supabase
-                  .from('active_sessions')
-                  .select('status, permission')
-                  .eq('device_id', currentId)
-                  .maybeSingle();
-
-                if (!error && data?.status === 'revoked') {
-                  console.warn('[DeviceCheck] Device session is revoked. Logging out...');
-                  localStorage.removeItem('cached_is_authenticated');
-                  localStorage.removeItem('cached_user_session');
-                  localStorage.removeItem('device_permission');
-                  try { await supabase.auth.signOut(); } catch(e) {}
-                  window.location.reload();
-                  return;
-                }
-
-                // If device is not yet registered in active_sessions, self-register it so it appears in Manage Devices
-                if (!data && currentId && activeUser) {
-                  await supabase.from('active_sessions').upsert({
-                    device_id: currentId,
-                    user_id: activeUser.id,
-                    device_name: navigator.userAgent,
-                    status: 'active',
-                    permission: 'admin',
-                    last_active: new Date().toISOString()
-                  }, { onConflict: 'device_id' });
-                  localStorage.setItem('device_permission', 'admin');
-                } else if (data && data.permission) {
-                  localStorage.setItem('device_permission', data.permission);
-                  window.dispatchEvent(new Event('settingsChange'));
-                }
-              } catch (e) {}
-            };
-
-            await checkDeviceStatus();
-
-            if (deviceId) {
-              // Setup realtime listener for this specific device to auto-logout if kicked
-              const channelName = `device_${deviceId}`;
-              const existingChannels = supabase.getChannels();
-              const alreadySubscribed = existingChannels.some((ch: any) => ch.topic === `realtime:${channelName}` || ch.topic === channelName);
-              if (!alreadySubscribed) {
-                supabase.channel(channelName)
-                  .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions', filter: `device_id=eq.${deviceId}` }, async (payload) => {
-                    if (payload.eventType === 'UPDATE' && payload.new.status === 'revoked') {
-                      localStorage.removeItem('cached_is_authenticated');
-                      localStorage.removeItem('cached_user_session');
-                      localStorage.removeItem('device_permission');
-                      try { await supabase.auth.signOut(); } catch(e) {}
-                      window.location.reload();
-                    } else if (payload.eventType === 'UPDATE' && payload.new.permission) {
-                      localStorage.setItem('device_permission', payload.new.permission);
-                      window.dispatchEvent(new Event('settingsChange'));
-                    }
-                  }).subscribe();
-              }
-            }
-
-            // Periodic heartbeat every 10 seconds & on tab focus
-            setInterval(checkDeviceStatus, 10000);
-            const handleVisibility = () => {
-              if (document.visibilityState === 'visible') {
-                checkDeviceStatus();
-              }
-            };
-            document.addEventListener('visibilitychange', handleVisibility);
-            // --- End Device Check ---
           } catch (e) {
             console.error('Background sync/auth init error:', e);
           }

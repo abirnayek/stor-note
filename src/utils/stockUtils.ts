@@ -99,10 +99,22 @@ export const matchesFish = (soldName: string, purchaseName: string): boolean => 
   const isKaloP = pNorm.includes('kalo') && (pNorm.includes('chad') || pNorm.includes('chd'));
   if (isKaloS && isKaloP) return true;
 
-  // General Crab / Kakra (kakra, mad kakra, kakra boro, kakra choto, kakra mad, kakra kalo, redy cook kakra, redy cook)
-  const isKakraS = sNorm.includes('kakra') || sNorm.includes('cook');
-  const isKakraP = pNorm.includes('kakra') || pNorm.includes('cook');
-  if (isKakraS && isKakraP && !isBlueCrabS && !isBlueCrabP) return true;
+  // General Crab / Kakra
+  const isKakraS = sNorm.includes('kakra') || sNorm.includes('crab');
+  const isKakraP = pNorm.includes('kakra') || pNorm.includes('crab');
+  if (isKakraS && isKakraP && !isBlueCrabS && !isBlueCrabP) {
+    // Specific crab varieties/grades must match each other (e.g. kalo, boro, choto, mad, cook, bali, redy, lal)
+    const crabQualifiers = ['kalo', 'boro', 'choto', 'mad', 'cook', 'bali', 'redy', 'lal'];
+    const sQuals = crabQualifiers.filter(q => sNorm.includes(q));
+    const pQuals = crabQualifiers.filter(q => pNorm.includes(q));
+
+    // If either has specific variety tags, require all present tags to match
+    if (sQuals.length > 0 || pQuals.length > 0) {
+      const match = sQuals.every(q => pQuals.includes(q)) && pQuals.every(q => sQuals.includes(q));
+      if (!match) return false;
+    }
+    return true;
+  }
 
   // Koral: Koy Koral vs Datina Koral
   if (sNorm.includes('koy') && sNorm.includes('koral') && pNorm.includes('koy') && pNorm.includes('koral')) return true;
@@ -171,6 +183,29 @@ export const matchesFish = (soldName: string, purchaseName: string): boolean => 
   return false;
 };
 
+/**
+ * Robust fish matcher for item lists: prioritizes exact string -> exact normalized key -> intelligent alias
+ */
+export const findMatchingStockItem = <T extends { name: string }>(
+  items: T[],
+  targetName: string
+): T | undefined => {
+  if (!targetName || !items || items.length === 0) return undefined;
+  const cleanTarget = targetName.trim().toLowerCase();
+  const targetNorm = normalizeFishKey(cleanTarget);
+
+  // 1. Exact string match
+  const exact = items.find(it => it.name.trim().toLowerCase() === cleanTarget);
+  if (exact) return exact;
+
+  // 2. Exact normalized key match
+  const normExact = items.find(it => normalizeFishKey(it.name) === targetNorm);
+  if (normExact) return normExact;
+
+  // 3. Intelligent alias match
+  return items.find(it => matchesFish(cleanTarget, it.name));
+};
+
 export interface ActiveSalesMemoEntry {
   id?: string;
   serialNo?: string;
@@ -237,18 +272,16 @@ export const getAllActiveSalesMemos = (): ActiveSalesMemo[] => {
 
     if (memosMap.has(memoId)) {
       const existing = memosMap.get(memoId)!;
-      if (existing.lotNumber === null && lotNumber !== null) {
-        existing.lotNumber = lotNumber;
+      const isNewer = (timestamp || 0) >= (existing.timestamp || 0);
+      if (isNewer || (!existing.lotNumber && lotNumber !== null)) {
+        if (lotNumber !== null) existing.lotNumber = lotNumber;
+        if (timestamp) existing.timestamp = timestamp;
+        if (entries.length >= existing.entries.length) existing.entries = entries;
+        if (customerName) existing.customerName = customerName;
+        if (date) existing.date = date;
+        if (time) existing.time = time;
+        if (folderId) { existing.folderId = folderId; existing.folderName = folderName; }
       }
-      if (entries.length > existing.entries.length) {
-        existing.entries = entries;
-      }
-      if (!existing.timestamp && timestamp) {
-        existing.timestamp = timestamp;
-      }
-      if (!existing.customerName && customerName) existing.customerName = customerName;
-      if (!existing.time && time) existing.time = time;
-      if (!existing.folderId && folderId) { existing.folderId = folderId; existing.folderName = folderName; }
       return;
     }
 
@@ -340,7 +373,8 @@ const getRawPurchaseData = (lotNumber: number): any => {
     try { purchaseData = JSON.parse(rawPurchase); } catch (e) {}
   }
   if (!purchaseData) {
-    const duePurchase = localStorage.getItem(`due_memo_purchase_lot_${lotNumber}`);
+    const duePurchase = localStorage.getItem(`due_memo_purchase_lot_${lotNumber}`) 
+      || localStorage.getItem(`due_memo_purchase_lot_${String(lotNumber).padStart(2, '0')}`);
     if (duePurchase) {
       try {
         const parsed = JSON.parse(duePurchase);
@@ -418,77 +452,80 @@ export const getAllLotsStock = (): LotStockSummary[] => {
   // Fetch all active sales memos
   const salesMemos = getAllActiveSalesMemos();
 
-  // Phase 1: Memos with explicit lot number
-  salesMemos.forEach(memo => {
-    if (memo.lotNumber !== null && lotsMap.has(memo.lotNumber)) {
-      const lotObj = lotsMap.get(memo.lotNumber)!;
-      memo.entries.forEach(entry => {
-        const name = (entry.name || '').trim();
-        let weight = Number(entry.totalKg) || 0;
-        if (entry.weightUnit === 'g') weight /= 1000;
-        if (weight <= 0 || !name) return;
-
-        const matchedItem = lotObj.items.find(item => matchesFish(name, item.name));
-        if (matchedItem) {
-          matchedItem.soldKg += weight;
-        }
-      });
-    }
-  });
-
-  // Phase 2: Unassigned memos (lotNumber === null)
-  // Allocate to lot containing that fish, using FIFO across lots (Lot 1, Lot 2, ...)
   const sortedLotNums = Array.from(lotsMap.keys()).sort((a, b) => a - b);
 
   salesMemos.forEach(memo => {
-    if (memo.lotNumber === null) {
-      memo.entries.forEach(entry => {
-        const name = (entry.name || '').trim();
-        let weight = Number(entry.totalKg) || 0;
-        if (entry.weightUnit === 'g') weight /= 1000;
-        if (weight <= 0 || !name) return;
+    memo.entries.forEach(entry => {
+      const name = (entry.name || '').trim();
+      let weight = Number(entry.totalKg) || 0;
+      if (entry.weightUnit === 'g') weight /= 1000;
+      if (weight <= 0 || !name) return;
 
-        // If entry has explicit lotNumber, deduct directly from that lot
-        const explicitEntryLot = normalizeLotNumber(entry.lotNumber);
-        if (explicitEntryLot !== null && lotsMap.has(explicitEntryLot)) {
-          const lObj = lotsMap.get(explicitEntryLot)!;
-          const found = lObj.items.find(item => matchesFish(name, item.name));
-          if (found) {
-            found.soldKg += weight;
-            return;
-          }
+      // 1. If entry has explicit lotNumber, deduct directly from that lot
+      const explicitEntryLot = normalizeLotNumber(entry.lotNumber);
+      if (explicitEntryLot !== null && lotsMap.has(explicitEntryLot)) {
+        const lObj = lotsMap.get(explicitEntryLot)!;
+        const matched = findMatchingStockItem(lObj.items, name);
+        if (matched) {
+          matched.soldKg += weight;
+          return;
         }
+      }
 
-        // Find candidate items across lots in FIFO order
-        // STRICT TEMPORAL GUARD: Unassigned sales can ONLY deduct from lots that existed on or before the sale date!
-        const candidateItems: LotInternalItem[] = [];
-        sortedLotNums.forEach(lNum => {
-          const lObj = lotsMap.get(lNum)!;
-          // If memo has timestamp and lot has timestamp, past sale cannot consume from a future lot!
-          const isLotExisting = !memo.timestamp || !lObj.timestamp || memo.timestamp >= (lObj.timestamp - 24 * 60 * 60 * 1000);
-          if (isLotExisting) {
-            const found = lObj.items.find(item => matchesFish(name, item.name));
-            if (found) {
-              candidateItems.push(found);
-            }
-          }
-        });
+      // 2. If memo has explicit lotNumber, deduct from that lot
+      const memoLot = normalizeLotNumber(memo.lotNumber);
+      if (memoLot !== null && lotsMap.has(memoLot)) {
+        const lObj = lotsMap.get(memoLot)!;
+        const matched = findMatchingStockItem(lObj.items, name);
+        if (matched) {
+          matched.soldKg += weight;
+          return;
+        }
+      }
 
-        if (candidateItems.length === 0) return;
+      // 3. Unassigned sale: find matching lots containing this fish
+      // Prioritize lots that have an exact fish name match
+      const exactCandidateLots: LotInternalData[] = [];
+      const looseCandidateLots: LotInternalData[] = [];
 
-        let weightToDeduct = weight;
-        for (const item of candidateItems) {
-          const availableStock = Math.max(0, item.purchasedKg - item.soldKg);
+      sortedLotNums.forEach(lNum => {
+        const lObj = lotsMap.get(lNum)!;
+        const cleanName = name.toLowerCase();
+        const normName = normalizeFishKey(name);
+        const hasExact = lObj.items.some(it => it.name.trim().toLowerCase() === cleanName || normalizeFishKey(it.name) === normName);
+        if (hasExact) {
+          exactCandidateLots.push(lObj);
+        } else if (lObj.items.some(it => matchesFish(name, it.name))) {
+          looseCandidateLots.push(lObj);
+        }
+      });
+
+      const candidateLots = exactCandidateLots.length > 0 ? exactCandidateLots : looseCandidateLots;
+      if (candidateLots.length === 0) return;
+
+      let weightToDeduct = weight;
+      for (const lObj of candidateLots) {
+        const matched = findMatchingStockItem(lObj.items, name);
+        if (matched) {
+          const availableStock = Math.max(0, matched.purchasedKg - matched.soldKg);
           if (availableStock > 0) {
             const take = Math.min(weightToDeduct, availableStock);
-            item.soldKg += take;
+            matched.soldKg += take;
             weightToDeduct -= take;
             if (weightToDeduct <= 0.0001) break;
           }
         }
-        // Do not force overflow onto lots if stock was not available
-      });
-    }
+      }
+
+      // If weight still remains (oversold), record it on the last candidate lot
+      if (weightToDeduct > 0.0001 && candidateLots.length > 0) {
+        const lastLot = candidateLots[candidateLots.length - 1];
+        const matched = findMatchingStockItem(lastLot.items, name);
+        if (matched) {
+          matched.soldKg += weightToDeduct;
+        }
+      }
+    });
   });
 
   // Build final LotStockSummary
@@ -632,7 +669,7 @@ export const getLotPurchaseItems = (lotNumber: number | null): LotPurchaseFishIt
     const profitPercent = Number(entry.profitPercent !== undefined && entry.profitPercent !== '' ? entry.profitPercent : globalProfitPercent) || 0;
     const suggestedSaleRate = Math.round((effectiveCostRate + (effectiveCostRate * profitPercent / 100)) * 100) / 100;
 
-    const stockItem = stockSummary.items.find(it => matchesFish(name, it.name));
+    const stockItem = findMatchingStockItem(stockSummary.items, name);
     const remainingKg = stockItem ? stockItem.remainingKg : Math.max(0, purchasedKg);
 
     return {
@@ -802,86 +839,97 @@ export const getFishSalesBreakdown = (targetFishName: string, targetLotNumber: n
     });
   };
 
-  // Phase 1: Memos with explicit lot number
-  salesMemos.forEach(memo => {
-    if (memo.lotNumber !== null && lotsMap.has(memo.lotNumber)) {
-      const lotObj = lotsMap.get(memo.lotNumber)!;
-      memo.entries.forEach(entry => {
-        const name = (entry.name || '').trim();
-        let weight = Number(entry.totalKg) || 0;
-        if (entry.weightUnit === 'g') weight /= 1000;
-        if (weight <= 0 || !name) return;
+  const sortedLotNums = Array.from(lotsMap.keys()).sort((a, b) => a - b);
 
-        const matchedItem = lotObj.items.find(item => matchesFish(name, item.name));
-        if (matchedItem) {
-          matchedItem.soldKg += weight;
-          if (memo.lotNumber === normTargetLot && (matchesFish(name, cleanTargetName) || matchesFish(cleanTargetName, matchedItem.name))) {
-            const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : matchedItem.buyRate;
-            addMemoRecord(memo, entry, weight, cost, matchedItem.suggestedSaleRate);
+  salesMemos.forEach(memo => {
+    memo.entries.forEach(entry => {
+      const name = (entry.name || '').trim();
+      let weight = Number(entry.totalKg) || 0;
+      if (entry.weightUnit === 'g') weight /= 1000;
+      if (weight <= 0 || !name) return;
+
+      // 1. Direct lot deduction from explicit entry.lotNumber
+      const explicitEntryLot = normalizeLotNumber(entry.lotNumber);
+      if (explicitEntryLot !== null && lotsMap.has(explicitEntryLot)) {
+        const lObj = lotsMap.get(explicitEntryLot)!;
+        const found = findMatchingStockItem(lObj.items, name);
+        if (found) {
+          found.soldKg += weight;
+          if (explicitEntryLot === normTargetLot && (findMatchingStockItem([found], cleanTargetName) || findMatchingStockItem([{ name }], cleanTargetName))) {
+            const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : found.buyRate;
+            addMemoRecord(memo, entry, weight, cost, found.suggestedSaleRate);
           }
+          return;
+        }
+      }
+
+      // 2. Direct lot deduction from explicit memo.lotNumber
+      const memoLot = normalizeLotNumber(memo.lotNumber);
+      if (memoLot !== null && lotsMap.has(memoLot)) {
+        const lObj = lotsMap.get(memoLot)!;
+        const found = findMatchingStockItem(lObj.items, name);
+        if (found) {
+          found.soldKg += weight;
+          if (memoLot === normTargetLot && (findMatchingStockItem([found], cleanTargetName) || findMatchingStockItem([{ name }], cleanTargetName))) {
+            const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : found.buyRate;
+            addMemoRecord(memo, entry, weight, cost, found.suggestedSaleRate);
+          }
+          return;
+        }
+      }
+
+      // 3. Unassigned sales deduction: find candidate lots
+      const exactCandidateLots: { lotNum: number; lObj: LotTrack }[] = [];
+      const looseCandidateLots: { lotNum: number; lObj: LotTrack }[] = [];
+
+      sortedLotNums.forEach(lNum => {
+        const lObj = lotsMap.get(lNum)!;
+        const cleanName = name.toLowerCase();
+        const normName = normalizeFishKey(name);
+        const hasExact = lObj.items.some(it => it.name.trim().toLowerCase() === cleanName || normalizeFishKey(it.name) === normName);
+        if (hasExact) {
+          exactCandidateLots.push({ lotNum: lNum, lObj });
+        } else if (lObj.items.some(it => matchesFish(name, it.name))) {
+          looseCandidateLots.push({ lotNum: lNum, lObj });
         }
       });
-    }
-  });
 
-  // Phase 2: Unassigned memos (lotNumber === null) - FIFO across lots
-  const sortedLotNums = Array.from(lotsMap.keys()).sort((a, b) => a - b);
-  salesMemos.forEach(memo => {
-    if (memo.lotNumber === null) {
-      memo.entries.forEach(entry => {
-        const name = (entry.name || '').trim();
-        let weight = Number(entry.totalKg) || 0;
-        if (entry.weightUnit === 'g') weight /= 1000;
-        if (weight <= 0 || !name) return;
+      const candidateLots = exactCandidateLots.length > 0 ? exactCandidateLots : looseCandidateLots;
+      if (candidateLots.length === 0) return;
 
-        // If entry has explicit lotNumber, deduct directly from that lot
-        const explicitEntryLot = normalizeLotNumber(entry.lotNumber);
-        if (explicitEntryLot !== null && lotsMap.has(explicitEntryLot)) {
-          const lObj = lotsMap.get(explicitEntryLot)!;
-          const found = lObj.items.find(item => matchesFish(name, item.name));
-          if (found) {
-            found.soldKg += weight;
-            if (explicitEntryLot === normTargetLot && (matchesFish(name, cleanTargetName) || matchesFish(cleanTargetName, found.name))) {
-              const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : found.buyRate;
-              addMemoRecord(memo, entry, weight, cost, found.suggestedSaleRate);
-            }
-            return;
-          }
-        }
-
-        // Find candidate items across lots
-        const candidateItems: { lotNum: number; item: LotTrackItem }[] = [];
-        sortedLotNums.forEach(lNum => {
-          const lObj = lotsMap.get(lNum)!;
-          const isLotExisting = !memo.timestamp || !lObj.timestamp || memo.timestamp >= (lObj.timestamp - 24 * 60 * 60 * 1000);
-          if (isLotExisting) {
-            const found = lObj.items.find(item => matchesFish(name, item.name));
-            if (found) {
-              candidateItems.push({ lotNum: lNum, item: found });
-            }
-          }
-        });
-
-        if (candidateItems.length === 0) return;
-
-        let weightToDeduct = weight;
-        for (const candidate of candidateItems) {
-          const availableStock = Math.max(0, candidate.item.purchasedKg - candidate.item.soldKg);
+      let weightToDeduct = weight;
+      for (const { lotNum, lObj } of candidateLots) {
+        const found = findMatchingStockItem(lObj.items, name);
+        if (found) {
+          const availableStock = Math.max(0, found.purchasedKg - found.soldKg);
           if (availableStock > 0) {
             const take = Math.min(weightToDeduct, availableStock);
-            candidate.item.soldKg += take;
+            found.soldKg += take;
             weightToDeduct -= take;
 
-            if (candidate.lotNum === normTargetLot && (matchesFish(name, cleanTargetName) || matchesFish(cleanTargetName, candidate.item.name))) {
-              const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : candidate.item.buyRate;
-              addMemoRecord(memo, entry, take, cost, candidate.item.suggestedSaleRate);
+            if (lotNum === normTargetLot && (findMatchingStockItem([found], cleanTargetName) || findMatchingStockItem([{ name }], cleanTargetName))) {
+              const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : found.buyRate;
+              addMemoRecord(memo, entry, take, cost, found.suggestedSaleRate);
             }
 
             if (weightToDeduct <= 0.0001) break;
           }
         }
-      });
-    }
+      }
+
+      // If weight still remains (oversold), add remaining to the last candidate lot
+      if (weightToDeduct > 0.0001 && candidateLots.length > 0) {
+        const { lotNum, lObj } = candidateLots[candidateLots.length - 1];
+        const found = findMatchingStockItem(lObj.items, name);
+        if (found) {
+          found.soldKg += weightToDeduct;
+          if (lotNum === normTargetLot && (findMatchingStockItem([found], cleanTargetName) || findMatchingStockItem([{ name }], cleanTargetName))) {
+            const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : found.buyRate;
+            addMemoRecord(memo, entry, weightToDeduct, cost, found.suggestedSaleRate);
+          }
+        }
+      }
+    });
   });
 
   // Sort memos newest first

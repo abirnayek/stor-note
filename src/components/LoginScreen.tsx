@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
-import { restoreFromCloud, setupRealtimeSync } from '../utils/syncEngine';
+import { restoreFromCloud, setupRealtimeSync, getReadableDeviceName } from '../utils/syncEngine';
 import { CheckCircle } from 'lucide-react';
 
 interface LoginScreenProps {
@@ -55,7 +55,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         deviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
         localStorage.setItem('device_id', deviceId);
       }
-      const deviceName = navigator.userAgent;
+      const deviceName = getReadableDeviceName();
 
       if (authData?.user) {
         // Check if there are any admins in the system

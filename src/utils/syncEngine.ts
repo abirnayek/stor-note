@@ -674,6 +674,28 @@ export const setupRealtimeSync = () => {
     .subscribe();
 };
 
+export const getReadableDeviceName = (): string => {
+  if (typeof window === 'undefined' || !navigator) return 'Unknown Device';
+  const ua = navigator.userAgent || '';
+  let os = 'Device';
+  if (/windows/i.test(ua)) os = 'Windows PC';
+  else if (/android/i.test(ua)) os = 'Android Phone';
+  else if (/iphone/i.test(ua)) os = 'iPhone';
+  else if (/ipad/i.test(ua)) os = 'iPad';
+  else if (/macintosh|mac os x/i.test(ua)) os = 'Mac';
+  else if (/linux/i.test(ua)) os = 'Linux';
+
+  let browser = 'Browser';
+  if (/edg/i.test(ua)) browser = 'Edge';
+  else if (/samsungbrowser/i.test(ua)) browser = 'Samsung Internet';
+  else if (/chrome|crios/i.test(ua)) browser = 'Chrome';
+  else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
+  else if (/safari/i.test(ua)) browser = 'Safari';
+
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  return `${os} (${browser})${isLocalhost ? ' - Localhost' : ''}`;
+};
+
 export const broadcastDeviceKickout = (deviceId: string) => {
   if (realtimeChannel) {
     try {

@@ -26,6 +26,15 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
 
   useEffect(() => {
     fetchSessions();
+    const channel = supabase.channel('active_sessions_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'active_sessions' }, () => {
+        fetchSessions();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchSessions = async () => {
@@ -120,6 +129,12 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
                       {session.device_id === currentDeviceId && (
                         <span style={{ fontSize: '0.7rem', background: 'var(--primary-color)', color: '#000', padding: '3px 8px', borderRadius: '12px', fontWeight: 'bold' }}>
                           This Device
+                        </span>
+                      )}
+                      {session.last_active && (Date.now() - new Date(session.last_active).getTime() < 5 * 60 * 1000) && (
+                        <span style={{ fontSize: '0.7rem', background: 'rgba(76, 175, 80, 0.2)', border: '1px solid #4caf50', color: '#4caf50', padding: '2px 8px', borderRadius: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#4caf50', display: 'inline-block' }}></span>
+                          Active Now
                         </span>
                       )}
                     </div>

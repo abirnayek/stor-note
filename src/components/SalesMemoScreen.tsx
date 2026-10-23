@@ -8,7 +8,7 @@ import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
-import { getLotStock, getLotPurchaseItems, getAllPurchaseItems, type LotStockSummary, type LotPurchaseFishItem } from '../utils/stockUtils';
+import { getLotStock, getLotPurchaseItems, getAllPurchaseItems, findMatchingStockItem, matchesFish, type LotStockSummary, type LotPurchaseFishItem } from '../utils/stockUtils';
 import { parseMemoMonthYear, getMemoExactTimestamp, MONTHS, enToBnDigits, bnToEnDigits } from '../utils/dateUtils';
 import { isPurchaseMemoData } from '../utils/dueSyncUtils';
 
@@ -420,42 +420,36 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
     // 1. If entry has explicit lotNumber, match that lot first
     if (entry.lotNumber) {
-      const byLot = lotPurchaseItems.find(it => 
-        it.lotNumber === entry.lotNumber && 
-        it.name.trim().toLowerCase() === trimmed
-      );
-      if (byLot) return byLot;
+      const lotSubset = lotPurchaseItems.filter(it => it.lotNumber === entry.lotNumber);
+      const matched = findMatchingStockItem(lotSubset, trimmed);
+      if (matched) return matched;
     }
 
     // 2. If memo has global lotNumberInput / lotNumber prop, match that lot
     const rawLot = memoState.lotNumberInput ? parseInt(memoState.lotNumberInput, 10) : lotNumber;
     if (rawLot && !isNaN(rawLot) && rawLot > 0) {
-      const byMemoLot = lotPurchaseItems.find(it => 
-        it.lotNumber === rawLot && 
-        it.name.trim().toLowerCase() === trimmed
-      );
-      if (byMemoLot) return byMemoLot;
+      const lotSubset = lotPurchaseItems.filter(it => it.lotNumber === rawLot);
+      const matched = findMatchingStockItem(lotSubset, trimmed);
+      if (matched) return matched;
     }
 
     // 3. If entry has buyRate, match by effective cost rate
     if (entry.buyRate && Number(entry.buyRate) > 0) {
       const rateNum = Number(entry.buyRate);
       const byRate = lotPurchaseItems.find(it => 
-        it.name.trim().toLowerCase() === trimmed && 
+        (it.name.trim().toLowerCase() === trimmed || matchesFish(trimmed, it.name)) && 
         Math.abs(it.effectiveCostRate - rateNum) < 0.05
       );
       if (byRate) return byRate;
     }
 
     // 4. Prioritize candidate with stock > 0 in FIFO order
-    const inStock = lotPurchaseItems.find(it => 
-      it.name.trim().toLowerCase() === trimmed && 
-      (it.remainingKg || 0) > 0.001
-    );
-    if (inStock) return inStock;
+    const inStock = lotPurchaseItems.filter(it => (it.remainingKg || 0) > 0.001);
+    const matchedInStock = findMatchingStockItem(inStock, trimmed);
+    if (matchedInStock) return matchedInStock;
 
-    // 5. Fallback: first match
-    return lotPurchaseItems.find(it => it.name.trim().toLowerCase() === trimmed) || null;
+    // 5. Fallback: match any
+    return findMatchingStockItem(lotPurchaseItems, trimmed) || null;
   };
 
   const handleSelectFishSuggestion = (entryId: string, item: LotPurchaseFishItem) => {
@@ -2258,9 +2252,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
 
                               {/* Stock and Purchase Cost badges for matched items */}
                               {!isExtra && (() => {
-                                const sItem = currentLotStock?.items.find(
-                                  it => it.name.trim().toLowerCase() === (entry.name || '').trim().toLowerCase()
-                                );
+                                const sItem = currentLotStock ? findMatchingStockItem(currentLotStock.items, entry.name || '') : undefined;
                                 const remKg = sItem ? sItem.remainingKg : matchedLotItem?.remainingKg;
                                 if (remKg !== undefined) {
                                   const isAvailable = remKg > 0;
