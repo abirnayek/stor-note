@@ -4,8 +4,10 @@ import './index.css'
 import App from './App.tsx'
 import { LanguageProvider } from './i18n/LanguageContext'
 import { initSyncEngine } from './utils/syncEngine'
+import { initVersionAutoChecker } from './utils/versionCheck'
 
 initSyncEngine();
+initVersionAutoChecker();
 
 // Auto-reload when new service worker takes control
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {

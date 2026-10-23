@@ -29,6 +29,7 @@ import DeviceManager from './components/DeviceManager';
 import { LotPasswordManager } from './components/LotPasswordManager';
 
 import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow, getReadableDeviceName } from './utils/syncEngine';
+import { APP_VERSION, checkAppVersionAndSync } from './utils/versionCheck';
 import { runLotRecovery } from './utils/lotRecovery';
 import { getAllGlobalSalesMemos } from './utils/dueSyncUtils';
 import { getAllLotsStock } from './utils/stockUtils';
@@ -304,7 +305,7 @@ function App() {
               .eq('device_id', currentId)
               .maybeSingle();
 
-            if (!isLocalhost && !error && data?.status === 'revoked') {
+            if (!error && data?.status === 'revoked') {
               console.warn('[DeviceCheck] Device session is revoked. Logging out...');
               localStorage.removeItem('cached_is_authenticated');
               localStorage.removeItem('cached_user_session');
@@ -2142,22 +2143,12 @@ function App() {
             <div className="setting-item">
               <span>{t('appVersion')}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <span style={{ opacity: 0.7, fontSize: '0.85rem' }}>v1.0.0</span>
+                <span style={{ opacity: 0.7, fontSize: '0.85rem' }}>v{APP_VERSION}</span>
                 <button 
                   className="btn btn-secondary"
                   style={{ fontSize: '0.8rem', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
                   onClick={async () => {
-                    try {
-                      if ('serviceWorker' in navigator) {
-                        const reg = await navigator.serviceWorker.getRegistration();
-                        if (reg) await reg.update();
-                      }
-                      if ('caches' in window) {
-                        const names = await caches.keys();
-                        await Promise.all(names.map(name => caches.delete(name)));
-                      }
-                    } catch (e) {}
-                    window.location.reload();
+                    await checkAppVersionAndSync(true);
                   }}
                   title="Check for newest updates and refresh"
                 >

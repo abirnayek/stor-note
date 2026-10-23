@@ -36,7 +36,13 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         navigateFallback: 'index.html',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,jpg}'],
-        globIgnores: ['**/PC Version/**/*', '**/dist-electron/**/*', '**/Untitled-1.pdf']
+        globIgnores: ['**/PC Version/**/*', '**/dist-electron/**/*', '**/Untitled-1.pdf', '**/version.json'],
+        runtimeCaching: [
+          {
+            urlPattern: /.*version\.json.*/,
+            handler: 'NetworkOnly'
+          }
+        ]
       }
     })
   ],
