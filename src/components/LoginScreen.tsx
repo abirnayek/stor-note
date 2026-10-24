@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../utils/supabaseClient';
-import { restoreFromCloud, setupRealtimeSync, getReadableDeviceName } from '../utils/syncEngine';
+import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, getReadableDeviceName } from '../utils/syncEngine';
 import { CheckCircle } from 'lucide-react';
 
 interface LoginScreenProps {
@@ -78,8 +78,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       }
       // --- End Device Tracking ---
 
-      // Restore data from cloud to local storage after successful login
+      // Push local data first so offline/local memos are preserved and uploaded to cloud
+      await pushUnsyncedLocalData(true);
       await restoreFromCloud();
+      await pushUnsyncedLocalData(true);
       setupRealtimeSync();
       onLoginSuccess();
     } catch (err: any) {
