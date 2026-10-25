@@ -68,6 +68,7 @@ const SalesMemoListScreen: React.FC<SalesMemoListScreenProps> = ({ onNavigate, l
       lotNumberInput: lotNumber.toString(),
       lotNumber: lotNumber.toString(),
       paidAmount: '',
+      payments: [],
       customerType: 'regular',
       status: 'draft',
       createdAt: today,

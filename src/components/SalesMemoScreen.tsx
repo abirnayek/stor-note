@@ -10,7 +10,7 @@ import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
 import { getLotStock, getLotPurchaseItems, getAllPurchaseItems, findMatchingStockItem, matchesFish, type LotStockSummary, type LotPurchaseFishItem } from '../utils/stockUtils';
 import { parseMemoMonthYear, getMemoExactTimestamp, MONTHS, enToBnDigits, bnToEnDigits } from '../utils/dateUtils';
-import { isPurchaseMemoData } from '../utils/dueSyncUtils';
+import { isPurchaseMemoData, type MemoPayment } from '../utils/dueSyncUtils';
 
 // Helper to convert date strings to YYYY-MM-DD for native <input type="date">
 const getIsoDateForPicker = (dateStr?: string): string => {
@@ -93,6 +93,7 @@ interface MemoState {
   mobile: string;
   lotNumberInput: string;
   paidAmount: number | '';
+  payments?: MemoPayment[];
   customerType?: 'regular' | 'permanent' | 'reseller' | '';
   status?: 'due' | 'paid' | 'draft';
   createdAt?: string;
@@ -210,13 +211,25 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       const finalAddress = src.address || dueData?.address || '';
       const finalMobile = src.mobile || dueData?.mobile || '';
       const finalLotNumber = src.lotNumberInput || (src.lotNumber ? src.lotNumber.toString() : '') || (dueData?.lotNumber ? dueData.lotNumber.toString() : '') || (lotNumber ? lotNumber.toString() : '');
-      const finalPaidAmount = src.paidAmount !== undefined && src.paidAmount !== ''
+      const rawPayments: MemoPayment[] = (src.payments && Array.isArray(src.payments))
+        ? src.payments
+        : ((dueData?.payments && Array.isArray(dueData.payments))
+          ? dueData.payments
+          : ((dueData?.memoState?.payments && Array.isArray(dueData.memoState.payments))
+            ? dueData.memoState.payments
+            : []));
+
+      let finalPaidAmount = src.paidAmount !== undefined && src.paidAmount !== ''
         ? src.paidAmount
         : (src.deposit !== undefined && src.deposit !== ''
           ? src.deposit
           : (dueData?.paidAmount !== undefined && dueData?.paidAmount !== ''
             ? dueData.paidAmount
             : (dueData?.deposit !== undefined ? dueData.deposit : '')));
+
+      if (rawPayments.length > 0) {
+        finalPaidAmount = rawPayments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+      }
       const finalCustomerType = src.customerType || src.type || dueData?.customerType || dueData?.type || defaultCustomerType || 'regular';
 
       const rawEntries = (src.entries && Array.isArray(src.entries) && src.entries.some((e: any) => e.name || e.totalKg || e.manualSaleRate || e.buyRate))
@@ -269,6 +282,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         mobile: finalMobile,
         lotNumberInput: finalLotNumber,
         paidAmount: finalPaidAmount,
+        payments: rawPayments,
         customerType: finalCustomerType,
         status: src.status || dueData?.status || 'draft',
         createdAt: src.createdAt || today,
@@ -302,6 +316,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       mobile: '',
       lotNumberInput: lotNumber ? lotNumber.toString() : '',
       paidAmount: '',
+      payments: [],
       customerType: defaultCustomerType || 'regular',
       status: 'draft',
       createdAt: today,
@@ -342,6 +357,122 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   const [showCustomerCallMenu, setShowCustomerCallMenu] = useState(false);
   const [currentLotStock, setCurrentLotStock] = useState<LotStockSummary | null>(null);
   const [stockVersion, setStockVersion] = useState(0);
+
+  // Payment installment modal state & handlers
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [payModalAmount, setPayModalAmount] = useState<string>('');
+  const [payModalDate, setPayModalDate] = useState<string>('');
+  const [payModalNote, setPayModalNote] = useState<string>('');
+  const [isPaymentsExpanded, setIsPaymentsExpanded] = useState<boolean>(true);
+
+  const openAddPaymentModal = (suggestedDue?: number) => {
+    const existingPaid = Number(memoState.paidAmount) || 0;
+    const currentPayments = memoState.payments || [];
+    let basePayments = [...currentPayments];
+
+    // If there is an existing single paid amount and no payments array yet, convert it to 1st installment
+    if (basePayments.length === 0 && existingPaid > 0) {
+      basePayments.push({
+        id: `pay_${Date.now()}_init`,
+        amount: existingPaid,
+        date: memoState.customDate || memoState.createdAt || today,
+        time: memoState.createdAtTime || currentTime,
+        note: language === 'bn' ? '১ম জমা' : '1st Payment'
+      });
+      setMemoState(prev => ({
+        ...prev,
+        payments: basePayments,
+        paidAmount: existingPaid
+      }), { recordHistory: false });
+    }
+
+    setEditingPaymentId(null);
+    if (suggestedDue !== undefined && suggestedDue > 0) {
+      setPayModalAmount(suggestedDue.toString());
+    } else {
+      setPayModalAmount('');
+    }
+
+    const nowD = new Date();
+    const yyyy = nowD.getFullYear();
+    const mm = String(nowD.getMonth() + 1).padStart(2, '0');
+    const dd = String(nowD.getDate()).padStart(2, '0');
+    setPayModalDate(`${yyyy}-${mm}-${dd}`);
+    setPayModalNote('');
+    setShowPaymentModal(true);
+  };
+
+  const openEditPaymentModal = (payment: MemoPayment) => {
+    setEditingPaymentId(payment.id);
+    setPayModalAmount(payment.amount !== '' ? payment.amount.toString() : '');
+    setPayModalDate(getIsoDateForPicker(payment.date) || new Date().toISOString().split('T')[0]);
+    setPayModalNote(payment.note || '');
+    setShowPaymentModal(true);
+  };
+
+  const handleSavePaymentModal = () => {
+    const amt = parseMathOrNumber(payModalAmount);
+    const numAmt = Number(amt) || 0;
+    if (numAmt <= 0) {
+      alert(language === 'bn' ? 'দয়া করে সঠিক জমার পরিমাণ লিখুন।' : 'Please enter a valid payment amount.');
+      return;
+    }
+
+    const formattedDate = formatPickerDateToDisplay(payModalDate) || today;
+    const currentPayments = memoState.payments || [];
+
+    if (editingPaymentId) {
+      const updated = currentPayments.map(p => {
+        if (p.id === editingPaymentId) {
+          return {
+            ...p,
+            amount: numAmt,
+            date: formattedDate,
+            note: payModalNote.trim()
+          };
+        }
+        return p;
+      });
+      const newTotal = updated.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      setMemoState(prev => ({
+        ...prev,
+        payments: updated,
+        paidAmount: newTotal
+      }));
+    } else {
+      const newPay: MemoPayment = {
+        id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        amount: numAmt,
+        date: formattedDate,
+        time: new Date().toLocaleTimeString(language === 'bn' ? 'bn-BD' : 'en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        note: payModalNote.trim()
+      };
+      const updated = [...currentPayments, newPay];
+      const newTotal = updated.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      setMemoState(prev => ({
+        ...prev,
+        payments: updated,
+        paidAmount: newTotal
+      }));
+    }
+
+    setShowPaymentModal(false);
+    setEditingPaymentId(null);
+  };
+
+  const handleDeletePayment = (paymentId: string) => {
+    if (!window.confirm(language === 'bn' ? 'এই কিস্তির জমাটি মুছে ফেলতে চান?' : 'Delete this installment payment?')) {
+      return;
+    }
+    const updated = (memoState.payments || []).filter(p => p.id !== paymentId);
+    const newTotal = updated.length > 0 ? updated.reduce((s, p) => s + (Number(p.amount) || 0), 0) : '';
+    setMemoState(prev => ({
+      ...prev,
+      payments: updated,
+      paidAmount: newTotal
+    }));
+  };
 
   useEffect(() => {
     const handleStockUpdate = () => {
@@ -802,7 +933,14 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       } else {
         grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions + commissionAmount) * 100) / 100);
       }
-      const dueAmount = Math.max(0, Math.round((grandTotal - Number(memoState.paidAmount || 0)) * 100) / 100);
+      const paymentsList = memoState.payments || [];
+      const hasPayments = paymentsList.length > 0;
+      const paymentsTotal = hasPayments 
+        ? paymentsList.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+        : 0;
+      const effectivePaidNum = hasPayments ? paymentsTotal : Number(memoState.paidAmount || 0);
+
+      const dueAmount = Math.max(0, Math.round((grandTotal - effectivePaidNum) * 100) / 100);
       let currentStatus = memoState.status || 'draft';
 
       if (memoState.customerType) {
@@ -814,15 +952,15 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       }
 
       const effectiveState = memoState.status !== currentStatus 
-        ? { ...memoState, status: currentStatus } 
-        : memoState;
+        ? { ...memoState, status: currentStatus, paidAmount: hasPayments ? paymentsTotal : memoState.paidAmount } 
+        : (hasPayments && memoState.paidAmount !== paymentsTotal ? { ...memoState, paidAmount: paymentsTotal } : memoState);
 
-      if (memoState.status !== currentStatus) {
-        setMemoState(prev => ({ ...prev, status: currentStatus }), { recordHistory: false });
+      if (memoState.status !== currentStatus || (hasPayments && memoState.paidAmount !== paymentsTotal)) {
+        setMemoState(prev => ({ ...prev, status: currentStatus, paidAmount: hasPayments ? paymentsTotal : prev.paidAmount }), { recordHistory: false });
       }
 
       // Sync to due accounts (default to 'regular' if not explicitly chosen, so due is NEVER lost!)
-      if (memoState.customerType || dueAmount > 0 || (grandTotal > 0 && Number(memoState.paidAmount || 0) > 0)) {
+      if (memoState.customerType || dueAmount > 0 || (grandTotal > 0 && effectivePaidNum > 0)) {
         const type = (memoState.customerType === 'permanent' || memoState.customerType === 'reseller') 
           ? memoState.customerType 
           : (defaultCustomerType === 'permanent' || defaultCustomerType === 'reseller' ? defaultCustomerType : 'regular');
@@ -842,7 +980,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         const newDueData = {
           ...existingDueObj,
           id: memoId,
-          memoState: { ...memoState, date: effectiveDateStr, customDate: memoState.customDate },
+          memoState: { ...memoState, date: effectiveDateStr, customDate: memoState.customDate, payments: paymentsList, paidAmount: effectivePaidNum },
           date: effectiveDateStr,
           createdAt: effectiveDateStr,
           name: memoState.customerName,
@@ -850,8 +988,9 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           address: memoState.address,
           mobile: memoState.mobile,
           lotNumber: memoState.lotNumberInput,
-          deposit: memoState.paidAmount,
-          paidAmount: memoState.paidAmount,
+          deposit: effectivePaidNum,
+          paidAmount: effectivePaidNum,
+          payments: paymentsList,
           type: type,
           status: currentStatus,
           autoMessage: existingDueObj.autoMessage,
@@ -1076,9 +1215,20 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
       const { pdf, pdfBlob, fileName } = res;
       const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
       const customerName = memoState.customerName ? memoState.customerName.trim() : 'সম্মানিত ক্রেতা';
-      const paidVal = Number(memoState.paidAmount) || 0;
+      const paidVal = paidNum;
       const excessVal = (paidVal > grandTotal && grandTotal > 0) ? Math.round((paidVal - grandTotal) * 100) / 100 : 0;
-      const summaryText = `*সামুদ্রিক মাছ নোটবুক - বিক্রয় মেমো*\nক্রেতা: ${customerName}\nতারিখ: ${memoState.customDate || memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\nমোট বিল: ৳ ${grandTotal.toFixed(2)}\nজমা: ৳ ${paidVal.toFixed(2)}\n${excessVal > 0 ? `বকেয়া: ৳ 0.00\nঅতিরিক্ত জমা (ফেরত): ৳ ${excessVal.toFixed(2)}` : `বকেয়া: ৳ ${dueAmount.toFixed(2)}`}`;
+
+      let paymentsSummaryText = '';
+      if (memoState.payments && memoState.payments.length > 0) {
+        paymentsSummaryText = `\n----------------------------------\n*জমার হিসাব (${language === 'bn' ? `${enToBnDigits(memoState.payments.length)} বার জমা` : `${memoState.payments.length} Payments`}):*`;
+        memoState.payments.forEach((p, idx) => {
+          const pNum = language === 'bn' ? enToBnDigits(idx + 1) : (idx + 1);
+          const pNote = p.note ? ` (${p.note})` : '';
+          paymentsSummaryText += `\n${pNum}. ${p.date}: ৳ ${(Number(p.amount) || 0).toFixed(2)}${pNote}`;
+        });
+      }
+
+      const summaryText = `*সামুদ্রিক মাছ নোটবুক - বিক্রয় মেমো*\nক্রেতা: ${customerName}\nতারিখ: ${memoState.customDate || memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\nমোট বিল: ৳ ${grandTotal.toFixed(2)}\nজমা: ৳ ${paidVal.toFixed(2)}${memoState.payments && memoState.payments.length > 1 ? ` (${memoState.payments.length} বার)` : ''}\n${excessVal > 0 ? `বকেয়া: ৳ 0.00\nঅতিরিক্ত জমা (ফেরত): ৳ ${excessVal.toFixed(2)}` : `বকেয়া: ৳ ${dueAmount.toFixed(2)}`}${paymentsSummaryText}`;
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
@@ -1119,9 +1269,20 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         }
       });
 
-      const paidVal = Number(memoState.paidAmount) || 0;
+      const paidVal = paidNum;
       const excessVal = (paidVal > grandTotal && grandTotal > 0) ? Math.round((paidVal - grandTotal) * 100) / 100 : 0;
-      const waText = `*সামুদ্রিক মাছ নোটবুক - বিক্রয় মেমো*\nক্রেতা: ${customerName}\nমোবাইল: ${memoState.mobile || 'N/A'}\nতারিখ: ${memoState.customDate || memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\n----------------------------------\n*পণ্যের বিবরণ:*${itemsText}\n----------------------------------\nমাছের মোট মূল্য: ৳ ${fishTotal.toFixed(2)}${commissionAmount > 0 ? `\nকমিশন: ${(memoState.commissionOperation || 'subtract') === 'add' ? '+' : '-'} ৳ ${commissionAmount.toFixed(2)}` : ''}${totalDeductions > 0 ? `\nকর্তন/ছাড়: - ৳ ${totalDeductions.toFixed(2)}` : ''}\n*চূড়ান্ত মোট বিল: ৳ ${grandTotal.toFixed(2)}*\nজমা: ৳ ${paidVal.toFixed(2)}\n${excessVal > 0 ? `*বকেয়া: ৳ 0.00*\n*গ্রাহককে ফেরত: ৳ ${excessVal.toFixed(2)}*` : `*বকেয়া: ৳ ${dueAmount.toFixed(2)}*`}\n\nধন্যবাদ!`;
+
+      let paymentsSummaryText = '';
+      if (memoState.payments && memoState.payments.length > 0) {
+        paymentsSummaryText = `\n----------------------------------\n*জমার বিবরণ (${language === 'bn' ? `${enToBnDigits(memoState.payments.length)} বার জমা` : `${memoState.payments.length} Payments`}):*`;
+        memoState.payments.forEach((p, idx) => {
+          const pNum = language === 'bn' ? enToBnDigits(idx + 1) : (idx + 1);
+          const pNote = p.note ? ` (${p.note})` : '';
+          paymentsSummaryText += `\n${pNum}. ${p.date}: ৳ ${(Number(p.amount) || 0).toFixed(2)}${pNote}`;
+        });
+      }
+
+      const waText = `*সামুদ্রিক মাছ নোটবুক - বিক্রয় মেমো*\nক্রেতা: ${customerName}\nমোবাইল: ${memoState.mobile || 'N/A'}\nতারিখ: ${memoState.customDate || memoState.createdAt || today}\nলট নং: ${lotNumber || 'N/A'}\n----------------------------------\n*পণ্যের বিবরণ:*${itemsText}\n----------------------------------\nমাছের মোট মূল্য: ৳ ${fishTotal.toFixed(2)}${commissionAmount > 0 ? `\nকমিশন: ${(memoState.commissionOperation || 'subtract') === 'add' ? '+' : '-'} ৳ ${commissionAmount.toFixed(2)}` : ''}${totalDeductions > 0 ? `\nকর্তন/ছাড়: - ৳ ${totalDeductions.toFixed(2)}` : ''}\n*চূড়ান্ত মোট বিল: ৳ ${grandTotal.toFixed(2)}*\nজমা: ৳ ${paidVal.toFixed(2)}${memoState.payments && memoState.payments.length > 1 ? ` (${memoState.payments.length} বার)` : ''}\n${excessVal > 0 ? `*বকেয়া: ৳ 0.00*\n*গ্রাহককে ফেরত: ৳ ${excessVal.toFixed(2)}*` : `*বকেয়া: ৳ ${dueAmount.toFixed(2)}*`}${paymentsSummaryText}\n\nধন্যবাদ!`;
 
       let phone = (memoState.mobile || '').replace(/[^\d]/g, '');
       if (phone.length === 11 && phone.startsWith('01')) {
@@ -1167,9 +1328,19 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
         }
       });
 
-      const paidVal = Number(memoState.paidAmount) || 0;
+      const paidVal = paidNum;
       const excessVal = (paidVal > grandTotal && grandTotal > 0) ? Math.round((paidVal - grandTotal) * 100) / 100 : 0;
-      const emailBody = `Sales Memo - Samudrik Mach Notebook\nCustomer: ${customerName}\nDate: ${memoState.customDate || memoState.createdAt || today}\nLot: ${lotNumber || 'N/A'}\n----------------------------------\nItems:${itemsText}\n----------------------------------\nFish Total: Tk ${fishTotal.toFixed(2)}\nNet Total: Tk ${grandTotal.toFixed(2)}\nPaid: Tk ${paidVal.toFixed(2)}\n${excessVal > 0 ? `Due: Tk 0.00\nChange / Refund: Tk ${excessVal.toFixed(2)}` : `Due: Tk ${dueAmount.toFixed(2)}`}\n\nThank you!`;
+
+      let paymentsSummaryEmail = '';
+      if (memoState.payments && memoState.payments.length > 0) {
+        paymentsSummaryEmail = `\n----------------------------------\nPayment Installments (${memoState.payments.length}):`;
+        memoState.payments.forEach((p, idx) => {
+          const pNote = p.note ? ` (${p.note})` : '';
+          paymentsSummaryEmail += `\n${idx + 1}. ${p.date}: Tk ${(Number(p.amount) || 0).toFixed(2)}${pNote}`;
+        });
+      }
+
+      const emailBody = `Sales Memo - Samudrik Mach Notebook\nCustomer: ${customerName}\nDate: ${memoState.customDate || memoState.createdAt || today}\nLot: ${lotNumber || 'N/A'}\n----------------------------------\nItems:${itemsText}\n----------------------------------\nFish Total: Tk ${fishTotal.toFixed(2)}\nNet Total: Tk ${grandTotal.toFixed(2)}\nPaid: Tk ${paidVal.toFixed(2)}${memoState.payments && memoState.payments.length > 1 ? ` (${memoState.payments.length} installments)` : ''}\n${excessVal > 0 ? `Due: Tk 0.00\nChange / Refund: Tk ${excessVal.toFixed(2)}` : `Due: Tk ${dueAmount.toFixed(2)}`}${paymentsSummaryEmail}\n\nThank you!`;
 
       if (res) {
         const { pdf, pdfBlob, fileName } = res;
@@ -1291,7 +1462,12 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
   } else {
     grandTotal = Math.max(0, Math.round((fishTotal - totalDeductions + commissionAmount) * 100) / 100);
   }
-  const paidNum = Number(memoState.paidAmount || 0);
+  const paymentsList = memoState.payments || [];
+  const hasMultiplePayments = paymentsList.length > 0;
+  const paymentsTotal = hasMultiplePayments
+    ? paymentsList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    : 0;
+  const paidNum = hasMultiplePayments ? paymentsTotal : Number(memoState.paidAmount || 0);
   const dueAmount = Math.max(0, Math.round((grandTotal - paidNum) * 100) / 100);
   const excessAmount = (paidNum > grandTotal && grandTotal > 0) ? Math.round((paidNum - grandTotal) * 100) / 100 : 0;
 
@@ -3028,28 +3204,277 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
               </div>
 
               {/* Jama / Paid Amount */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.15rem' }}>
-                <span className="memo-label-dark" style={{ fontSize: '0.88rem' }}>
-                  {t('jamaPaid')}
-                </span>
-                <MathInput 
-                  className="supplier-input" 
-                  style={{
-                    width: '115px',
-                    textAlign: 'right',
-                    padding: '0.35rem 0.6rem',
-                    background: 'rgba(0, 0, 0, 0.35)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    borderRadius: '6px',
-                    color: '#fff',
-                    fontWeight: 'bold',
-                    fontSize: '0.92rem'
-                  }}
-                  value={memoState.paidAmount}
-                  onChange={e => updateMemoState('paidAmount', parseMathOrNumber(e.target.value))}
-                  placeholder="0.00"
-                />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span className="memo-label-dark" style={{ fontSize: '0.88rem', fontWeight: 'bold' }}>
+                    {hasMultiplePayments 
+                      ? (language === 'bn' ? 'মোট জমা:' : 'Total Paid:')
+                      : t('jamaPaid')}
+                  </span>
+                  {hasMultiplePayments && (
+                    <button
+                      type="button"
+                      data-html2canvas-ignore
+                      onClick={() => setIsPaymentsExpanded(!isPaymentsExpanded)}
+                      style={{
+                        background: 'rgba(16, 185, 129, 0.18)',
+                        border: '1px solid rgba(52, 211, 153, 0.4)',
+                        borderRadius: '12px',
+                        padding: '1px 8px',
+                        color: '#34d399',
+                        fontSize: '0.72rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                      title={language === 'bn' ? 'কিস্তির বিবরণ দেখান / লুকান' : 'Toggle payment installments'}
+                    >
+                      <span>📋</span>
+                      <span>
+                        {language === 'bn' ? `${enToBnDigits(paymentsList.length)} বার জমা` : `${paymentsList.length} Payments`}
+                      </span>
+                      <span style={{ fontSize: '0.65rem' }}>{isPaymentsExpanded ? '▲' : '▼'}</span>
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {hasMultiplePayments ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{
+                        color: '#34d399',
+                        fontWeight: 'bold',
+                        fontSize: '1.05rem',
+                        padding: '0.2rem 0.55rem',
+                        background: 'rgba(16, 185, 129, 0.12)',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(52, 211, 153, 0.3)'
+                      }}>
+                        ৳ {paidNum.toFixed(2)}
+                      </span>
+                      <button
+                        type="button"
+                        data-html2canvas-ignore
+                        onClick={() => openAddPaymentModal(dueAmount)}
+                        style={{
+                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                          border: 'none',
+                          borderRadius: '6px',
+                          color: '#fff',
+                          padding: '0.35rem 0.55rem',
+                          fontSize: '0.75rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)'
+                        }}
+                        title={language === 'bn' ? 'নতুন কিস্তি যোগ করুন' : 'Add installment payment'}
+                      >
+                        <Plus size={13} />
+                        <span>{language === 'bn' ? 'কিস্তি' : 'Add'}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <MathInput 
+                        className="supplier-input" 
+                        style={{
+                          width: '100px',
+                          textAlign: 'right',
+                          padding: '0.35rem 0.5rem',
+                          background: 'rgba(0, 0, 0, 0.35)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: '6px',
+                          color: '#fff',
+                          fontWeight: 'bold',
+                          fontSize: '0.92rem'
+                        }}
+                        value={memoState.paidAmount}
+                        onChange={e => updateMemoState('paidAmount', parseMathOrNumber(e.target.value))}
+                        placeholder="0.00"
+                      />
+                      <button
+                        type="button"
+                        data-html2canvas-ignore
+                        onClick={() => openAddPaymentModal(dueAmount)}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(52, 211, 153, 0.35)',
+                          borderRadius: '6px',
+                          color: '#34d399',
+                          padding: '0.35rem 0.5rem',
+                          fontSize: '0.74rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          whiteSpace: 'nowrap'
+                        }}
+                        title={language === 'bn' ? 'একাধিক কিস্তিতে টাকা জমা রাখার হিসাব করুন' : 'Record multiple installment payments'}
+                      >
+                        <Plus size={12} />
+                        <span>{language === 'bn' ? 'কিস্তি' : 'Installment'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* Installment breakdown card (Visible when payments exist) */}
+              {hasMultiplePayments && (
+                <div style={{
+                  background: 'rgba(0, 0, 0, 0.4)',
+                  border: '1px solid rgba(52, 211, 153, 0.3)',
+                  borderRadius: '8px',
+                  padding: '0.55rem 0.7rem',
+                  marginTop: '0.35rem',
+                  display: isPaymentsExpanded ? 'flex' : 'none',
+                  flexDirection: 'column',
+                  gap: '5px'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                    paddingBottom: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 'bold', color: '#34d399', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span>🗓️</span>
+                      <span>
+                        {language === 'bn' 
+                          ? `কিস্তির হিসাব (মোট ${enToBnDigits(paymentsList.length)} বার)` 
+                          : `Payment Installments (${paymentsList.length})`}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      data-html2canvas-ignore
+                      onClick={() => openAddPaymentModal(dueAmount)}
+                      style={{
+                        background: 'rgba(16, 185, 129, 0.2)',
+                        border: '1px solid rgba(52, 211, 153, 0.4)',
+                        borderRadius: '4px',
+                        color: '#34d399',
+                        fontSize: '0.7rem',
+                        padding: '2px 7px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        fontWeight: 600
+                      }}
+                    >
+                      <Plus size={11} />
+                      <span>{language === 'bn' ? 'নতুন কিস্তি যোগ' : 'Add Installment'}</span>
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '2px' }}>
+                    {paymentsList.map((pay, idx) => {
+                      const pNum = language === 'bn' ? enToBnDigits(idx + 1) : (idx + 1);
+                      const pAmt = Number(pay.amount) || 0;
+                      return (
+                        <div
+                          key={pay.id || idx}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            fontSize: '0.78rem',
+                            padding: '3px 5px',
+                            borderRadius: '4px',
+                            background: idx % 2 === 0 ? 'rgba(255, 255, 255, 0.03)' : 'transparent'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: 1 }}>
+                            <span style={{ color: '#aaa', fontWeight: 'bold', fontSize: '0.72rem' }}>#{pNum}</span>
+                            <span style={{ color: '#e2e8f0', fontWeight: 500, fontSize: '0.76rem' }}>{pay.date}</span>
+                            {pay.note && (
+                              <span style={{
+                                background: 'rgba(59, 130, 246, 0.18)',
+                                color: '#93c5fd',
+                                border: '1px solid rgba(59, 130, 246, 0.3)',
+                                borderRadius: '3px',
+                                padding: '1px 5px',
+                                fontSize: '0.67rem',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '110px'
+                              }}>
+                                {pay.note}
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontWeight: 'bold', color: '#34d399', fontSize: '0.85rem' }}>
+                              ৳ {pAmt.toFixed(2)}
+                            </span>
+                            <div data-html2canvas-ignore style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                              <button
+                                type="button"
+                                onClick={() => openEditPaymentModal(pay)}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: '#60a5fa',
+                                  cursor: 'pointer',
+                                  padding: '2px',
+                                  display: 'flex',
+                                  alignItems: 'center'
+                                }}
+                                title={language === 'bn' ? 'সম্পাদন করুন' : 'Edit'}
+                              >
+                                <RotateCcw size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePayment(pay.id)}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: '#f87171',
+                                  cursor: 'pointer',
+                                  padding: '2px',
+                                  display: 'flex',
+                                  alignItems: 'center'
+                                }}
+                                title={language === 'bn' ? 'মুছে ফেলুন' : 'Delete'}
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    borderTop: '1px dashed rgba(52, 211, 153, 0.3)',
+                    paddingTop: '4px',
+                    marginTop: '2px',
+                    fontSize: '0.78rem'
+                  }}>
+                    <span style={{ color: '#aaa' }}>
+                      {language === 'bn' ? `মোট ${enToBnDigits(paymentsList.length)} বারে জমা:` : `Total Paid (${paymentsList.length} times):`}
+                    </span>
+                    <span style={{ fontWeight: 'bold', color: '#34d399', fontSize: '0.92rem' }}>
+                      ৳ {paidNum.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Due (Baki) */}
               <div style={{
@@ -3177,6 +3602,240 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
           
         </div>
       </div>
+
+      {/* Installment Payment Modal */}
+      {showPaymentModal && (
+        <div
+          data-html2canvas-ignore
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.78)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '1rem'
+          }}
+          onClick={() => setShowPaymentModal(false)}
+        >
+          <div
+            style={{
+              background: '#0a2318',
+              border: '1px solid rgba(52, 211, 153, 0.45)',
+              borderRadius: '12px',
+              padding: '1.25rem',
+              width: '100%',
+              maxWidth: '380px',
+              boxShadow: '0 12px 35px rgba(0, 0, 0, 0.6)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.6rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>💰</span>
+                <span>
+                  {editingPaymentId 
+                    ? (language === 'bn' ? 'কিস্তির জমা সম্পাদন করুন' : 'Edit Installment Payment') 
+                    : (language === 'bn' ? 'টাকা জমা / কিস্তি যোগ করুন' : 'Add Payment Installment')}
+                </span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                style={{ background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              {/* Amount */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: 600 }}>
+                  {language === 'bn' ? 'জমার পরিমাণ (টাকা):' : 'Payment Amount (Tk):'} <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '0.6rem 0.8rem',
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    border: '1px solid rgba(52, 211, 153, 0.5)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '1.1rem',
+                    fontWeight: 'bold',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                  placeholder="0.00"
+                  value={payModalAmount}
+                  onChange={e => setPayModalAmount(e.target.value)}
+                />
+                {dueAmount > 0 && !editingPaymentId && (
+                  <button
+                    type="button"
+                    onClick={() => setPayModalAmount(dueAmount.toString())}
+                    style={{
+                      background: 'rgba(255, 152, 0, 0.15)',
+                      border: '1px solid rgba(255, 152, 0, 0.4)',
+                      borderRadius: '4px',
+                      color: '#ffb74d',
+                      fontSize: '0.72rem',
+                      padding: '3px 8px',
+                      marginTop: '6px',
+                      cursor: 'pointer',
+                      fontWeight: 600
+                    }}
+                  >
+                    {language === 'bn' ? `সম্পূর্ণ বকেয়া পরিশোধ (৳ ${dueAmount.toFixed(2)})` : `Full Due Pay (Tk ${dueAmount.toFixed(2)})`}
+                  </button>
+                )}
+              </div>
+
+              {/* Date */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '0.82rem', color: '#cbd5e1', fontWeight: 600 }}>
+                    {language === 'bn' ? 'জমার তারিখ:' : 'Payment Date:'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nowD = new Date();
+                      const yyyy = nowD.getFullYear();
+                      const mm = String(nowD.getMonth() + 1).padStart(2, '0');
+                      const dd = String(nowD.getDate()).padStart(2, '0');
+                      setPayModalDate(`${yyyy}-${mm}-${dd}`);
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#34d399',
+                      fontSize: '0.72rem',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    {language === 'bn' ? 'আজকের তারিখ' : 'Today'}
+                  </button>
+                </div>
+                <input
+                  type="date"
+                  style={{
+                    width: '100%',
+                    padding: '0.55rem 0.8rem',
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '0.92rem',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                  value={payModalDate}
+                  onChange={e => setPayModalDate(e.target.value)}
+                />
+              </div>
+
+              {/* Method / Note */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: 600 }}>
+                  {language === 'bn' ? 'পরিশোধের মাধ্যম / মন্তব্য:' : 'Payment Method / Note:'}
+                </label>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                  {['ক্যাশ', 'বিকাশ', 'নগদ', 'ব্যাংক', 'রকেট'].map(chip => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setPayModalNote(chip)}
+                      style={{
+                        background: payModalNote === chip ? 'rgba(52, 211, 153, 0.3)' : 'rgba(255, 255, 255, 0.08)',
+                        border: payModalNote === chip ? '1px solid #34d399' : '1px solid rgba(255, 255, 255, 0.15)',
+                        borderRadius: '12px',
+                        color: payModalNote === chip ? '#34d399' : '#cbd5e1',
+                        padding: '2px 8px',
+                        fontSize: '0.72rem',
+                        cursor: 'pointer',
+                        fontWeight: 600
+                      }}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  style={{
+                    width: '100%',
+                    padding: '0.55rem 0.8rem',
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '0.9rem',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                  placeholder={language === 'bn' ? 'যেমন: ক্যাশ, বিকাশ বা অন্য কোনো নোট' : 'e.g. Cash, bKash, Bank etc.'}
+                  value={payModalNote}
+                  onChange={e => setPayModalNote(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                style={{
+                  flex: 1,
+                  padding: '0.6rem',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '8px',
+                  color: '#cbd5e1',
+                  fontWeight: 'bold',
+                  fontSize: '0.88rem',
+                  cursor: 'pointer'
+                }}
+              >
+                {language === 'bn' ? 'বাতিল' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleSavePaymentModal}
+                style={{
+                  flex: 2,
+                  padding: '0.6rem',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)'
+                }}
+              >
+                {editingPaymentId 
+                  ? (language === 'bn' ? 'আপডেট করুন' : 'Update') 
+                  : (language === 'bn' ? 'জমা সংরক্ষণ করুন' : 'Save Payment')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

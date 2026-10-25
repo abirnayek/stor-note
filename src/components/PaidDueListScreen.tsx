@@ -4,6 +4,7 @@ import { ChevronLeft, Settings, X, Trash2, ArrowLeftRight } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { syncAllDueAccounts, getNormalizedMemo, deleteDueMemo, changeDueCustomerType, type NormalizedDueMemo } from '../utils/dueSyncUtils';
+import { enToBnDigits } from '../utils/dateUtils';
 
 interface PaidDueListScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -250,8 +251,13 @@ const PaidDueListScreen: React.FC<PaidDueListScreenProps> = ({ onNavigate, dueTy
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '80%' }}>
                     <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--text-color)', wordBreak: 'break-word', textAlign: 'left' }}>{name}</span>
-                    <span style={{ fontSize: '0.95rem', color: '#72be44', marginTop: '0.3rem', fontWeight: '600' }}>
-                      Paid: ৳ {memo.paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    <span style={{ fontSize: '0.95rem', color: '#72be44', marginTop: '0.3rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span>Paid: ৳ {memo.paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      {memo.payments && memo.payments.length > 1 && (
+                        <span style={{ fontSize: '0.72rem', color: '#34d399', background: 'rgba(52, 211, 153, 0.15)', border: '1px solid rgba(52, 211, 153, 0.3)', padding: '1px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
+                          ({language === 'bn' ? `${enToBnDigits(memo.payments.length)} কিস্তিতে পরিশোধ` : `${memo.payments.length} installments`})
+                        </span>
+                      )}
                     </span>
                     {paidDateStr && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.5rem' }}>Paid on: {paidDateStr}</div>}
                     {memo.mobile && <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.2rem' }}>📞 {memo.mobile}</div>}

@@ -2,6 +2,15 @@ import { parseMemoMonthYear, getMemoExactTimestamp } from './dateUtils';
 import { moveToTrash } from './trashUtils';
 import { markMemoDeleted, isMemoDeleted } from './syncEngine';
 
+export interface MemoPayment {
+  id: string;
+  amount: number | '';
+  date: string;
+  time?: string;
+  note?: string;
+  method?: string;
+}
+
 export interface NormalizedDueMemo {
   id: string;
   name: string;
@@ -22,6 +31,7 @@ export interface NormalizedDueMemo {
     status: 'pending' | 'sent' | 'failed';
   };
   timestamp: number;
+  payments?: MemoPayment[];
   raw: any;
 }
 
@@ -121,9 +131,17 @@ export const calculateMemoTotals = (memoData: any): { totalBill: number; paidAmo
     }
   }
 
+  const rawPayments = (memo.payments && Array.isArray(memo.payments))
+    ? memo.payments
+    : ((memoData.payments && Array.isArray(memoData.payments)) ? memoData.payments : []);
+  let sumPayments = 0;
+  if (rawPayments.length > 0) {
+    sumPayments = rawPayments.reduce((acc: number, p: any) => acc + (Number(p.amount) || 0), 0);
+  }
+
   const deposit = Number(memo.deposit !== undefined ? memo.deposit : (memoData.deposit !== undefined ? memoData.deposit : 0)) || 0;
   const paid = Number(memo.paidAmount !== undefined ? memo.paidAmount : (memoData.paidAmount !== undefined ? memoData.paidAmount : 0)) || 0;
-  const paidAmount = Math.max(deposit, paid);
+  const paidAmount = rawPayments.length > 0 ? sumPayments : Math.max(deposit, paid);
 
   const dueAmount = Math.max(0, Math.round((totalBill - paidAmount) * 100) / 100);
 
@@ -265,6 +283,14 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
 
   const { dateStr, timeStr } = parseMemoMonthYear(innerMemo, timestamp);
 
+  const rawPayments: MemoPayment[] = (innerMemo.payments && Array.isArray(innerMemo.payments) && innerMemo.payments.length > 0)
+    ? innerMemo.payments
+    : ((primary.payments && Array.isArray(primary.payments) && primary.payments.length > 0)
+      ? primary.payments
+      : ((dueData?.payments && Array.isArray(dueData.payments) && dueData.payments.length > 0)
+        ? dueData.payments
+        : ((dueData?.memoState?.payments && Array.isArray(dueData.memoState.payments)) ? dueData.memoState.payments : [])));
+
   return {
     id: memoId,
     name,
@@ -281,6 +307,7 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
     paidDate,
     autoMessage,
     timestamp: timestamp || Date.now(),
+    payments: rawPayments,
     raw: {
       ...primary,
       customerName: name,
@@ -290,6 +317,7 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
       deductions: (innerMemo.deductions && Array.isArray(innerMemo.deductions))
         ? innerMemo.deductions
         : ((primary.deductions && Array.isArray(primary.deductions)) ? primary.deductions : (dueData?.deductions || [])),
+      payments: rawPayments,
       memoState: {
         ...innerMemo,
         customerName: name,
@@ -298,7 +326,8 @@ export const getNormalizedMemo = (memoId: string): NormalizedDueMemo => {
         entries: combinedEntries,
         deductions: (innerMemo.deductions && Array.isArray(innerMemo.deductions))
           ? innerMemo.deductions
-          : ((primary.deductions && Array.isArray(primary.deductions)) ? primary.deductions : (dueData?.deductions || []))
+          : ((primary.deductions && Array.isArray(primary.deductions)) ? primary.deductions : (dueData?.deductions || [])),
+        payments: rawPayments
       }
     }
   };

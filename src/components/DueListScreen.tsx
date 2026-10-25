@@ -4,6 +4,7 @@ import { ChevronLeft, Plus, Trash2, Clock, CheckCircle, AlertTriangle, ArrowLeft
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { syncAllDueAccounts, getNormalizedMemo, deleteDueMemo, changeDueCustomerType, type NormalizedDueMemo } from '../utils/dueSyncUtils';
+import { enToBnDigits } from '../utils/dateUtils';
 
 interface AutoMessageConfig {
   scheduledFor: number;
@@ -270,6 +271,11 @@ const DueListScreen: React.FC<DueListScreenProps> = ({ onNavigate, dueType, onSe
                     {memo.totalBill > 0 && (
                       <span style={{ fontSize: '0.78rem', color: '#aaa', marginTop: '0.15rem' }}>
                         মোট: ৳{memo.totalBill.toFixed(0)} | পরিশোধ: ৳{memo.paidAmount.toFixed(0)}
+                        {memo.payments && memo.payments.length > 1 && (
+                          <span style={{ color: '#34d399', fontWeight: 600, marginLeft: '5px' }}>
+                            ({language === 'bn' ? `${enToBnDigits(memo.payments.length)} বার জমা` : `${memo.payments.length} installments`})
+                          </span>
+                        )}
                       </span>
                     )}
                     {memo.mobile && (
