@@ -277,11 +277,12 @@ if (typeof window !== 'undefined') {
     }
   });
 
+  // Periodic background check every 5 minutes (Realtime sync handles live updates instantly via WebSocket)
   setInterval(() => {
     if ((currentUser || getStoredUserCached()) && !isRestoring && navigator.onLine) {
       syncFromCloud();
     }
-  }, 10000);
+  }, 300000);
 }
 
 const syncTimers: Record<string, any> = {};

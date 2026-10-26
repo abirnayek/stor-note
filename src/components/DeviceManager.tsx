@@ -19,6 +19,7 @@ interface Session {
 const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [kickoutLoading, setKickoutLoading] = useState(false);
   const currentDeviceId = localStorage.getItem('device_id');
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -43,7 +44,9 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
           permission: devPermission,
           last_active: new Date().toISOString()
         }, { onConflict: 'device_id' });
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[DeviceManager] registerCurrentDevice error:', e);
+      }
 
       await fetchSessions();
     };
@@ -63,16 +66,55 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
 
   const fetchSessions = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('active_sessions')
-      .select('*')
-      .eq('status', 'active')
-      .order('last_active', { ascending: false });
-
-    if (!error && data) {
-      setSessions(data);
+    setErrorMessage(null);
+    let devId = localStorage.getItem('device_id');
+    if (!devId) {
+      devId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
+      localStorage.setItem('device_id', devId);
     }
-    setLoading(false);
+    const devPermission = (localStorage.getItem('device_permission') as any) || 'admin';
+    const devName = getReadableDeviceName();
+
+    const currentDeviceFallback: Session = {
+      id: devId,
+      device_id: devId,
+      device_name: devName,
+      last_active: new Date().toISOString(),
+      status: 'active',
+      permission: devPermission
+    };
+
+    try {
+      const { data, error } = await supabase
+        .from('active_sessions')
+        .select('*')
+        .eq('status', 'active')
+        .order('last_active', { ascending: false });
+
+      if (error) {
+        console.error('[DeviceManager] fetchSessions error:', error);
+        if (error.message?.includes('exceed_egress_quota') || (error as any).status === 402) {
+          setErrorMessage('Supabase কোটা সীমা শেষ (Exceed Egress Quota): Supabase ফ্রি প্ল্যানের মাসিক ব্যান্ডউইথ (5GB) লিমিট শেষ হওয়ায় সার্ভার সাময়িকভাবে রেস্ট্রিক্ট করা হয়েছে। Supabase Dashboard (Billing / Usage) থেকে Spend Cap বা Plan আপডেট করুন। তবে আপনার বর্তমান ডিভাইস সচল রয়েছে।');
+        } else {
+          setErrorMessage('ক্লাউড থেকে তথ্য লোড করা যায়নি: ' + error.message);
+        }
+        // Always display current device so user is not shown an empty list
+        setSessions([currentDeviceFallback]);
+      } else if (data) {
+        const hasCurrent = data.some(s => s.device_id === devId);
+        if (!hasCurrent) {
+          setSessions([currentDeviceFallback, ...data]);
+        } else {
+          setSessions(data);
+        }
+      }
+    } catch (e: any) {
+      console.error('[DeviceManager] Exception in fetchSessions:', e);
+      setErrorMessage(e?.message || 'সার্ভার যোগাযোগে ত্রুটি হয়েছে।');
+      setSessions([currentDeviceFallback]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleKickOut = async (deviceId: string) => {
@@ -85,6 +127,8 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
       if (!error) {
         broadcastDeviceKickout(deviceId);
         fetchSessions();
+      } else {
+        alert("ডিভাইস রিমুভ করা যায়নি: " + error.message);
       }
     }
   };
@@ -98,6 +142,8 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
     if (!error) {
       broadcastDevicePermission(deviceId, newPermission);
       fetchSessions();
+    } else {
+      alert("পারমিশন পরিবর্তন করা যায়নি: " + error.message);
     }
   };
 
@@ -140,6 +186,27 @@ const DeviceManager: React.FC<DeviceManagerProps> = ({ onClose }) => {
         <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(255,152,0,0.1)', border: '1px solid rgba(255,152,0,0.3)', borderRadius: '8px', color: '#ff9800', fontSize: '0.9rem' }}>
           Here you can see all devices currently logged into your account. You can revoke their access (Remove) or change their permissions (View/Edit).
         </div>
+
+        {errorMessage && (
+          <div style={{
+            marginBottom: '1rem',
+            padding: '0.85rem 1rem',
+            background: 'rgba(244, 67, 54, 0.15)',
+            border: '1px solid rgba(244, 67, 54, 0.4)',
+            borderRadius: '8px',
+            color: '#ff7979',
+            fontSize: '0.85rem',
+            lineHeight: 1.5,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.4rem'
+          }}>
+            <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <ShieldAlert size={16} /> ক্লাউড সার্ভার সংক্রান্ত সতর্কতা
+            </div>
+            <div>{errorMessage}</div>
+          </div>
+        )}
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: '2rem' }}>Loading devices...</div>

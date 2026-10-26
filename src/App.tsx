@@ -374,8 +374,8 @@ function App() {
           }
         }
 
-        // Periodic heartbeat every 15 seconds & on tab focus
-        setInterval(checkDeviceStatus, 15000);
+        // Periodic heartbeat every 2 minutes & on tab focus
+        setInterval(checkDeviceStatus, 120000);
         const handleVisibility = () => {
           if (document.visibilityState === 'visible') {
             checkDeviceStatus();
