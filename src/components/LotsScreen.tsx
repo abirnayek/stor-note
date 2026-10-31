@@ -36,7 +36,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
         if (key && (key.startsWith('memo_lot_') || key.startsWith('due_memo_purchase_lot_'))) {
           const lotStr = key.replace('memo_lot_', '').replace('due_memo_purchase_lot_', '');
           const n = parseInt(lotStr, 10);
-          if (!isNaN(n) && n > 0) {
+          if (!isNaN(n) && n > 0 && n < 1000) {
             lotNumbersSet.add(n);
           }
         }
