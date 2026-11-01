@@ -3,8 +3,8 @@ import { type Screen } from '../App';
 import { ChevronLeft, Calendar, FileText, Trash2, Search, Filter, TrendingUp, TrendingDown } from 'lucide-react';
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
-import { MONTHS, parseMemoMonthYear, getMemoExactTimestamp, enToBnDigits } from '../utils/dateUtils';
-import { deleteSalesMemoCompletely, isPurchaseMemoData, purgeCorruptedPurchaseMemosFromSales } from '../utils/dueSyncUtils';
+import { MONTHS, enToBnDigits } from '../utils/dateUtils';
+import { deleteSalesMemoCompletely, getAllGlobalSalesMemos, purgeCorruptedPurchaseMemosFromSales } from '../utils/dueSyncUtils';
 import { getLotPurchaseItems, getAllPurchaseItems, matchesFish } from '../utils/stockUtils';
 
 interface MonthlySalesScreenProps {
@@ -55,64 +55,32 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
 
   const loadMonthMemos = () => {
     purgeCorruptedPurchaseMemosFromSales(true);
+
+    // Use the exact same single source of truth as the SalesLotsScreen folders
+    const allGlobal = getAllGlobalSalesMemos();
+    const monthGlobal = allGlobal.filter(m => m.month === monthIndex && m.year === year);
+
     const foundMemosMap = new Map<string, MonthlyMemo>();
 
-    let localTimestamps: Record<string, number> = {};
-    try {
-      const tsRaw = localStorage.getItem('local_timestamps');
-      if (tsRaw) localTimestamps = JSON.parse(tsRaw);
-    } catch (e) {}
+    monthGlobal.forEach(globalItem => {
+      // Fetch full memo object to calculate profit/loss from entries
+      let rawData: any = null;
+      try {
+        if (globalItem.sourceKey && localStorage.getItem(globalItem.sourceKey)) {
+          rawData = JSON.parse(localStorage.getItem(globalItem.sourceKey) || '{}');
+        } else if (localStorage.getItem(`sales_memo_${globalItem.id}`)) {
+          rawData = JSON.parse(localStorage.getItem(`sales_memo_${globalItem.id}`) || '{}');
+        } else if (localStorage.getItem(`due_memo_${globalItem.id}`)) {
+          rawData = JSON.parse(localStorage.getItem(`due_memo_${globalItem.id}`) || '{}');
+        }
+      } catch (e) {}
 
-    let purchaseDueIds: Set<string> = new Set();
-    try {
-      const dp = localStorage.getItem('dues_purchase');
-      if (dp) JSON.parse(dp).forEach((x: string) => purchaseDueIds.add(String(x)));
-      const pdp = localStorage.getItem('paid_dues_purchase');
-      if (pdp) JSON.parse(pdp).forEach((x: string) => purchaseDueIds.add(String(x)));
-    } catch (e) {}
+      const memo = rawData ? (rawData.memoState || rawData) : {};
+      const effectiveLot = globalItem.lotNumber;
+      const lotPurchaseItems = effectiveLot ? getLotPurchaseItems(effectiveLot) : getAllPurchaseItems();
 
-    for (let l = 1; l <= 50; l++) {
-      purchaseDueIds.add(String(l));
-      purchaseDueIds.add(`lot_${l}`);
-      purchaseDueIds.add(`purchase_lot_${l}`);
-    }
-
-    const processItem = (id: string, rawData: any, sourceKey?: string) => {
-      if (!id || !rawData) return;
-
-      // STRICT FILTER: Monthly Sales Screen is strictly for SALES memos.
-      // Purchase memos belong strictly to purchase lots and dues_purchase, NEVER sales.
-      if (isPurchaseMemoData(id, rawData, sourceKey) || purchaseDueIds.has(String(id))) {
-        return;
-      }
-
-      const memo = rawData.memoState || rawData;
-
-      const fallbackLocalTs = (sourceKey && localTimestamps[sourceKey])
-        ? Number(localTimestamps[sourceKey])
-        : (localTimestamps[`sales_memo_${id}`] ? Number(localTimestamps[`sales_memo_${id}`]) : undefined);
-
-      let ts = getMemoExactTimestamp(rawData, fallbackLocalTs);
-      const { month: mIdx, year: mYear, dateStr, timeStr } = parseMemoMonthYear(memo, ts);
-
-      // Filter by this month & year
-      if (mIdx !== monthIndex || mYear !== year) {
-        return;
-      }
-
-      const rawLot = (memo.lotNumberInput !== undefined && memo.lotNumberInput !== '')
-        ? memo.lotNumberInput
-        : (memo.lotNumber !== undefined && memo.lotNumber !== '' ? memo.lotNumber : null);
-      const effectiveLot = (rawLot !== null && !isNaN(Number(rawLot)) && Number(rawLot) > 0)
-        ? Number(rawLot)
-        : null;
-
-      let name = memo.customerName || memo.name || (language === 'bn' ? `মেমো #${id}` : `Memo ${id}`);
-      let totalBill = 0;
       let memoProfit = 0;
       let memoLoss = 0;
-
-      const lotPurchaseItems = effectiveLot ? getLotPurchaseItems(effectiveLot) : getAllPurchaseItems();
 
       if (memo.entries && Array.isArray(memo.entries)) {
         memo.entries.forEach((entry: any) => {
@@ -145,7 +113,6 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
 
           if (weightInKg > 0 && saleRate > 0) {
             const entrySaleAmount = weightInKg * saleRate;
-            totalBill += entrySaleAmount;
 
             // Extra products are strictly and completely EXCLUDED from profit and loss
             let costRate = 0;
@@ -166,35 +133,29 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         });
       }
 
-      if (totalBill === 0 && memo.totalBill) {
-        totalBill = Number(memo.totalBill) || 0;
-      }
-
+      // Deductions
       const rawDeductions = (memo.deductions && Array.isArray(memo.deductions))
         ? memo.deductions
-        : ((rawData.deductions && Array.isArray(rawData.deductions)) ? rawData.deductions : []);
+        : ((rawData && rawData.deductions && Array.isArray(rawData.deductions)) ? rawData.deductions : []);
       const totalDeductions = rawDeductions.reduce((sum: number, d: any) => sum + (Number(d.amount) || 0), 0);
       if (totalDeductions > 0) {
-        totalBill = Math.max(0, totalBill - totalDeductions);
         memoProfit = Math.max(0, memoProfit - totalDeductions);
       }
 
       // Commission handling
-      let rawCommVal = memo.commissionValue !== undefined ? memo.commissionValue : rawData.commissionValue;
+      let rawCommVal = memo.commissionValue !== undefined ? memo.commissionValue : (rawData ? rawData.commissionValue : undefined);
       if (typeof rawCommVal === 'object' && rawCommVal !== null) {
         rawCommVal = rawCommVal.value ?? rawCommVal.amount ?? '';
       }
       const commVal = Number(rawCommVal) || 0;
-      const commType = memo.commissionType || rawData.commissionType || 'percent';
-      const commOp = memo.commissionOperation || rawData.commissionOperation || 'subtract';
+      const commType = memo.commissionType || (rawData ? rawData.commissionType : 'percent');
+      const commOp = memo.commissionOperation || (rawData ? rawData.commissionOperation : 'subtract');
       if (commVal > 0) {
-        const commAmt = commType === 'flat' ? commVal : Math.round((totalBill * commVal / 100) * 100) / 100;
+        const commAmt = commType === 'flat' ? commVal : Math.round((globalItem.totalAmount * commVal / 100) * 100) / 100;
         if (commAmt > 0) {
           if (commOp === 'add') {
-            totalBill = Math.round((totalBill + commAmt) * 100) / 100;
             memoProfit = Math.round((memoProfit + commAmt) * 100) / 100;
           } else {
-            totalBill = Math.max(0, Math.round((totalBill - commAmt) * 100) / 100);
             if (commAmt > memoProfit) {
               memoLoss = Math.round((memoLoss + (commAmt - memoProfit)) * 100) / 100;
               memoProfit = 0;
@@ -205,36 +166,14 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         }
       }
 
-      const rawPaid = (memo.paidAmount !== undefined && memo.paidAmount !== '')
-        ? memo.paidAmount
-        : ((rawData.paidAmount !== undefined && rawData.paidAmount !== '')
-          ? rawData.paidAmount
-          : ((memo.deposit !== undefined && memo.deposit !== '')
-            ? memo.deposit
-            : (rawData.deposit !== undefined && rawData.deposit !== '' ? rawData.deposit : 0)));
-      let paidAmount = Number(rawPaid) || 0;
-
-      let status: 'paid' | 'due' | 'draft' = memo.status || rawData.status || 'draft';
-      const isExplicitlyPaid = memo.status === 'paid' || rawData.status === 'paid' || Boolean(memo.paidDate) || Boolean(rawData.paidDate);
-      if (isExplicitlyPaid || (totalBill > 0 && paidAmount >= totalBill)) {
-        status = 'paid';
-        if (totalBill > 0 && paidAmount < totalBill) {
-          paidAmount = totalBill;
-        }
-      } else if (status === 'due' || (totalBill > 0 && totalBill > paidAmount)) {
-        status = 'due';
-      }
-
-      const dueAmount = status === 'paid' ? 0 : Math.max(0, Math.round((totalBill - paidAmount) * 100) / 100);
-
       let cashProfit = 0;
       let dueProfit = 0;
       if (memoProfit > 0) {
-        if (status === 'paid') {
+        if (globalItem.status === 'paid') {
           cashProfit = memoProfit;
           dueProfit = 0;
-        } else if (totalBill > 0) {
-          const ratio = Math.min(1, Math.max(0, paidAmount / totalBill));
+        } else if (globalItem.totalAmount > 0) {
+          const ratio = Math.min(1, Math.max(0, globalItem.paidAmount / globalItem.totalAmount));
           cashProfit = Math.round(memoProfit * ratio * 100) / 100;
           dueProfit = Math.round((memoProfit - cashProfit) * 100) / 100;
         } else {
@@ -243,101 +182,28 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         }
       }
 
-      let statusColor = '#aaa';
-      let statusText = 'Draft';
-      if (status === 'paid') {
-        statusColor = '#72be44';
-        statusText = 'Paid';
-      } else if (status === 'due') {
-        statusColor = '#ff9800';
-        statusText = 'Due';
-      }
-
-      // If already processed, prefer canonical or newer
-      if (foundMemosMap.has(id)) {
-        const existing = foundMemosMap.get(id)!;
-        if (sourceKey === `sales_memo_${id}`) {
-          // Canonical takes precedence
-        } else if (ts <= existing.timestamp) {
-          return;
-        }
-      }
-
-      const rawCustomerType = memo.customerType || rawData.customerType || memo.type || rawData.type || '';
-      const effectiveCustomerType: 'regular' | 'permanent' | 'reseller' | '' = 
-        rawCustomerType === 'permanent' ? 'permanent' :
-        rawCustomerType === 'reseller' ? 'reseller' :
-        rawCustomerType === 'regular' ? 'regular' : '';
-
-      const folderId = memo.folderId || rawData.folderId || '';
-      const folderName = memo.folderName || rawData.folderName || '';
-
-      foundMemosMap.set(id, {
-        id,
-        name,
-        lotNumber: effectiveLot,
-        status,
-        statusText,
-        statusColor,
-        dateStr: (memo.isOriginalDate === false && memo.customDate) ? memo.customDate : (dateStr || memo.createdAt || ''),
-        timeStr: timeStr || memo.createdAtTime || '',
-        totalBill,
-        paidAmount,
-        dueAmount,
+      foundMemosMap.set(globalItem.id, {
+        id: globalItem.id,
+        name: globalItem.name,
+        lotNumber: globalItem.lotNumber,
+        status: globalItem.status,
+        statusText: globalItem.statusText,
+        statusColor: globalItem.statusColor,
+        dateStr: globalItem.dateStr,
+        timeStr: globalItem.timeStr,
+        totalBill: globalItem.totalAmount,
+        paidAmount: globalItem.paidAmount,
+        dueAmount: globalItem.dueAmount,
         totalProfit: Math.round(memoProfit * 100) / 100,
         cashProfit,
         dueProfit,
         totalLoss: Math.round(memoLoss * 100) / 100,
-        timestamp: ts,
-        customerType: effectiveCustomerType,
-        folderId,
-        folderName
+        timestamp: globalItem.timestamp,
+        customerType: globalItem.customerType,
+        folderId: globalItem.folderId,
+        folderName: globalItem.folderName
       });
-    };
-
-    // 1. Scan canonical sales_memo_*
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key) continue;
-      if (key.startsWith('sales_memo_') && !key.startsWith('sales_memo_lot_') && !key.startsWith('sales_memo_list_')) {
-        const id = key.replace('sales_memo_', '');
-        try {
-          const raw = JSON.parse(localStorage.getItem(key) || '{}');
-          processItem(id, raw, key);
-        } catch (e) {}
-      }
-    }
-
-    // 2. Scan lot keys
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('sales_memo_lot_') && key.includes('_memo_')) {
-        const parts = key.split('_memo_');
-        if (parts.length === 2) {
-          const id = parts[1];
-          try {
-            const raw = JSON.parse(localStorage.getItem(key) || '{}');
-            processItem(id, raw, key);
-          } catch (e) {}
-        }
-      }
-    }
-
-    // 3. Scan due_memo_* (strictly sales only, never purchase)
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('due_memo_') && !key.startsWith('due_memo_purchase_')) {
-        const id = key.replace('due_memo_', '');
-        if (purchaseDueIds.has(id)) continue;
-        try {
-          const raw = JSON.parse(localStorage.getItem(key) || '{}');
-          if (isPurchaseMemoData(id, raw, key)) {
-            continue;
-          }
-          processItem(id, raw, key);
-        } catch (e) {}
-      }
-    }
+    });
 
     const arr = Array.from(foundMemosMap.values());
     arr.sort((a, b) => {
