@@ -5,7 +5,7 @@ import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { MONTHS, parseMemoMonthYear, getMemoExactTimestamp, enToBnDigits } from '../utils/dateUtils';
 import { deleteSalesMemoCompletely, isPurchaseMemoData, purgeCorruptedPurchaseMemosFromSales } from '../utils/dueSyncUtils';
-import { getLotPurchaseItems, getAllPurchaseItems } from '../utils/stockUtils';
+import { getLotPurchaseItems, getAllPurchaseItems, matchesFish } from '../utils/stockUtils';
 
 interface MonthlySalesScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -32,6 +32,9 @@ interface MonthlyMemo {
   dueProfit: number;
   totalLoss: number;
   timestamp: number;
+  customerType?: 'regular' | 'permanent' | 'reseller' | '';
+  folderId?: string;
+  folderName?: string;
 }
 
 const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
@@ -44,6 +47,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
   const [memos, setMemos] = useState<MonthlyMemo[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'paid' | 'due' | 'loss'>('all');
+  const [memoTypeFilter, setMemoTypeFilter] = useState<'all' | 'lots' | 'aratdar' | 'reseller'>('all');
 
   const monthObj = MONTHS.find(m => m.index === monthIndex) || MONTHS[0];
   const monthName = language === 'bn' ? monthObj.nameBn : monthObj.nameEn;
@@ -114,8 +118,9 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         memo.entries.forEach((entry: any) => {
           let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
 
-          const matchedItem = (entry.name && entry.name.trim() !== '')
-            ? lotPurchaseItems.find(it => it.name.trim().toLowerCase() === entry.name.trim().toLowerCase())
+          const entryCleanName = (entry.name || '').trim();
+          const matchedItem = entryCleanName !== ''
+            ? lotPurchaseItems.find(it => it.name.trim().toLowerCase() === entryCleanName.toLowerCase() || matchesFish(entryCleanName, it.name))
             : null;
           // Extra products are those not found in lot purchase items
           const isExtra = !matchedItem && (entry.name || '').trim() !== '';
@@ -258,6 +263,15 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         }
       }
 
+      const rawCustomerType = memo.customerType || rawData.customerType || memo.type || rawData.type || '';
+      const effectiveCustomerType: 'regular' | 'permanent' | 'reseller' | '' = 
+        rawCustomerType === 'permanent' ? 'permanent' :
+        rawCustomerType === 'reseller' ? 'reseller' :
+        rawCustomerType === 'regular' ? 'regular' : '';
+
+      const folderId = memo.folderId || rawData.folderId || '';
+      const folderName = memo.folderName || rawData.folderName || '';
+
       foundMemosMap.set(id, {
         id,
         name,
@@ -274,7 +288,10 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         cashProfit,
         dueProfit,
         totalLoss: Math.round(memoLoss * 100) / 100,
-        timestamp: ts
+        timestamp: ts,
+        customerType: effectiveCustomerType,
+        folderId,
+        folderName
       });
     };
 
@@ -402,16 +419,25 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
     }
   };
 
+  // Type counts
+  const aratdarMemosCount = memos.filter(m => m.customerType === 'permanent').length;
+  const resellerMemosCount = memos.filter(m => m.customerType === 'reseller').length;
+  const lotsMemosCount = memos.filter(m => m.customerType !== 'permanent' && m.customerType !== 'reseller').length;
+
   const filteredMemos = memos.filter(m => {
     if (filter === 'paid' && m.status !== 'paid') return false;
     if (filter === 'due' && m.status !== 'due') return false;
     if (filter === 'loss' && !(m.totalLoss > 0)) return false;
+    if (memoTypeFilter === 'lots' && (m.customerType === 'permanent' || m.customerType === 'reseller')) return false;
+    if (memoTypeFilter === 'aratdar' && m.customerType !== 'permanent') return false;
+    if (memoTypeFilter === 'reseller' && m.customerType !== 'reseller') return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = m.name.toLowerCase().includes(q);
       const matchId = m.id.includes(q);
       const matchLot = m.lotNumber !== null && m.lotNumber.toString().includes(q);
-      return matchName || matchId || matchLot;
+      const matchFolder = m.folderName ? m.folderName.toLowerCase().includes(q) : false;
+      return matchName || matchId || matchLot || matchFolder;
     }
     return true;
   });
@@ -430,7 +456,7 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
               {monthName} {displayYear} - {language === 'bn' ? 'বিক্রয় মেমোসমূহ' : 'Sales Memos'}
             </h2>
             <div style={{ fontSize: '0.8rem', color: '#aaa', marginTop: '2px' }}>
-              {language === 'bn' ? 'এই মাসে তৈরি হওয়া সকল মেমোর হিসাব' : 'All memos created in this month'}
+              {language === 'bn' ? 'এই মাসে তৈরি হওয়া সাধারণ, আড়তদার ও রিসেলার সহ সকল মেমোর কেন্দ্রীয় হিসাব' : 'Unified monthly record of all general, aratdar & reseller memos'}
             </div>
           </div>
         </div>
@@ -637,6 +663,76 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
                 : (language === 'bn' ? 'এই মাসে কোনো লস নেই' : 'No loss this month')}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Category Selection Tabs (সব মেমো / লট বিক্রয় / আড়তদার / রিসেলার) */}
+      <div className="screen-sub-container" style={{ marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', background: 'rgba(255,255,255,0.03)', padding: '6px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <button
+            onClick={() => setMemoTypeFilter('all')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              background: memoTypeFilter === 'all' ? '#72be44' : 'transparent',
+              color: memoTypeFilter === 'all' ? '#000' : '#ccc',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              transition: 'all 0.2s'
+            }}
+          >
+            {language === 'bn' ? 'সব মেমো' : 'All Memos'} ({memos.length})
+          </button>
+          <button
+            onClick={() => setMemoTypeFilter('lots')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              background: memoTypeFilter === 'lots' ? '#72be44' : 'transparent',
+              color: memoTypeFilter === 'lots' ? '#000' : '#ccc',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              transition: 'all 0.2s'
+            }}
+          >
+            {language === 'bn' ? 'সাধারণ/লট মেমো' : 'General/Lots'} ({lotsMemosCount})
+          </button>
+          <button
+            onClick={() => setMemoTypeFilter('aratdar')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              background: memoTypeFilter === 'aratdar' ? '#ab47bc' : 'transparent',
+              color: memoTypeFilter === 'aratdar' ? '#fff' : '#ccc',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              transition: 'all 0.2s'
+            }}
+          >
+            {language === 'bn' ? 'আড়তদার মেমো' : 'Aratdar'} ({aratdarMemosCount})
+          </button>
+          <button
+            onClick={() => setMemoTypeFilter('reseller')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              background: memoTypeFilter === 'reseller' ? '#2196f3' : 'transparent',
+              color: memoTypeFilter === 'reseller' ? '#fff' : '#ccc',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              transition: 'all 0.2s'
+            }}
+          >
+            {language === 'bn' ? 'রিসেলার মেমো' : 'Reseller'} ({resellerMemosCount})
+          </button>
         </div>
       </div>
 
@@ -852,6 +948,21 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
                       }}>
                         {memo.statusText}
                       </span>
+                      {memo.customerType === 'permanent' && (
+                        <span style={{ fontSize: '0.75rem', background: 'rgba(171, 71, 188, 0.25)', color: '#ce93d8', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', border: '1px solid rgba(171, 71, 188, 0.4)' }}>
+                          আড়তদার
+                        </span>
+                      )}
+                      {memo.customerType === 'reseller' && (
+                        <span style={{ fontSize: '0.75rem', background: 'rgba(33, 150, 243, 0.25)', color: '#90caf9', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', border: '1px solid rgba(33, 150, 243, 0.4)' }}>
+                          রিসেলার
+                        </span>
+                      )}
+                      {memo.folderName && (
+                        <span style={{ fontSize: '0.75rem', background: 'rgba(255, 255, 255, 0.08)', color: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>
+                          📁 {memo.folderName}
+                        </span>
+                      )}
                       <span style={{
                         fontSize: '0.8rem',
                         background: 'rgba(255,255,255,0.1)',
