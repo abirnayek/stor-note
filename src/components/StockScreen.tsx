@@ -7,6 +7,7 @@ import { moveToTrash } from '../utils/trashUtils';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { FishSalesModal } from './FishSalesModal';
+import { OversoldListModal, type OversoldItemDetail } from './OversoldListModal';
 
 interface StockScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -27,6 +28,19 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
 
   // Fish sales breakdown modal state
   const [selectedFishSales, setSelectedFishSales] = useState<FishSalesSummary | null>(null);
+
+  // Oversold modal state
+  const [oversoldModalData, setOversoldModalData] = useState<{
+    isOpen: boolean;
+    title: string;
+    totalOversoldKg: number;
+    items: OversoldItemDetail[];
+  }>({
+    isOpen: false,
+    title: '',
+    totalOversoldKg: 0,
+    items: []
+  });
 
   // Admin permission state
   const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('device_permission') === 'admin');
@@ -199,7 +213,52 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
   // Aggregated totals
   const totalPurchased = lotsStock.reduce((sum, lot) => sum + lot.totalPurchasedKg, 0);
   const totalSold = lotsStock.reduce((sum, lot) => sum + lot.totalSoldKg, 0);
-  const totalRemaining = lotsStock.reduce((sum, lot) => sum + lot.totalRemainingKg, 0);
+  const totalRemaining = Math.round((totalPurchased - totalSold) * 100) / 100;
+  const totalOversold = Math.round(lotsStock.reduce((sum, lot) => sum + (lot.totalOversoldKg || 0), 0) * 100) / 100;
+
+  // Collect all oversold fish items across all lots
+  const allOversoldItems: OversoldItemDetail[] = [];
+  lotsStock.forEach(lot => {
+    lot.items.forEach(it => {
+      if (it.oversoldKg && it.oversoldKg > 0.001) {
+        allOversoldItems.push({
+          lotNumber: lot.lotNumber,
+          fishName: it.name,
+          purchasedKg: it.purchasedKg,
+          soldKg: it.soldKg,
+          oversoldKg: it.oversoldKg
+        });
+      }
+    });
+  });
+
+  const handleOpenOversoldModal = (lotNumber?: number) => {
+    if (lotNumber) {
+      const targetLot = lotsStock.find(l => l.lotNumber === lotNumber);
+      const items: OversoldItemDetail[] = (targetLot?.items || [])
+        .filter(it => (it.oversoldKg || 0) > 0.001)
+        .map(it => ({
+          lotNumber,
+          fishName: it.name,
+          purchasedKg: it.purchasedKg,
+          soldKg: it.soldKg,
+          oversoldKg: it.oversoldKg!
+        }));
+      setOversoldModalData({
+        isOpen: true,
+        title: `লট ${lotNumber < 10 ? '০' + lotNumber : lotNumber} - অতিরিক্ত বিক্রয় তালিকা`,
+        totalOversoldKg: targetLot?.totalOversoldKg || 0,
+        items
+      });
+    } else {
+      setOversoldModalData({
+        isOpen: true,
+        title: 'সকল লটের অতিরিক্ত বিক্রয় তালিকা',
+        totalOversoldKg: totalOversold,
+        items: allOversoldItems
+      });
+    }
+  };
   const totalSoldPercent = totalPurchased > 0 ? Math.min(100, Math.round((totalSold / totalPurchased) * 100)) : 0;
   const totalRemainingPercent = Math.max(0, 100 - totalSoldPercent);
 
@@ -491,6 +550,38 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
               <div style={{ fontSize: '0.68rem', color: '#72be44', textTransform: 'uppercase', letterSpacing: '0.5px' }}>বর্তমান মোট স্টক</div>
               <div style={{ fontSize: '1.12rem', fontWeight: 'bold', color: '#72be44' }}>{totalRemaining.toFixed(2)} <span style={{ fontSize: '0.72rem', fontWeight: 'normal' }}>কেজি</span></div>
             </div>
+            {totalOversold > 0 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenOversoldModal();
+                }}
+                title={language === 'bn' ? 'অতিরিক্ত বিক্রির তালিকা ও মেমো দেখতে ক্লিক করুন' : 'View oversold fish list'}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.18)',
+                  padding: '5px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(239, 68, 68, 0.45)',
+                  textAlign: 'center',
+                  minWidth: '95px',
+                  cursor: 'pointer',
+                  color: '#ef4444',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.3)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.18)'}
+              >
+                <div style={{ fontSize: '0.68rem', color: '#fca5a5', textTransform: 'uppercase', letterSpacing: '0.5px' }}>অতিরিক্ত বিক্রি</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#ff6b6b' }}>
+                  -{totalOversold.toFixed(2)} <span style={{ fontSize: '0.72rem', fontWeight: 'normal' }}>কেজি</span>
+                </div>
+              </button>
+            )}
           </div>
 
           {/* Export Stock PDF actions */}
@@ -568,13 +659,46 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                       {totalSold.toFixed(2)} <span style={{ fontSize: '0.65rem', fontWeight: 'normal' }}>কেজি</span>
                     </div>
                   </div>
-                  <div style={{ textAlign: 'center' }}>
+                  <div style={{ textAlign: 'center', position: 'relative' }}>
                     <div style={{ fontSize: '0.68rem', color: '#72be44' }}>অবশিষ্ট স্টক</div>
                     <div style={{ fontSize: '0.96rem', fontWeight: 'bold', color: '#72be44', marginTop: '2px' }}>
                       {totalRemaining.toFixed(2)} <span style={{ fontSize: '0.65rem', fontWeight: 'normal' }}>কেজি</span>
                     </div>
                   </div>
                 </div>
+
+                {totalOversold > 0 && (
+                  <div style={{ marginBottom: '0.65rem' }}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenOversoldModal();
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '4px 8px',
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        borderRadius: '6px',
+                        color: '#f87171',
+                        fontSize: '0.74rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        ⚠️ অতিরিক্ত বিক্রি (ক্রয়ের চেয়ে বেশি):
+                      </span>
+                      <span style={{ background: 'rgba(239, 68, 68, 0.3)', padding: '1px 6px', borderRadius: '4px', color: '#fff' }}>
+                        -{totalOversold.toFixed(2)} কেজি (তালিকা দেখুন)
+                      </span>
+                    </button>
+                  </div>
+                )}
 
                 {/* Sales progress bar */}
                 <div>
@@ -714,6 +838,37 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                       </div>
                     </div>
 
+                    {(lot.totalOversoldKg || 0) > 0.001 && (
+                      <div style={{ marginBottom: '0.65rem' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenOversoldModal(lot.lotNumber);
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '3px 8px',
+                            background: 'rgba(239, 68, 68, 0.14)',
+                            border: '1px solid rgba(239, 68, 68, 0.35)',
+                            borderRadius: '6px',
+                            color: '#f87171',
+                            fontSize: '0.72rem',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between'
+                          }}
+                        >
+                          <span>⚠️ অতিরিক্ত বিক্রি:</span>
+                          <span style={{ background: 'rgba(239, 68, 68, 0.3)', padding: '1px 6px', borderRadius: '4px', color: '#fff' }}>
+                            -{(lot.totalOversoldKg || 0).toFixed(2)} কেজি (তালিকা দেখুন)
+                          </span>
+                        </button>
+                      </div>
+                    )}
+
                     {/* Progress bar */}
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#aaa', marginBottom: '3px' }}>
@@ -848,6 +1003,29 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                     {lotInfo.date && <span>তারিখ: {lotInfo.date} &nbsp;|&nbsp; </span>}
                     <span>মাছের প্রজাতি: {lotInfo.items.length} টি</span>
                   </div>
+                  {(lotInfo.totalOversoldKg || 0) > 0.001 && (
+                    <div style={{ marginTop: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenOversoldModal(lotInfo.lotNumber)}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.18)',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          color: '#fca5a5',
+                          borderRadius: '6px',
+                          padding: '3px 10px',
+                          fontSize: '0.78rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        ⚠️ এই লটে অতিরিক্ত বিক্রি: <b>-{(lotInfo.totalOversoldKg || 0).toFixed(2)} কেজি</b> (ক্লিক করে মেমো দেখুন)
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -1175,6 +1353,31 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
                                   ❌ স্টক শেষ (পুনরায় ক্রয় করুন)
                                 </span>
                               )}
+                              {(item.oversoldKg || 0) > 0.001 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenFishSales(item);
+                                  }}
+                                  style={{
+                                    fontSize: '0.7rem',
+                                    color: '#fff',
+                                    background: 'rgba(239, 68, 68, 0.8)',
+                                    border: '1px solid #ef4444',
+                                    padding: '1px 8px',
+                                    borderRadius: '10px',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}
+                                  title="অতিরিক্ত বিক্রির মেমো দেখতে ক্লিক করুন"
+                                >
+                                  ⚠️ অতিরিক্ত বিক্রি: -{(item.oversoldKg || 0).toFixed(2)} কেজি (মেমো দেখুন)
+                                </button>
+                              )}
                             </div>
                             {item.supplierName && (
                               <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '2px' }}>আড়ত: {item.supplierName}</div>
@@ -1286,6 +1489,18 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
         salesSummary={selectedFishSales}
         onClose={() => setSelectedFishSales(null)}
         onSelectSalesMemo={onSelectSalesMemo}
+      />
+
+      <OversoldListModal
+        isOpen={oversoldModalData.isOpen}
+        onClose={() => setOversoldModalData(prev => ({ ...prev, isOpen: false }))}
+        title={oversoldModalData.title}
+        items={oversoldModalData.items}
+        totalOversoldKg={oversoldModalData.totalOversoldKg}
+        onOpenFishSales={(summary) => {
+          setOversoldModalData(prev => ({ ...prev, isOpen: false }));
+          setSelectedFishSales(summary);
+        }}
       />
 
       {/* Hidden printable Stock Report for high quality PDF generation */}

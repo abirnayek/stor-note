@@ -11,6 +11,7 @@ export interface FishStockItem {
   buyRate: number;
   unit: string;
   status: 'in_stock' | 'low_stock' | 'out_of_stock';
+  oversoldKg?: number;
 }
 
 export interface LotStockSummary {
@@ -20,6 +21,7 @@ export interface LotStockSummary {
   totalPurchasedKg: number;
   totalSoldKg: number;
   totalRemainingKg: number;
+  totalOversoldKg?: number;
   items: FishStockItem[];
 }
 
@@ -537,14 +539,18 @@ export const getAllLotsStock = (): LotStockSummary[] => {
     let totalSoldKg = 0;
     let totalRemainingKg = 0;
 
+    let totalLotOversoldKg = 0;
+
     const items: FishStockItem[] = lotObj.items.map(item => {
       const purchasedKg = Math.round(item.purchasedKg * 100) / 100;
       const soldKg = Math.round(item.soldKg * 100) / 100;
       const remainingKg = Math.max(0, Math.round((purchasedKg - soldKg) * 100) / 100);
+      const oversoldKg = soldKg > purchasedKg ? Math.round((soldKg - purchasedKg) * 100) / 100 : 0;
 
       totalPurchasedKg += purchasedKg;
       totalSoldKg += soldKg;
       totalRemainingKg += remainingKg;
+      totalLotOversoldKg += oversoldKg;
 
       let status: 'in_stock' | 'low_stock' | 'out_of_stock' = 'in_stock';
       if (remainingKg <= 0.001) {
@@ -562,7 +568,8 @@ export const getAllLotsStock = (): LotStockSummary[] => {
         remainingKg,
         buyRate: item.buyRate,
         unit: item.unit,
-        status
+        status,
+        oversoldKg
       };
     });
 
@@ -572,7 +579,8 @@ export const getAllLotsStock = (): LotStockSummary[] => {
       date: lotObj.date,
       totalPurchasedKg: Math.round(totalPurchasedKg * 100) / 100,
       totalSoldKg: Math.round(totalSoldKg * 100) / 100,
-      totalRemainingKg: Math.round(totalRemainingKg * 100) / 100,
+      totalRemainingKg: Math.round((totalPurchasedKg - totalSoldKg) * 100) / 100,
+      totalOversoldKg: Math.round(totalLotOversoldKg * 100) / 100,
       items
     });
   });
