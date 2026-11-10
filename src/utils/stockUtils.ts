@@ -1,4 +1,4 @@
-import { isMemoDeleted } from './syncEngine';
+import { isMemoDeleted, isPurchaseLotDeleted } from './syncEngine';
 import { getMemoExactTimestamp } from './dateUtils';
 
 export interface FishStockItem {
@@ -349,7 +349,7 @@ const getAvailableLotNumbers = (): number[] => {
       const list: any[] = JSON.parse(saved);
       list.forEach(item => {
         const num = normalizeLotNumber(item);
-        if (num) lotNumbersSet.add(num);
+        if (num && !isPurchaseLotDeleted(num)) lotNumbersSet.add(num);
       });
     } catch (e) {}
   }
@@ -358,7 +358,7 @@ const getAvailableLotNumbers = (): number[] => {
     if (key && key.startsWith('memo_lot_')) {
       const lotStr = key.replace('memo_lot_', '');
       const num = normalizeLotNumber(lotStr);
-      if (num) lotNumbersSet.add(num);
+      if (num && !isPurchaseLotDeleted(num)) lotNumbersSet.add(num);
     }
   }
   if (lotNumbersSet.size === 0) {

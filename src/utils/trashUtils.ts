@@ -1,4 +1,4 @@
-import { unmarkMemoDeleted } from './syncEngine';
+import { unmarkMemoDeleted, unmarkPurchaseLotDeleted } from './syncEngine';
 
 export interface TrashedItem {
   id: string;
@@ -39,6 +39,7 @@ export const restoreFromTrash = (item: TrashedItem) => {
     const existingLots: number[] = existingLotsStr ? JSON.parse(existingLotsStr) : [];
     const lotNum = parseInt(item.id.replace('lot_', ''));
     if (!isNaN(lotNum)) {
+      unmarkPurchaseLotDeleted(lotNum);
       if (!existingLots.includes(lotNum)) {
         localStorage.setItem('purchase_lots_list', JSON.stringify([...existingLots, lotNum].sort((a,b) => a-b)));
       }

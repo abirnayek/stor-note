@@ -5,6 +5,7 @@ import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { moveToTrash } from '../utils/trashUtils';
 import { runLotRecovery } from '../utils/lotRecovery';
+import { isPurchaseLotDeleted, markPurchaseLotDeleted } from '../utils/syncEngine';
 
 interface LotsScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -25,7 +26,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
         if (Array.isArray(parsed)) {
           parsed.forEach(num => {
             const n = parseInt(String(num), 10);
-            if (!isNaN(n) && n > 0) lotNumbersSet.add(n);
+            if (!isNaN(n) && n > 0 && !isPurchaseLotDeleted(n)) lotNumbersSet.add(n);
           });
         }
       } catch (e) {}
@@ -36,7 +37,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
         if (key && (key.startsWith('memo_lot_') || key.startsWith('due_memo_purchase_lot_'))) {
           const lotStr = key.replace('memo_lot_', '').replace('due_memo_purchase_lot_', '');
           const n = parseInt(lotStr, 10);
-          if (!isNaN(n) && n > 0 && n < 1000) {
+          if (!isNaN(n) && n > 0 && n < 1000 && !isPurchaseLotDeleted(n)) {
             lotNumbersSet.add(n);
           }
         }
@@ -101,7 +102,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
   const handleDeleteLot = (lot: number, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this lot?')) {
-      const memoDataStr = localStorage.getItem(`memo_lot_${lot}`);
+      const memoDataStr = localStorage.getItem(`memo_lot_${lot}`) || localStorage.getItem(`memo_lot_${String(lot).padStart(2, '0')}`) || localStorage.getItem(`due_memo_purchase_lot_${lot}`);
       const memoData = memoDataStr ? JSON.parse(memoDataStr) : {};
       
       moveToTrash({
@@ -111,19 +112,31 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
         data: memoData
       });
 
+      // Mark permanently deleted in syncEngine (local + cloud tombstones)
+      markPurchaseLotDeleted(lot);
+
       const newLots = lots.filter(l => l !== lot);
       setLots(newLots);
       localStorage.setItem('purchase_lots_list', JSON.stringify(newLots));
       localStorage.removeItem(`memo_lot_${lot}`);
+      localStorage.removeItem(`memo_lot_${String(lot).padStart(2, '0')}`);
       localStorage.removeItem(`due_memo_${lot}`);
       localStorage.removeItem(`due_memo_purchase_${lot}`);
+      localStorage.removeItem(`due_memo_purchase_lot_${lot}`);
+      localStorage.removeItem(`due_memo_purchase_lot_${String(lot).padStart(2, '0')}`);
+      localStorage.removeItem(`lot_password_${lot}`);
+      localStorage.removeItem(`lot_password_${String(lot).padStart(2, '0')}`);
 
       const cleanList = (k: string) => {
         try {
           const s = localStorage.getItem(k);
           if (s) {
             const arr: any[] = JSON.parse(s);
-            localStorage.setItem(k, JSON.stringify(arr.filter(id => String(id) !== String(lot))));
+            localStorage.setItem(k, JSON.stringify(arr.filter(id => 
+              String(id) !== String(lot) && 
+              String(id) !== `purchase_lot_${lot}` &&
+              String(id) !== `purchase_lot_${String(lot).padStart(2, '0')}`
+            )));
           }
         } catch(e) {}
       };

@@ -4,6 +4,7 @@ import { ChevronLeft, Search, Package, CheckCircle2, AlertTriangle, XCircle, Arr
 import { useLanguage } from '../i18n/LanguageContext';
 import { getAllLotsStock, getFishSalesBreakdown, type LotStockSummary, type FishStockItem, type FishSalesSummary } from '../utils/stockUtils';
 import { moveToTrash } from '../utils/trashUtils';
+import { markPurchaseLotDeleted } from '../utils/syncEngine';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { FishSalesModal } from './FishSalesModal';
@@ -168,6 +169,9 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
         title: `Purchase Lot ${lotNumber}`,
         data: memoData
       });
+
+      // Mark permanently deleted in syncEngine (local + cloud tombstones)
+      markPurchaseLotDeleted(lotNumber);
 
       // 2. Remove from purchase_lots_list
       try {

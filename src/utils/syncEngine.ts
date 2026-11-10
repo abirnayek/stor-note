@@ -164,6 +164,91 @@ export const markMemoDeleted = (memoId: string, ts: number = Date.now()) => {
   } catch (e) {}
 };
 
+export const markPurchaseLotDeleted = (lotNumber: number, ts: number = Date.now()) => {
+  if (!lotNumber || isNaN(lotNumber)) return;
+  try {
+    const originalGetItem = localStorage.getItem;
+    const originalSetItem = localStorage.setItem;
+
+    // 1. Record in deleted_purchase_lots
+    const rawLots = originalGetItem.call(localStorage, 'deleted_purchase_lots');
+    const lotTombstones: Record<string, number> = rawLots ? JSON.parse(rawLots) : {};
+    lotTombstones[String(lotNumber)] = ts;
+    lotTombstones[String(lotNumber).padStart(2, '0')] = ts;
+    originalSetItem.call(localStorage, 'deleted_purchase_lots', JSON.stringify(lotTombstones));
+
+    // 2. Also tombstone due_memo and memo keys
+    const lotKeys = [
+      `memo_lot_${lotNumber}`,
+      `memo_lot_${String(lotNumber).padStart(2, '0')}`,
+      `due_memo_${lotNumber}`,
+      `due_memo_purchase_${lotNumber}`,
+      `due_memo_purchase_lot_${lotNumber}`,
+      `due_memo_purchase_lot_${String(lotNumber).padStart(2, '0')}`,
+      `lot_password_${lotNumber}`,
+      `lot_password_${String(lotNumber).padStart(2, '0')}`
+    ];
+
+    lotKeys.forEach(k => {
+      addDeletedTombstone(k, ts);
+      markKeyPending(`__DELETE__:${k}`);
+    });
+
+    // Mark the due memo ID as deleted in deleted_memo_ids as well
+    markMemoDeleted(`purchase_lot_${lotNumber}`, ts);
+    markMemoDeleted(`purchase_lot_${String(lotNumber).padStart(2, '0')}`, ts);
+
+    // 3. Inform Supabase immediately if online
+    const user = currentUser || getStoredUserCached();
+    if (user && navigator.onLine) {
+      lotKeys.forEach(k => {
+        supabase.from('user_backups').delete().match({
+          user_id: user.id,
+          key: k
+        }).then(() => {});
+      });
+    }
+  } catch (e) {}
+};
+
+export const unmarkPurchaseLotDeleted = (lotNumber: number) => {
+  if (!lotNumber) return;
+  try {
+    const originalGetItem = localStorage.getItem;
+    const originalSetItem = localStorage.setItem;
+    const rawLots = originalGetItem.call(localStorage, 'deleted_purchase_lots');
+    if (rawLots) {
+      const lotTombstones: Record<string, number> = JSON.parse(rawLots);
+      delete lotTombstones[String(lotNumber)];
+      delete lotTombstones[String(lotNumber).padStart(2, '0')];
+      originalSetItem.call(localStorage, 'deleted_purchase_lots', JSON.stringify(lotTombstones));
+    }
+    removeDeletedTombstone(`memo_lot_${lotNumber}`);
+    removeDeletedTombstone(`memo_lot_${String(lotNumber).padStart(2, '0')}`);
+    removeDeletedTombstone(`due_memo_${lotNumber}`);
+    removeDeletedTombstone(`due_memo_purchase_${lotNumber}`);
+    removeDeletedTombstone(`due_memo_purchase_lot_${lotNumber}`);
+    removeDeletedTombstone(`due_memo_purchase_lot_${String(lotNumber).padStart(2, '0')}`);
+    removeDeletedTombstone(`lot_password_${lotNumber}`);
+    removeDeletedTombstone(`lot_password_${String(lotNumber).padStart(2, '0')}`);
+    unmarkMemoDeleted(`purchase_lot_${lotNumber}`);
+    unmarkMemoDeleted(`purchase_lot_${String(lotNumber).padStart(2, '0')}`);
+  } catch {}
+};
+
+export const isPurchaseLotDeleted = (lotNumber: number | string): boolean => {
+  if (!lotNumber) return false;
+  try {
+    const rawLots = localStorage.getItem('deleted_purchase_lots');
+    if (!rawLots) return false;
+    const lotTombstones: Record<string, number> = JSON.parse(rawLots);
+    const n = parseInt(String(lotNumber), 10);
+    return Boolean(lotTombstones[String(lotNumber)] || (n && lotTombstones[String(n)]));
+  } catch {
+    return false;
+  }
+};
+
 export const isMemoDeleted = (memoId: string): boolean => {
   if (!memoId) return false;
   try {
@@ -213,6 +298,15 @@ export const isKeyDeleted = (key: string): boolean => {
   if (memoId && isMemoDeleted(memoId)) {
     return true;
   }
+
+  // Check purchase lots tombstones
+  if (key.startsWith('memo_lot_') || key.startsWith('due_memo_purchase_lot_') || key.startsWith('lot_password_')) {
+    const lotPart = key.replace('memo_lot_', '').replace('due_memo_purchase_lot_', '').replace('lot_password_', '');
+    if (lotPart && isPurchaseLotDeleted(lotPart)) {
+      return true;
+    }
+  }
+
   return false;
 };
 
@@ -312,6 +406,7 @@ export const initSyncEngine = () => {
       key === 'pending_offline_sync_keys' || 
       key === 'deleted_keys_tombstones' ||
       key === 'deleted_memo_ids' ||
+      key === 'deleted_purchase_lots' ||
       key === 'cached_user_session' || 
       key === 'cached_is_authenticated' ||
       key === 'device_id' ||
@@ -388,6 +483,7 @@ export const initSyncEngine = () => {
       key === 'pending_offline_sync_keys' || 
       key === 'deleted_keys_tombstones' ||
       key === 'deleted_memo_ids' ||
+      key === 'deleted_purchase_lots' ||
       key === 'cached_user_session' || 
       key === 'cached_is_authenticated' ||
       key === 'device_id' ||
@@ -821,6 +917,7 @@ export const pushUnsyncedLocalData = async (forceAll: boolean = false) => {
       k !== 'pending_offline_sync_keys' && 
       k !== 'deleted_keys_tombstones' &&
       k !== 'deleted_memo_ids' &&
+      k !== 'deleted_purchase_lots' &&
       k !== 'cached_user_session' && 
       k !== 'cached_is_authenticated' && 
       k !== 'device_id' && 

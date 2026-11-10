@@ -11,6 +11,7 @@ import CallMenu from './CallMenu';
 import { getLotStock, getFishSalesBreakdown, type LotStockSummary, type FishSalesSummary } from '../utils/stockUtils';
 import { bnToEnDigits, parseMemoMonthYear } from '../utils/dateUtils';
 import { isMemoEmpty, RECOVERED_LOT_2_MEMO } from '../utils/lotRecovery';
+import { isPurchaseLotDeleted } from '../utils/syncEngine';
 import { FishSalesModal } from './FishSalesModal';
 
 // Helper to convert date strings to YYYY-MM-DD for native <input type="date">
@@ -106,8 +107,8 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack, 
       }
     }
 
-    // Fallback specifically for Lot 2 only if missing
-    if (lotNumber === 2 && (!saved || (() => { try { return isMemoEmpty(JSON.parse(saved!)); } catch(e) { return true; } })())) {
+    // Fallback specifically for Lot 2 only if missing and NOT deleted
+    if (lotNumber === 2 && !isPurchaseLotDeleted(2) && (!saved || (() => { try { return isMemoEmpty(JSON.parse(saved!)); } catch(e) { return true; } })())) {
       return {
         ...RECOVERED_LOT_2_MEMO,
         receiverSignature: (RECOVERED_LOT_2_MEMO as any).receiverSignature || '',

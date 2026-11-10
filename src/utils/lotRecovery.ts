@@ -1,4 +1,4 @@
-import { pushUnsyncedLocalData } from './syncEngine';
+import { pushUnsyncedLocalData, isPurchaseLotDeleted } from './syncEngine';
 import { getTrashItems, permanentlyDeleteFromTrash } from './trashUtils';
 
 export const RECOVERED_LOT_2_MEMO = {
@@ -140,6 +140,11 @@ export function isMemoEmpty(memo: any): boolean {
  */
 export function runLotRecovery(): boolean {
   try {
+    // If Lot 2 was deliberately deleted by the user, DO NOT restore it!
+    if (isPurchaseLotDeleted(2) || isPurchaseLotDeleted('02')) {
+      return false;
+    }
+
     const rawMemo2 = localStorage.getItem('memo_lot_2');
     const rawMemo02 = localStorage.getItem('memo_lot_02');
     const rawDue2 = localStorage.getItem('due_memo_purchase_lot_2');
