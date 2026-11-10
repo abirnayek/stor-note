@@ -358,10 +358,15 @@ const getAvailableLotNumbers = (): number[] => {
     if (key && key.startsWith('memo_lot_')) {
       const lotStr = key.replace('memo_lot_', '');
       const num = normalizeLotNumber(lotStr);
-      if (num && !isPurchaseLotDeleted(num)) lotNumbersSet.add(num);
+      if (num && !isPurchaseLotDeleted(num)) {
+        const val = localStorage.getItem(key);
+        if (val && val.trim() !== '' && val !== '{}' && val !== 'null') {
+          lotNumbersSet.add(num);
+        }
+      }
     }
   }
-  if (lotNumbersSet.size === 0) {
+  if (lotNumbersSet.size === 0 && !isPurchaseLotDeleted(1) && !localStorage.getItem('purchase_lots_list')) {
     lotNumbersSet.add(1);
   }
   return Array.from(lotNumbersSet).sort((a, b) => a - b);

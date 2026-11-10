@@ -22,7 +22,7 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
       const lotNumbersSet = new Set<number>();
       const saved = localStorage.getItem('purchase_lots_list');
       try {
-        const parsed = saved ? JSON.parse(saved) : [1];
+        const parsed = saved ? JSON.parse(saved) : [];
         if (Array.isArray(parsed)) {
           parsed.forEach(num => {
             const n = parseInt(String(num), 10);
@@ -38,12 +38,17 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
           const lotStr = key.replace('memo_lot_', '').replace('due_memo_purchase_lot_', '');
           const n = parseInt(lotStr, 10);
           if (!isNaN(n) && n > 0 && n < 1000 && !isPurchaseLotDeleted(n)) {
-            lotNumbersSet.add(n);
+            // Only add if it actually has memo data
+            const val = localStorage.getItem(key);
+            if (val && val.trim() !== '' && val !== '{}' && val !== 'null') {
+              lotNumbersSet.add(n);
+            }
           }
         }
       }
 
-      if (lotNumbersSet.size === 0) {
+      // Only default to [1] if the user has never created/deleted lots and there's no data at all
+      if (lotNumbersSet.size === 0 && !isPurchaseLotDeleted(1) && !localStorage.getItem('purchase_lots_list')) {
         lotNumbersSet.add(1);
       }
 
