@@ -11,7 +11,7 @@ import CallMenu from './CallMenu';
 import { getLotStock, getFishSalesBreakdown, type LotStockSummary, type FishSalesSummary } from '../utils/stockUtils';
 import { bnToEnDigits, parseMemoMonthYear } from '../utils/dateUtils';
 import { isMemoEmpty, RECOVERED_LOT_2_MEMO } from '../utils/lotRecovery';
-import { isPurchaseLotDeleted } from '../utils/syncEngine';
+import { isPurchaseLotDeleted, unmarkPurchaseLotDeleted } from '../utils/syncEngine';
 import { FishSalesModal } from './FishSalesModal';
 
 // Helper to convert date strings to YYYY-MM-DD for native <input type="date">
@@ -459,10 +459,11 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack, 
       localStorage.setItem(`memo_lot_${lotNumber}`, JSON.stringify(memoPayload));
       localStorage.setItem(`memo_lot_${String(lotNumber).padStart(2, '0')}`, JSON.stringify(memoPayload));
 
-      // Ensure lotNumber is present in purchase_lots_list
+      // Ensure lotNumber is present in purchase_lots_list and active
       if (lotNumber) {
         const num = parseInt(String(lotNumber), 10);
         if (!isNaN(num) && num > 0) {
+          unmarkPurchaseLotDeleted(num);
           const pLotsStr = localStorage.getItem('purchase_lots_list');
           const pLots: number[] = pLotsStr ? JSON.parse(pLotsStr) : [];
           if (!pLots.includes(num)) {

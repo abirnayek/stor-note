@@ -5,7 +5,7 @@ import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { moveToTrash } from '../utils/trashUtils';
 import { runLotRecovery } from '../utils/lotRecovery';
-import { isPurchaseLotDeleted, markPurchaseLotDeleted } from '../utils/syncEngine';
+import { isPurchaseLotDeleted, markPurchaseLotDeleted, unmarkPurchaseLotDeleted } from '../utils/syncEngine';
 
 interface LotsScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -88,6 +88,9 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
     const targetLot = (!isNaN(parsedNum) && parsedNum > 0)
       ? parsedNum
       : (lots.length > 0 ? Math.max(...lots) + 1 : 1);
+
+    // Revive the lot if it was previously marked as deleted
+    unmarkPurchaseLotDeleted(targetLot);
 
     if (!lots.includes(targetLot)) {
       const newLots = [...lots, targetLot].sort((a, b) => a - b);
