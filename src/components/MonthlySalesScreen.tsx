@@ -90,8 +90,6 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
           const matchedItem = entryCleanName !== ''
             ? lotPurchaseItems.find(it => it.name.trim().toLowerCase() === entryCleanName.toLowerCase() || matchesFish(entryCleanName, it.name))
             : null;
-          // Extra products are those not found in lot purchase items
-          const isExtra = !matchedItem && (entry.name || '').trim() !== '';
 
           let saleRate = 0;
           if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
@@ -103,6 +101,10 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
           } else if (entry.buyRate && Number(entry.buyRate) > 0) {
             let base = Number(entry.buyRate);
             saleRate = base + (base * currentProfitPercent / 100);
+          } else if (entry.saleRate && Number(entry.saleRate) > 0) {
+            saleRate = Number(entry.saleRate);
+          } else if (entry.rate && Number(entry.rate) > 0) {
+            saleRate = Number(entry.rate);
           }
 
           let weightInKg = 0;
@@ -114,18 +116,24 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
           if (weightInKg > 0 && saleRate > 0) {
             const entrySaleAmount = weightInKg * saleRate;
 
-            // Extra products are strictly and completely EXCLUDED from profit and loss
             let costRate = 0;
-            if (!isExtra && matchedItem && matchedItem.effectiveCostRate > 0) {
+            if (matchedItem && matchedItem.effectiveCostRate > 0) {
               costRate = matchedItem.effectiveCostRate;
+            } else if (entry.buyRate && Number(entry.buyRate) > 0) {
+              costRate = Number(entry.buyRate);
+            } else if (entry.costRate && Number(entry.costRate) > 0) {
+              costRate = Number(entry.costRate);
+            } else if (currentProfitPercent > 0) {
+              // Reconstruct cost from saleRate and profitPercent
+              costRate = Math.round((saleRate / (1 + currentProfitPercent / 100)) * 100) / 100;
             }
 
             if (costRate > 0) {
               const entryCostAmount = weightInKg * costRate;
               const diff = entrySaleAmount - entryCostAmount;
-              if (diff >= 0) {
+              if (diff > 0) {
                 memoProfit += diff;
-              } else {
+              } else if (diff < 0) {
                 memoLoss += Math.abs(diff);
               }
             }
