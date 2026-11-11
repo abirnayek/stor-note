@@ -714,6 +714,163 @@ export const getAllPurchaseItems = (): LotPurchaseFishItem[] => {
   return items;
 };
 
+export interface MemoFinancialBreakdown {
+  grossProfit: number;
+  grossLoss: number;
+  totalDeductions: number;
+  commissionAmount: number;
+  commOp: string;
+  netProfit: number; // positive if net profitable, else 0
+  netLoss: number;   // positive if net loss, else 0
+  netProfitOrLoss: number; // raw difference (+ or -)
+}
+
+/**
+ * Single source of truth for calculating memo financials (Gross Profit, Gross Loss, Net Profit, Net Loss).
+ * Used consistently by SalesMemoScreen and MonthlySalesScreen to ensure identical figures everywhere.
+ */
+export const calculateMemoFinancials = (
+  memoData: any,
+  lotPurchaseItems?: LotPurchaseFishItem[]
+): MemoFinancialBreakdown => {
+  const memo = memoData ? (memoData.memoState || memoData) : {};
+  const entries: any[] = Array.isArray(memo.entries) ? memo.entries : [];
+  const pItems = lotPurchaseItems || getAllPurchaseItems();
+
+  let fishTotal = 0;
+  let grossProfit = 0;
+  let grossLoss = 0;
+
+  const rawLot = memo.lotNumberInput !== undefined && memo.lotNumberInput !== '' 
+    ? parseInt(String(memo.lotNumberInput), 10) 
+    : (memo.lotNumber !== undefined && memo.lotNumber !== '' ? parseInt(String(memo.lotNumber), 10) : null);
+
+  entries.forEach((entry: any) => {
+    if (!entry.name || !entry.name.trim()) return;
+    const cleanName = entry.name.trim().toLowerCase();
+
+    // Match lot purchase item
+    let matchedItem: LotPurchaseFishItem | null = null;
+
+    if (entry.lotNumber) {
+      const sub = pItems.filter(it => it.lotNumber === Number(entry.lotNumber));
+      matchedItem = findMatchingStockItem(sub, cleanName) || null;
+    }
+    if (!matchedItem && rawLot && !isNaN(rawLot) && rawLot > 0) {
+      const sub = pItems.filter(it => it.lotNumber === rawLot);
+      matchedItem = findMatchingStockItem(sub, cleanName) || null;
+    }
+    if (!matchedItem && entry.buyRate && Number(entry.buyRate) > 0) {
+      const rateNum = Number(entry.buyRate);
+      matchedItem = pItems.find(it => 
+        (it.name.trim().toLowerCase() === cleanName || matchesFish(cleanName, it.name)) && 
+        Math.abs(it.effectiveCostRate - rateNum) < 0.05
+      ) || null;
+    }
+    if (!matchedItem) {
+      const inStock = pItems.filter(it => (it.remainingKg || 0) > 0.001);
+      matchedItem = findMatchingStockItem(inStock, cleanName) || null;
+    }
+    if (!matchedItem) {
+      matchedItem = findMatchingStockItem(pItems, cleanName) || null;
+    }
+
+    const isExtra = !matchedItem && (entry.name || '').trim() !== '';
+
+    let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
+
+    let saleRate = 0;
+    if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
+      let manualRateNum = Number(entry.manualSaleRate) || 0;
+      saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
+    } else if (matchedItem) {
+      let base = matchedItem.suggestedSaleRate > 0 ? matchedItem.suggestedSaleRate : matchedItem.effectiveCostRate;
+      saleRate = base + (base * currentProfitPercent / 100);
+    } else if (entry.buyRate && Number(entry.buyRate) > 0) {
+      let base = Number(entry.buyRate);
+      saleRate = base + (base * currentProfitPercent / 100);
+    } else if (entry.saleRate && Number(entry.saleRate) > 0) {
+      saleRate = Number(entry.saleRate);
+    } else if (entry.rate && Number(entry.rate) > 0) {
+      saleRate = Number(entry.rate);
+    }
+
+    let weightInKg = 0;
+    let totalKgNum = Number(entry.totalKg) || 0;
+    if (totalKgNum > 0) {
+      weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
+    }
+
+    if (weightInKg > 0 && saleRate > 0) {
+      const itemSale = weightInKg * saleRate;
+      fishTotal += itemSale;
+
+      // Extra products are completely EXCLUDED from profit and loss
+      let costRate = 0;
+      if (!isExtra && matchedItem && matchedItem.effectiveCostRate > 0) {
+        costRate = matchedItem.effectiveCostRate;
+      } else if (!isExtra && Number(entry.buyRate) > 0) {
+        costRate = Number(entry.buyRate);
+      } else if (!isExtra && Number(entry.costRate) > 0) {
+        costRate = Number(entry.costRate);
+      }
+
+      if (costRate > 0) {
+        const itemCost = weightInKg * costRate;
+        const diff = itemSale - itemCost;
+        if (diff > 0) {
+          grossProfit += diff;
+        } else if (diff < 0) {
+          grossLoss += Math.abs(diff);
+        }
+      }
+    }
+  });
+
+  // Deductions / Expenses (গাড়ি ভাড়া, বরফ ইত্যাদি)
+  const deductionsList = memo.deductions || memoData?.deductions || [];
+  const totalDeductions = Array.isArray(deductionsList) 
+    ? deductionsList.reduce((sum: number, d: any) => sum + (Number(d.amount) || 0), 0)
+    : 0;
+
+  // Commission handling
+  let rawCommVal = memo.commissionValue !== undefined ? memo.commissionValue : memoData?.commissionValue;
+  if (typeof rawCommVal === 'object' && rawCommVal !== null) {
+    rawCommVal = (rawCommVal as any).target?.value ?? (rawCommVal as any).value ?? (rawCommVal as any).amount ?? '';
+  }
+  const commVal = typeof rawCommVal === 'string'
+    ? (Number(rawCommVal.replace(/[০-৯]/g, (d: string) => (d.charCodeAt(0) - 0x09e6).toString())) || 0)
+    : (Number(rawCommVal) || 0);
+  const commType = memo.commissionType || memoData?.commissionType || 'percent';
+  const commOp = memo.commissionOperation || memoData?.commissionOperation || 'subtract';
+  let commissionAmount = 0;
+  if (commVal > 0) {
+    if (commType === 'flat') {
+      commissionAmount = commVal;
+    } else {
+      commissionAmount = Math.round((fishTotal * commVal / 100) * 100) / 100;
+    }
+  }
+
+  // Net Profit & Loss after Deductions and Commission
+  const commDelta = commOp === 'subtract' ? -commissionAmount : commissionAmount;
+  const netProfitOrLoss = Math.round((grossProfit - grossLoss - totalDeductions + commDelta) * 100) / 100;
+
+  const netProfit = netProfitOrLoss > 0 ? netProfitOrLoss : 0;
+  const netLoss = netProfitOrLoss < 0 ? Math.abs(netProfitOrLoss) : 0;
+
+  return {
+    grossProfit: Math.round(grossProfit * 100) / 100,
+    grossLoss: Math.round(grossLoss * 100) / 100,
+    totalDeductions: Math.round(totalDeductions * 100) / 100,
+    commissionAmount,
+    commOp,
+    netProfit,
+    netLoss,
+    netProfitOrLoss
+  };
+};
+
 export interface FishMemoSaleDetail {
   memoId: string;
   lotNumber: number | null;

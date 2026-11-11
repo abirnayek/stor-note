@@ -5,7 +5,7 @@ import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { MONTHS, enToBnDigits } from '../utils/dateUtils';
 import { deleteSalesMemoCompletely, getAllGlobalSalesMemos, purgeCorruptedPurchaseMemosFromSales } from '../utils/dueSyncUtils';
-import { getLotPurchaseItems, getAllPurchaseItems, matchesFish } from '../utils/stockUtils';
+import { getLotPurchaseItems, getAllPurchaseItems, calculateMemoFinancials } from '../utils/stockUtils';
 
 interface MonthlySalesScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -75,104 +75,13 @@ const MonthlySalesScreen: React.FC<MonthlySalesScreenProps> = ({
         }
       } catch (e) {}
 
-      const memo = rawData ? (rawData.memoState || rawData) : {};
       const effectiveLot = globalItem.lotNumber;
       const lotPurchaseItems = effectiveLot ? getLotPurchaseItems(effectiveLot) : getAllPurchaseItems();
 
-      let memoProfit = 0;
-      let memoLoss = 0;
-
-      if (memo.entries && Array.isArray(memo.entries)) {
-        memo.entries.forEach((entry: any) => {
-          let currentProfitPercent = entry.profitPercent !== undefined && entry.profitPercent !== '' ? Number(entry.profitPercent) : 0;
-
-          const entryCleanName = (entry.name || '').trim();
-          const matchedItem = entryCleanName !== ''
-            ? lotPurchaseItems.find(it => it.name.trim().toLowerCase() === entryCleanName.toLowerCase() || matchesFish(entryCleanName, it.name))
-            : null;
-
-          let saleRate = 0;
-          if (entry.manualSaleRate !== undefined && entry.manualSaleRate !== '') {
-            let manualRateNum = Number(entry.manualSaleRate) || 0;
-            saleRate = manualRateNum + (manualRateNum * currentProfitPercent / 100);
-          } else if (matchedItem) {
-            let base = matchedItem.suggestedSaleRate > 0 ? matchedItem.suggestedSaleRate : matchedItem.effectiveCostRate;
-            saleRate = base + (base * currentProfitPercent / 100);
-          } else if (entry.buyRate && Number(entry.buyRate) > 0) {
-            let base = Number(entry.buyRate);
-            saleRate = base + (base * currentProfitPercent / 100);
-          } else if (entry.saleRate && Number(entry.saleRate) > 0) {
-            saleRate = Number(entry.saleRate);
-          } else if (entry.rate && Number(entry.rate) > 0) {
-            saleRate = Number(entry.rate);
-          }
-
-          let weightInKg = 0;
-          let totalKgNum = Number(entry.totalKg) || 0;
-          if (totalKgNum > 0) {
-            weightInKg = entry.weightUnit === 'g' ? totalKgNum / 1000 : totalKgNum;
-          }
-
-          if (weightInKg > 0 && saleRate > 0) {
-            const entrySaleAmount = weightInKg * saleRate;
-
-            let costRate = 0;
-            if (matchedItem && matchedItem.effectiveCostRate > 0) {
-              costRate = matchedItem.effectiveCostRate;
-            } else if (entry.buyRate && Number(entry.buyRate) > 0) {
-              costRate = Number(entry.buyRate);
-            } else if (entry.costRate && Number(entry.costRate) > 0) {
-              costRate = Number(entry.costRate);
-            } else if (currentProfitPercent > 0) {
-              // Reconstruct cost from saleRate and profitPercent
-              costRate = Math.round((saleRate / (1 + currentProfitPercent / 100)) * 100) / 100;
-            }
-
-            if (costRate > 0) {
-              const entryCostAmount = weightInKg * costRate;
-              const diff = entrySaleAmount - entryCostAmount;
-              if (diff > 0) {
-                memoProfit += diff;
-              } else if (diff < 0) {
-                memoLoss += Math.abs(diff);
-              }
-            }
-          }
-        });
-      }
-
-      // Deductions
-      const rawDeductions = (memo.deductions && Array.isArray(memo.deductions))
-        ? memo.deductions
-        : ((rawData && rawData.deductions && Array.isArray(rawData.deductions)) ? rawData.deductions : []);
-      const totalDeductions = rawDeductions.reduce((sum: number, d: any) => sum + (Number(d.amount) || 0), 0);
-      if (totalDeductions > 0) {
-        memoProfit = Math.max(0, memoProfit - totalDeductions);
-      }
-
-      // Commission handling
-      let rawCommVal = memo.commissionValue !== undefined ? memo.commissionValue : (rawData ? rawData.commissionValue : undefined);
-      if (typeof rawCommVal === 'object' && rawCommVal !== null) {
-        rawCommVal = rawCommVal.value ?? rawCommVal.amount ?? '';
-      }
-      const commVal = Number(rawCommVal) || 0;
-      const commType = memo.commissionType || (rawData ? rawData.commissionType : 'percent');
-      const commOp = memo.commissionOperation || (rawData ? rawData.commissionOperation : 'subtract');
-      if (commVal > 0) {
-        const commAmt = commType === 'flat' ? commVal : Math.round((globalItem.totalAmount * commVal / 100) * 100) / 100;
-        if (commAmt > 0) {
-          if (commOp === 'add') {
-            memoProfit = Math.round((memoProfit + commAmt) * 100) / 100;
-          } else {
-            if (commAmt > memoProfit) {
-              memoLoss = Math.round((memoLoss + (commAmt - memoProfit)) * 100) / 100;
-              memoProfit = 0;
-            } else {
-              memoProfit = Math.round((memoProfit - commAmt) * 100) / 100;
-            }
-          }
-        }
-      }
+      // Compute identical unified financials
+      const financials = calculateMemoFinancials(rawData, lotPurchaseItems);
+      const memoProfit = financials.netProfit;
+      const memoLoss = financials.netLoss;
 
       let cashProfit = 0;
       let dueProfit = 0;
