@@ -372,7 +372,7 @@ const getAvailableLotNumbers = (): number[] => {
   return Array.from(lotNumbersSet).sort((a, b) => a - b);
 };
 
-const getRawPurchaseData = (lotNumber: number): any => {
+export const getRawPurchaseData = (lotNumber: number): any => {
   let purchaseData: any = null;
   const directKey = `memo_lot_${lotNumber}`;
   const rawPurchase = localStorage.getItem(directKey) || localStorage.getItem(`memo_lot_${String(lotNumber).padStart(2, '0')}`);
@@ -388,6 +388,34 @@ const getRawPurchaseData = (lotNumber: number): any => {
         purchaseData = parsed.memoState || parsed;
       } catch (e) {}
     }
+  }
+  // Check permanent historical archive for deleted lots so past sales memos retain their buy rate
+  if (!purchaseData) {
+    const histPurchase = localStorage.getItem(`historical_purchase_lot_${lotNumber}`)
+      || localStorage.getItem(`historical_purchase_lot_${String(lotNumber).padStart(2, '0')}`);
+    if (histPurchase) {
+      try {
+        const parsed = JSON.parse(histPurchase);
+        purchaseData = parsed.memoState || parsed;
+      } catch (e) {}
+    }
+  }
+  // Fallback to trash_items
+  if (!purchaseData) {
+    try {
+      const rawTrash = localStorage.getItem('trash_items');
+      if (rawTrash) {
+        const trashArr: any[] = JSON.parse(rawTrash);
+        const match = trashArr.find(t => 
+          t.id === `lot_${lotNumber}` || 
+          t.id === `purchase_lot_${lotNumber}` ||
+          (t.type === 'purchase_lot' && String(t.data?.lotNumber) === String(lotNumber))
+        );
+        if (match && match.data) {
+          purchaseData = match.data.memoState || match.data;
+        }
+      }
+    } catch (e) {}
   }
   return purchaseData;
 };
@@ -491,12 +519,22 @@ export const getAllLotsStock = (): LotStockSummary[] => {
       }
 
       // 3. Unassigned sale: find matching lots containing this fish
-      // Prioritize lots that have an exact fish name match
+      // TEMPORAL GUARD: Sales memos can ONLY deduct stock from lots created on or before the sale memo time!
+      // A past memo (e.g. October) must NEVER draw or steal stock from a newly created purchase lot (e.g. November).
+      const memoTs = memo.timestamp || 0;
+
       const exactCandidateLots: LotInternalData[] = [];
       const looseCandidateLots: LotInternalData[] = [];
 
       sortedLotNums.forEach(lNum => {
         const lObj = lotsMap.get(lNum)!;
+        const lotTs = lObj.timestamp || 0;
+
+        // If both timestamps are present, sale cannot take from a future lot (with generous 12-hour same-day buffer)
+        if (memoTs > 0 && lotTs > 0 && memoTs < (lotTs - 12 * 60 * 60 * 1000)) {
+          return;
+        }
+
         const cleanName = name.toLowerCase();
         const normName = normalizeFishKey(name);
         const hasExact = lObj.items.some(it => it.name.trim().toLowerCase() === cleanName || normalizeFishKey(it.name) === normName);
@@ -647,21 +685,7 @@ export const getLotPurchaseItems = (lotNumber: number | null): LotPurchaseFishIt
   if (!normLot) return [];
 
   const stockSummary = getLotStock(normLot);
-
-  let purchaseData: any = null;
-  const rawPurchase = localStorage.getItem(`memo_lot_${normLot}`) || localStorage.getItem(`memo_lot_${String(normLot).padStart(2, '0')}`);
-  if (rawPurchase) {
-    try { purchaseData = JSON.parse(rawPurchase); } catch (e) {}
-  }
-  if (!purchaseData) {
-    const duePurchase = localStorage.getItem(`due_memo_purchase_lot_${normLot}`);
-    if (duePurchase) {
-      try {
-        const parsed = JSON.parse(duePurchase);
-        purchaseData = parsed.memoState || parsed;
-      } catch (e) {}
-    }
-  }
+  const purchaseData = getRawPurchaseData(normLot);
 
   const purchaseEntries: any[] = Array.isArray(purchaseData?.entries) ? purchaseData.entries : [];
   const totalPriceMain = Number(purchaseData?.totalPriceMain) || 0;
@@ -707,10 +731,49 @@ export const getLotPurchaseItems = (lotNumber: number | null): LotPurchaseFishIt
 export const getAllPurchaseItems = (): LotPurchaseFishItem[] => {
   const allSummaries = getAllLotsStock();
   const items: LotPurchaseFishItem[] = [];
+  const processedLots = new Set<number>();
+
   allSummaries.forEach(summary => {
+    processedLots.add(summary.lotNumber);
     const lotItems = getLotPurchaseItems(summary.lotNumber);
     items.push(...lotItems);
   });
+
+  // Also include historical lots (or deleted lots) so past sales memos have cost rates
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    let lotNum: number | null = null;
+    if (key.startsWith('historical_purchase_lot_')) {
+      lotNum = normalizeLotNumber(key.replace('historical_purchase_lot_', ''));
+    } else if (key.startsWith('memo_lot_')) {
+      lotNum = normalizeLotNumber(key.replace('memo_lot_', ''));
+    }
+    if (lotNum && !processedLots.has(lotNum)) {
+      processedLots.add(lotNum);
+      const histItems = getLotPurchaseItems(lotNum);
+      items.push(...histItems);
+    }
+  }
+
+  // Also check trash items for any purchase lots
+  try {
+    const rawTrash = localStorage.getItem('trash_items');
+    if (rawTrash) {
+      const trashArr: any[] = JSON.parse(rawTrash);
+      trashArr.forEach(t => {
+        if (t.type === 'purchase_lot') {
+          const lNum = normalizeLotNumber(t.id.replace('lot_', '')) || normalizeLotNumber(t.data?.lotNumber);
+          if (lNum && !processedLots.has(lNum)) {
+            processedLots.add(lNum);
+            const tItems = getLotPurchaseItems(lNum);
+            items.push(...tItems);
+          }
+        }
+      });
+    }
+  } catch (e) {}
+
   return items;
 };
 
@@ -1049,11 +1112,21 @@ export const getFishSalesBreakdown = (targetFishName: string, targetLotNumber: n
       }
 
       // 3. Unassigned sales deduction: find candidate lots
+      // TEMPORAL GUARD: Sales memos can ONLY deduct stock from lots created on or before the sale memo time!
+      const memoTs = memo.timestamp || 0;
+
       const exactCandidateLots: { lotNum: number; lObj: LotTrack }[] = [];
       const looseCandidateLots: { lotNum: number; lObj: LotTrack }[] = [];
 
       sortedLotNums.forEach(lNum => {
         const lObj = lotsMap.get(lNum)!;
+        const lotTs = lObj.timestamp || 0;
+
+        // If both timestamps are present, sale cannot take from a future lot (with generous 12-hour same-day buffer)
+        if (memoTs > 0 && lotTs > 0 && memoTs < (lotTs - 12 * 60 * 60 * 1000)) {
+          return;
+        }
+
         const cleanName = name.toLowerCase();
         const normName = normalizeFishKey(name);
         const hasExact = lObj.items.some(it => it.name.trim().toLowerCase() === cleanName || normalizeFishKey(it.name) === normName);

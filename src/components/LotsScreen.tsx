@@ -120,6 +120,11 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
         data: memoData
       });
 
+      // Archive purchase memo for historical profit/loss calculation so past memos don't lose cost rate or become Lot: N/A
+      if (memoDataStr) {
+        localStorage.setItem(`historical_purchase_lot_${lot}`, memoDataStr);
+      }
+
       // Mark permanently deleted in syncEngine (local + cloud tombstones)
       markPurchaseLotDeleted(lot);
 

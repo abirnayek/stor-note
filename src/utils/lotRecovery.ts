@@ -1,5 +1,5 @@
-import { pushUnsyncedLocalData, isPurchaseLotDeleted } from './syncEngine';
-import { getTrashItems, permanentlyDeleteFromTrash } from './trashUtils';
+import { pushUnsyncedLocalData, isPurchaseLotDeleted, unmarkPurchaseLotDeleted } from './syncEngine';
+import { getTrashItems, permanentlyDeleteFromTrash, restoreFromTrash } from './trashUtils';
 
 export const RECOVERED_LOT_2_MEMO = {
   supplierName: "Emon v",
@@ -133,6 +133,41 @@ export function isMemoEmpty(memo: any): boolean {
   const hasEntries = Array.isArray(memo.entries) && memo.entries.some((e: any) => e && (e.name?.trim() || e.totalKg || e.totalPrice));
   const hasTotal = Boolean(Number(memo.totalPriceMain) > 0);
   return !hasSupplier && !hasEntries && !hasTotal;
+}
+
+/**
+ * Recovers all deleted purchase lots from Trash Bin automatically so user calculations and lot references are intact.
+ */
+export function restoreDeletedPurchaseLotsFromTrash(): number {
+  let restoredCount = 0;
+  try {
+    const trashItems = getTrashItems();
+    trashItems.forEach(item => {
+      if (item.type === 'purchase_lot') {
+        const lotNum = parseInt(item.id.replace('lot_', ''), 10) || parseInt(String(item.data?.lotNumber), 10);
+        if (!isNaN(lotNum) && lotNum > 0) {
+          console.log(`[LotRecovery] Restoring purchase lot ${lotNum} from trash...`);
+          // Unmark tombstone
+          unmarkPurchaseLotDeleted(lotNum);
+          // Restore lot data
+          restoreFromTrash(item);
+          // Also save in historical archive
+          if (item.data) {
+            localStorage.setItem(`historical_purchase_lot_${lotNum}`, JSON.stringify(item.data));
+          }
+          permanentlyDeleteFromTrash(item.id);
+          restoredCount++;
+        }
+      }
+    });
+
+    if (restoredCount > 0) {
+      window.dispatchEvent(new Event('storage'));
+    }
+  } catch (err) {
+    console.error('[LotRecovery] Error restoring purchase lots from trash:', err);
+  }
+  return restoredCount;
 }
 
 /**

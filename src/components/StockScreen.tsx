@@ -170,6 +170,11 @@ const StockScreen: React.FC<StockScreenProps> = ({ onNavigate, onSelectPurchaseL
         data: memoData
       });
 
+      // Archive purchase memo for historical calculations so past memos don't distort
+      if (memoDataStr) {
+        localStorage.setItem(`historical_purchase_lot_${lotNumber}`, memoDataStr);
+      }
+
       // Mark permanently deleted in syncEngine (local + cloud tombstones)
       markPurchaseLotDeleted(lotNumber);
 
