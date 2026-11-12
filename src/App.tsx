@@ -30,7 +30,7 @@ import { LotPasswordManager } from './components/LotPasswordManager';
 
 import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow, getReadableDeviceName } from './utils/syncEngine';
 import { APP_VERSION, checkAppVersionAndSync } from './utils/versionCheck';
-import { runLotRecovery, restoreDeletedPurchaseLotsFromTrash } from './utils/lotRecovery';
+import { runLotRecovery } from './utils/lotRecovery';
 import { getAllGlobalSalesMemos } from './utils/dueSyncUtils';
 import { getAllLotsStock } from './utils/stockUtils';
 
@@ -191,7 +191,6 @@ function App() {
   const [syncToast, setSyncToast] = useState<string | null>(null);
 
   useEffect(() => {
-    restoreDeletedPurchaseLotsFromTrash();
     runLotRecovery();
   }, []);
 

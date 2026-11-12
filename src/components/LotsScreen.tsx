@@ -31,14 +31,13 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
         }
       } catch (e) {}
 
-      // Discover any existing purchase memos in localStorage (e.g. memo_lot_3, due_memo_purchase_lot_3)
+      // Discover any existing purchase memos in localStorage (e.g. memo_lot_3, due_memo_purchase_lot_3, historical_purchase_lot_3)
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && (key.startsWith('memo_lot_') || key.startsWith('due_memo_purchase_lot_'))) {
-          const lotStr = key.replace('memo_lot_', '').replace('due_memo_purchase_lot_', '');
+        if (key && (key.startsWith('memo_lot_') || key.startsWith('due_memo_purchase_lot_') || key.startsWith('historical_purchase_lot_'))) {
+          const lotStr = key.replace('memo_lot_', '').replace('due_memo_purchase_lot_', '').replace('historical_purchase_lot_', '');
           const n = parseInt(lotStr, 10);
-          if (!isNaN(n) && n > 0 && n < 1000 && !isPurchaseLotDeleted(n)) {
-            // Only add if it actually has memo data
+          if (!isNaN(n) && n > 0 && n < 1000) {
             const val = localStorage.getItem(key);
             if (val && val.trim() !== '' && val !== '{}' && val !== 'null') {
               lotNumbersSet.add(n);
@@ -46,6 +45,22 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
           }
         }
       }
+
+      // Also check trash items for any purchase lots
+      try {
+        const rawTrash = localStorage.getItem('trash_items');
+        if (rawTrash) {
+          const trashArr: any[] = JSON.parse(rawTrash);
+          trashArr.forEach(t => {
+            if (t.type === 'purchase_lot') {
+              const lNum = parseInt(t.id.replace('lot_', ''), 10) || parseInt(String(t.data?.lotNumber), 10);
+              if (!isNaN(lNum) && lNum > 0 && lNum < 1000) {
+                lotNumbersSet.add(lNum);
+              }
+            }
+          });
+        }
+      } catch (e) {}
 
       // Only default to [1] if the user has never created/deleted lots and there's no data at all
       if (lotNumbersSet.size === 0 && !isPurchaseLotDeleted(1) && !localStorage.getItem('purchase_lots_list')) {
@@ -170,6 +185,25 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
           memoDataStr = parsedDue.memoState ? JSON.stringify(parsedDue.memoState) : dueSaved;
         } catch(e) {}
       }
+    }
+    if (!memoDataStr) {
+      memoDataStr = localStorage.getItem(`historical_purchase_lot_${lot}`) || localStorage.getItem(`historical_purchase_lot_${String(lot).padStart(2, '0')}`);
+    }
+    if (!memoDataStr) {
+      try {
+        const rawTrash = localStorage.getItem('trash_items');
+        if (rawTrash) {
+          const trashArr: any[] = JSON.parse(rawTrash);
+          const match = trashArr.find(t => 
+            t.id === `lot_${lot}` || 
+            t.id === `purchase_lot_${lot}` || 
+            (t.type === 'purchase_lot' && String(t.data?.lotNumber) === String(lot))
+          );
+          if (match && match.data) {
+            memoDataStr = JSON.stringify(match.data);
+          }
+        }
+      } catch (e) {}
     }
     if (!memoDataStr && lot === 2) {
       runLotRecovery();
