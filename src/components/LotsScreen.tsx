@@ -46,6 +46,25 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
         }
       }
 
+      // Also check dues_purchase and paid_dues_purchase for any purchase lots
+      const scanDuesList = (k: string) => {
+        try {
+          const s = localStorage.getItem(k);
+          if (s) {
+            const arr: any[] = JSON.parse(s);
+            arr.forEach(item => {
+              const str = String(item).replace('purchase_lot_', '').replace('purchase_', '');
+              const n = parseInt(str, 10);
+              if (!isNaN(n) && n > 0 && n < 1000) {
+                lotNumbersSet.add(n);
+              }
+            });
+          }
+        } catch (e) {}
+      };
+      scanDuesList('dues_purchase');
+      scanDuesList('paid_dues_purchase');
+
       // Also check trash items for any purchase lots
       try {
         const rawTrash = localStorage.getItem('trash_items');
