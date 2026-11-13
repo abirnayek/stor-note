@@ -2216,8 +2216,23 @@ function App() {
       )}
       {/* Lot Password Manager Modal */}
       {isLotPasswordManagerOpen && (
-        <div className="modal-overlay" onClick={closeLotPasswordManager} style={{ zIndex: 9999 }}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ minWidth: '400px', maxWidth: '450px', background: 'var(--card-bg)', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div className="modal-overlay" onClick={closeLotPasswordManager} style={{ zIndex: 9999, padding: '10px' }}>
+          <div 
+            className="modal-content password-manager-modal" 
+            onClick={(e) => e.stopPropagation()} 
+            style={{ 
+              width: '100%',
+              maxWidth: '560px',
+              minWidth: 'unset',
+              padding: '1.25rem',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              background: 'var(--secondary-bg)', 
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: '16px',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+            }}
+          >
             <LotPasswordManager onClose={closeLotPasswordManager} />
           </div>
         </div>

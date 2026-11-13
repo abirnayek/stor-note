@@ -410,8 +410,25 @@ tr.search-highlight-blink > td:last-child {
   padding: 2rem;
   border-radius: 16px;
   width: 400px;
+  max-width: 95vw;
   box-shadow: var(--shadow);
   border: 1px solid var(--border-color);
+  box-sizing: border-box;
+}
+
+.password-manager-modal {
+  width: 580px !important;
+  max-width: 95vw !important;
+  padding: 1.5rem !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 600px) {
+  .password-manager-modal {
+    width: 95vw !important;
+    padding: 1rem 0.75rem !important;
+    max-height: 92vh !important;
+  }
 }
 
 .modal-header {
