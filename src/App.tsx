@@ -34,7 +34,7 @@ import { runLotRecovery } from './utils/lotRecovery';
 import { getAllGlobalSalesMemos } from './utils/dueSyncUtils';
 import { getAllLotsStock } from './utils/stockUtils';
 
-export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock' | 'sales-month-memos' | 'reseller-password' | 'reseller' | 'aratdar';
+export type Screen = 'dashboard' | 'password' | 'lots' | 'memo' | 'due-category' | 'due-types' | 'due-list' | 'due-purchase-list' | 'paid-due-list' | 'sales-lots' | 'sales-memo-list' | 'sales-memo' | 'due-memo' | 'due-sales-memo' | 'trash' | 'investor-password' | 'investor-list' | 'investor-memos-list' | 'investor-memo' | 'stock' | 'sales-month-memos' | 'reseller-password' | 'reseller' | 'aratdar' | 'sales-password' | 'due-password' | 'stock-password';
 
 export interface NavSnapshot {
   screen: Screen;
@@ -930,6 +930,30 @@ function App() {
   };
 
   const handleNavigate = (screen: Screen) => {
+    // Intercept screens with optional PIN protection
+    if (localStorage.getItem('disableLotPassword') !== 'true') {
+      if (screen === 'sales-lots') {
+        const pin = localStorage.getItem('salesAccountPin');
+        if (pin && pin.trim() !== '') {
+          navigateTo('sales-password');
+          return;
+        }
+      }
+      if (screen === 'due-category') {
+        const pin = localStorage.getItem('dueAccountPin');
+        if (pin && pin.trim() !== '') {
+          navigateTo('due-password');
+          return;
+        }
+      }
+      if (screen === 'stock') {
+        const pin = localStorage.getItem('stockAccountPin');
+        if (pin && pin.trim() !== '') {
+          navigateTo('stock-password');
+          return;
+        }
+      }
+    }
     navigateTo(screen);
   };
 
@@ -2087,6 +2111,30 @@ function App() {
               memoId={currentInvestorMemoId}
             />
           )}
+          {currentScreen === 'sales-password' && (
+            <PasswordScreen 
+              onSuccess={() => navigateTo('sales-lots', undefined, true)} 
+              onBack={() => navigateBack('dashboard')} 
+              pinKey="salesAccountPin"
+              title={t('salesAccount') || 'বিক্রয় হিসাব'}
+            />
+          )}
+          {currentScreen === 'due-password' && (
+            <PasswordScreen 
+              onSuccess={() => navigateTo('due-category', undefined, true)} 
+              onBack={() => navigateBack('dashboard')} 
+              pinKey="dueAccountPin"
+              title={t('dueAccount') || 'বকেয়া হিসাব'}
+            />
+          )}
+          {currentScreen === 'stock-password' && (
+            <PasswordScreen 
+              onSuccess={() => navigateTo('stock', undefined, true)} 
+              onBack={() => navigateBack('dashboard')} 
+              pinKey="stockAccountPin"
+              title={t('stockAccount') || 'স্টক হিসাব'}
+            />
+          )}
           {currentScreen === 'stock' && (
             <StockScreen 
               onNavigate={handleNavigate}
@@ -2141,9 +2189,9 @@ function App() {
             )}
 
             <div className="setting-item">
-              <span>Lot Passwords</span>
+              <span>{language === 'bn' ? 'পাসওয়ার্ড ম্যানেজমেন্ট' : 'Password Management'}</span>
               <button className="btn btn-secondary" onClick={() => { setIsSettingsOpen(false); openLotPasswordManager(); }} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                Manage Lot Passwords
+                {language === 'bn' ? 'ম্যানেজ পাসওয়ার্ড' : 'Manage Passwords'}
               </button>
             </div>
             <div className="setting-item">
