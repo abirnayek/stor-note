@@ -467,60 +467,85 @@ const PasswordScreen: React.FC<PasswordScreenProps> = ({
             </p>
             <p style={{ fontSize: '0.85rem', color: '#aaa', margin: 0 }}>
               {language === 'bn'
-                ? 'অননুমোদিত প্রবেশ রোধ করতে অনুগ্রহ করে ৪-৮ ডিজিটের একটি পাসওয়ার্ড সেট করুন (স্কিপ করার সুযোগ নেই)।'
-                : 'Please set a 4-8 digit password to protect this section (Skipping is not allowed).'}
+                ? 'অননুমোদিত প্রবেশ রোধ করতে আপনি চাইলে এখনই ৪-৮ ডিজিটের পাসওয়ার্ড সেট করতে পারেন, অথবা সেট না করেই সরাসরি প্রবেশ করতে পারেন।'
+                : 'To protect this section, you can set a 4-8 digit password now, or enter directly without setting one.'}
             </p>
           </div>
 
           <form onSubmit={handleInitialSetup} className="password-form" style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.88rem', color: '#ccc' }}>
-                {language === 'bn' ? 'নতুন পাসওয়ার্ড লিখুন:' : 'Enter New Password:'}
+                {language === 'bn' ? 'নতুন পাসওয়ার্ড লিখুন (ঐচ্ছিক):' : 'Enter New Password (Optional):'}
               </label>
               <input
                 type="password"
                 value={setupPin}
                 onChange={e => { setSetupPin(e.target.value); setSetupError(''); }}
                 placeholder="••••"
-                required
-                autoFocus
                 className="password-input"
                 style={{ width: '100%', boxSizing: 'border-box' }}
               />
             </div>
 
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.88rem', color: '#ccc' }}>
-                {language === 'bn' ? 'পাসওয়ার্ড নিশ্চিত করুন:' : 'Confirm Password:'}
-              </label>
-              <input
-                type="password"
-                value={confirmSetupPin}
-                onChange={e => { setConfirmSetupPin(e.target.value); setSetupError(''); }}
-                placeholder="••••"
-                required
-                className="password-input"
-                style={{ width: '100%', boxSizing: 'border-box' }}
-              />
-            </div>
+            {setupPin.trim() !== '' && (
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.88rem', color: '#ccc' }}>
+                  {language === 'bn' ? 'পাসওয়ার্ড নিশ্চিত করুন:' : 'Confirm Password:'}
+                </label>
+                <input
+                  type="password"
+                  value={confirmSetupPin}
+                  onChange={e => { setConfirmSetupPin(e.target.value); setSetupError(''); }}
+                  placeholder="••••"
+                  className="password-input"
+                  style={{ width: '100%', boxSizing: 'border-box' }}
+                />
+              </div>
+            )}
 
             {setupError && <span className="error-text" style={{ color: '#ff5252', fontSize: '0.88rem' }}>{setupError}</span>}
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '0.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={onBack}
+                  style={{ flex: 1, padding: '0.8rem' }}
+                >
+                  {t('backBtn') || 'ফিরে যান'}
+                </button>
+                {setupPin.trim() !== '' && (
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    style={{ flex: 1.5, padding: '0.8rem', fontWeight: 'bold' }}
+                  >
+                    {language === 'bn' ? 'পাসওয়ার্ড সংরক্ষণ ও প্রবেশ' : 'Save & Enter'}
+                  </button>
+                )}
+              </div>
+
+              {/* Skip / Enter Directly Button */}
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={onBack}
-                style={{ flex: 1, padding: '0.85rem' }}
+                onClick={onSuccess}
+                style={{
+                  background: setupPin.trim() === '' ? 'var(--primary-color)' : 'rgba(255,255,255,0.08)',
+                  color: '#fff',
+                  border: setupPin.trim() === '' ? 'none' : '1px solid rgba(255,255,255,0.2)',
+                  padding: '0.8rem',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '0.92rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
               >
-                {t('backBtn') || 'ফিরে যান'}
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ flex: 2, padding: '0.85rem', fontWeight: 'bold' }}
-              >
-                {language === 'bn' ? 'পাসওয়ার্ড সংরক্ষণ ও প্রবেশ' : 'Save & Enter'}
+                <span>{language === 'bn' ? 'পাসওয়ার্ড ছাড়াই সরাসরি প্রবেশ করুন ➔' : 'Enter Directly Without Password ➔'}</span>
               </button>
             </div>
           </form>
