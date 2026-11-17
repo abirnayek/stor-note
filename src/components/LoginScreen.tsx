@@ -22,8 +22,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setError(null);
     
     try {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const redirectUrl = isLocalhost ? window.location.origin : 'https://abirnayek.github.io/stor-note/';
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
+        options: {
+          emailRedirectTo: redirectUrl
+        }
       });
       if (error) throw error;
       setStep('code');
