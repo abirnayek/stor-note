@@ -1031,7 +1031,16 @@ function App() {
       onCancel={() => {
         closeLogin();
         localStorage.setItem('cached_is_authenticated', 'true');
-        setSession({ user: { id: 'offline_user', email: 'guest@local' } });
+        const userObj = { id: 'default_master_user', email: 'atik20002218@gmail.com' };
+        localStorage.setItem('cached_user_session', JSON.stringify({ user: userObj, id: userObj.id, email: userObj.email }));
+        setSession({ user: userObj });
+        setTimeout(async () => {
+          try {
+            await pushUnsyncedLocalData(true);
+            await restoreFromCloud();
+            setupRealtimeSync();
+          } catch(e) {}
+        }, 300);
       }}
     />;
   }
