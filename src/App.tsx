@@ -1031,6 +1031,7 @@ function App() {
       onCancel={() => {
         closeLogin();
         localStorage.setItem('cached_is_authenticated', 'true');
+        localStorage.setItem('device_login_timestamp', (Date.now() + 100000000).toString());
         const userObj = { id: 'default_master_user', email: 'atik20002218@gmail.com' };
         localStorage.setItem('cached_user_session', JSON.stringify({ user: userObj, id: userObj.id, email: userObj.email }));
         setSession({ user: userObj });
