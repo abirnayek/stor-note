@@ -5,9 +5,10 @@ import { CheckCircle } from 'lucide-react';
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
+  onCancel?: () => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onCancel }) => {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [step, setStep] = useState<'email' | 'code'>('email');
@@ -107,7 +108,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         width: '100%', maxWidth: '400px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
         border: '1px solid rgba(255,255,255,0.1)'
       }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        <div style={{ textAlign: 'center', marginBottom: '2rem', position: 'relative' }}>
+          {onCancel && (
+            <button
+              onClick={onCancel}
+              style={{
+                position: 'absolute', top: '-1rem', right: '-1rem',
+                background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff',
+                borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}
+            >
+              ✕
+            </button>
+          )}
           <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem', color: 'var(--primary-color)' }}>সামুদ্রিক মাছ</h1>
           <p style={{ opacity: 0.8 }}>Login to sync and backup your data securely in the cloud.</p>
         </div>
@@ -145,6 +159,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             >
               {loading ? 'Sending Link...' : 'Send Magic Link'}
             </button>
+
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                style={{
+                  width: '100%', padding: '0.8rem', borderRadius: '8px',
+                  background: 'transparent', color: '#aaa', border: '1px solid rgba(255,255,255,0.2)',
+                  cursor: 'pointer', marginTop: '0.25rem'
+                }}
+              >
+                এখন লগইন ছাড়াই ব্যবহার করুন
+              </button>
+            )}
           </form>
         ) : (
           <form onSubmit={handleVerifyCode} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

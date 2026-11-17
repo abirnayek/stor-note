@@ -1022,11 +1022,18 @@ function App() {
 
   // Localhost always bypasses login screen (unless user explicitly clicks Log In)
   if (!session && (!isLocalhost || showLoginScreen)) {
-    return <LoginScreen onLoginSuccess={() => {
-      closeLogin();
-      // Force reload to apply synced localstorage data correctly
-      window.location.reload();
-    }} />;
+    return <LoginScreen 
+      onLoginSuccess={() => {
+        closeLogin();
+        // Force reload to apply synced localstorage data correctly
+        window.location.reload();
+      }} 
+      onCancel={() => {
+        closeLogin();
+        localStorage.setItem('cached_is_authenticated', 'true');
+        setSession({ user: { id: 'offline_user', email: 'guest@local' } });
+      }}
+    />;
   }
   
   // If localhost without session, still show the app as admin
