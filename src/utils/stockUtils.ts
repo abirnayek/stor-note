@@ -1,5 +1,5 @@
 import { isMemoDeleted, isPurchaseLotDeleted } from './syncEngine';
-import { getMemoExactTimestamp } from './dateUtils';
+import { getMemoExactTimestamp, parseMemoMonthYear } from './dateUtils';
 
 export interface FishStockItem {
   id: string;
@@ -26,8 +26,39 @@ export interface LotStockSummary {
 }
 
 /**
- * Normalizes lot number to an integer
+ * Helper to check if a sales memo is strictly before a purchase lot's creation date.
+ * If true, the sales memo must NEVER deduct from this purchase lot.
  */
+export const isMemoBeforeLot = (memo: { timestamp?: number; date?: string; time?: string }, lot: { timestamp?: number; date?: string }): boolean => {
+  const memoTs = memo.timestamp || 0;
+  const lotTs = lot.timestamp || 0;
+
+  // 1. Direct timestamp check with 12-hour grace period for same-day timezone / time differences
+  if (memoTs > 0 && lotTs > 0) {
+    if (memoTs < (lotTs - 12 * 60 * 60 * 1000)) {
+      return true; // Sales memo happened before the lot was created
+    }
+  }
+
+  // 2. Strict calendar month/year comparison to prevent cross-month leakage (e.g. October sale vs November lot)
+  if (memo.date && lot.date) {
+    const memoParsed = parseMemoMonthYear(memo.date, memoTs);
+    const lotParsed = parseMemoMonthYear(lot.date, lotTs);
+
+    if (memoParsed.year && lotParsed.year) {
+      if (memoParsed.year < lotParsed.year) return true;
+      if (memoParsed.year === lotParsed.year) {
+        if (memoParsed.month < lotParsed.month) return true;
+        // Same year and same month: if days are present and memo day is at least 1 full day before lot day
+        if (memoParsed.month === lotParsed.month && memoParsed.day && lotParsed.day) {
+          if (memoParsed.day < lotParsed.day) return true;
+        }
+      }
+    }
+  }
+
+  return false;
+};
 export const normalizeLotNumber = (lot: any): number | null => {
   if (lot === null || lot === undefined || lot === '') return null;
   const num = parseInt(String(lot), 10);
@@ -500,10 +531,12 @@ export const getAllLotsStock = (): LotStockSummary[] => {
       const explicitEntryLot = normalizeLotNumber(entry.lotNumber);
       if (explicitEntryLot !== null && lotsMap.has(explicitEntryLot)) {
         const lObj = lotsMap.get(explicitEntryLot)!;
-        const matched = findMatchingStockItem(lObj.items, name);
-        if (matched) {
-          matched.soldKg += weight;
-          return;
+        if (!isMemoBeforeLot(memo, lObj)) {
+          const matched = findMatchingStockItem(lObj.items, name);
+          if (matched) {
+            matched.soldKg += weight;
+            return;
+          }
         }
       }
 
@@ -511,27 +544,26 @@ export const getAllLotsStock = (): LotStockSummary[] => {
       const memoLot = normalizeLotNumber(memo.lotNumber);
       if (memoLot !== null && lotsMap.has(memoLot)) {
         const lObj = lotsMap.get(memoLot)!;
-        const matched = findMatchingStockItem(lObj.items, name);
-        if (matched) {
-          matched.soldKg += weight;
-          return;
+        if (!isMemoBeforeLot(memo, lObj)) {
+          const matched = findMatchingStockItem(lObj.items, name);
+          if (matched) {
+            matched.soldKg += weight;
+            return;
+          }
         }
       }
 
       // 3. Unassigned sale: find matching lots containing this fish
       // TEMPORAL GUARD: Sales memos can ONLY deduct stock from lots created on or before the sale memo time!
       // A past memo (e.g. October) must NEVER draw or steal stock from a newly created purchase lot (e.g. November).
-      const memoTs = memo.timestamp || 0;
-
       const exactCandidateLots: LotInternalData[] = [];
       const looseCandidateLots: LotInternalData[] = [];
 
       sortedLotNums.forEach(lNum => {
         const lObj = lotsMap.get(lNum)!;
-        const lotTs = lObj.timestamp || 0;
 
-        // If both timestamps are present, sale cannot take from a future lot (with generous 12-hour same-day buffer)
-        if (memoTs > 0 && lotTs > 0 && memoTs < (lotTs - 12 * 60 * 60 * 1000)) {
+        // Sale cannot take from a lot that was created after the sale date/time
+        if (isMemoBeforeLot(memo, lObj)) {
           return;
         }
 
@@ -1001,6 +1033,7 @@ export const getFishSalesBreakdown = (targetFishName: string, targetLotNumber: n
   interface LotTrack {
     lotNumber: number;
     timestamp: number;
+    date: string;
     items: LotTrackItem[];
   }
 
@@ -1018,6 +1051,7 @@ export const getFishSalesBreakdown = (targetFishName: string, targetLotNumber: n
     lotsMap.set(lNum, {
       lotNumber: lNum,
       timestamp: getMemoExactTimestamp(pData),
+      date: pData?.createdAt || pData?.date || '',
       items
     });
   });
@@ -1085,14 +1119,16 @@ export const getFishSalesBreakdown = (targetFishName: string, targetLotNumber: n
       const explicitEntryLot = normalizeLotNumber(entry.lotNumber);
       if (explicitEntryLot !== null && lotsMap.has(explicitEntryLot)) {
         const lObj = lotsMap.get(explicitEntryLot)!;
-        const found = findMatchingStockItem(lObj.items, name);
-        if (found) {
-          found.soldKg += weight;
-          if (explicitEntryLot === normTargetLot && (findMatchingStockItem([found], cleanTargetName) || findMatchingStockItem([{ name }], cleanTargetName))) {
-            const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : found.buyRate;
-            addMemoRecord(memo, entry, weight, cost, found.suggestedSaleRate);
+        if (!isMemoBeforeLot(memo, lObj)) {
+          const found = findMatchingStockItem(lObj.items, name);
+          if (found) {
+            found.soldKg += weight;
+            if (explicitEntryLot === normTargetLot && (findMatchingStockItem([found], cleanTargetName) || findMatchingStockItem([{ name }], cleanTargetName))) {
+              const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : found.buyRate;
+              addMemoRecord(memo, entry, weight, cost, found.suggestedSaleRate);
+            }
+            return;
           }
-          return;
         }
       }
 
@@ -1100,30 +1136,29 @@ export const getFishSalesBreakdown = (targetFishName: string, targetLotNumber: n
       const memoLot = normalizeLotNumber(memo.lotNumber);
       if (memoLot !== null && lotsMap.has(memoLot)) {
         const lObj = lotsMap.get(memoLot)!;
-        const found = findMatchingStockItem(lObj.items, name);
-        if (found) {
-          found.soldKg += weight;
-          if (memoLot === normTargetLot && (findMatchingStockItem([found], cleanTargetName) || findMatchingStockItem([{ name }], cleanTargetName))) {
-            const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : found.buyRate;
-            addMemoRecord(memo, entry, weight, cost, found.suggestedSaleRate);
+        if (!isMemoBeforeLot(memo, lObj)) {
+          const found = findMatchingStockItem(lObj.items, name);
+          if (found) {
+            found.soldKg += weight;
+            if (memoLot === normTargetLot && (findMatchingStockItem([found], cleanTargetName) || findMatchingStockItem([{ name }], cleanTargetName))) {
+              const cost = Number(entry.buyRate) > 0 ? Number(entry.buyRate) : found.buyRate;
+              addMemoRecord(memo, entry, weight, cost, found.suggestedSaleRate);
+            }
+            return;
           }
-          return;
         }
       }
 
       // 3. Unassigned sales deduction: find candidate lots
       // TEMPORAL GUARD: Sales memos can ONLY deduct stock from lots created on or before the sale memo time!
-      const memoTs = memo.timestamp || 0;
-
       const exactCandidateLots: { lotNum: number; lObj: LotTrack }[] = [];
       const looseCandidateLots: { lotNum: number; lObj: LotTrack }[] = [];
 
       sortedLotNums.forEach(lNum => {
         const lObj = lotsMap.get(lNum)!;
-        const lotTs = lObj.timestamp || 0;
 
-        // If both timestamps are present, sale cannot take from a future lot (with generous 12-hour same-day buffer)
-        if (memoTs > 0 && lotTs > 0 && memoTs < (lotTs - 12 * 60 * 60 * 1000)) {
+        // Sale cannot take from a lot that was created after the sale date/time
+        if (isMemoBeforeLot(memo, lObj)) {
           return;
         }
 
