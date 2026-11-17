@@ -546,7 +546,6 @@ export const restoreFromCloud = async () => {
   if (!currentUser) {
     currentUser = getStoredUserCached();
   }
-  if (!currentUser) return false;
   
   isRestoring = true;
   try {
@@ -627,7 +626,7 @@ export const restoreFromCloud = async () => {
           const localValue = originalGetItem.call(localStorage, key);
           if (localValue !== null && !isKeyDeleted(key) && navigator.onLine) {
             supabase.from('user_backups').upsert({
-              user_id: currentUser.id,
+              user_id: currentUser?.id || null,
               key: key,
               value: localValue,
               updated_at: new Date(localTimestamps[key] || Date.now()).toISOString()
@@ -659,8 +658,8 @@ let currentSubscribedUserId: string | null = null;
 export const setupRealtimeSync = () => {
   if (!navigator.onLine) return;
   const user = currentUser || getStoredUserCached();
-  if (!user) return;
-  if (realtimeChannel && currentSubscribedUserId === user.id) return;
+  const userId = user?.id || 'public';
+  if (realtimeChannel && currentSubscribedUserId === userId) return;
 
   if (realtimeChannel) {
     try {
@@ -669,8 +668,8 @@ export const setupRealtimeSync = () => {
     realtimeChannel = null;
   }
 
-  currentSubscribedUserId = user.id;
-  const channelName = `user_sync_${user.id}`;
+  currentSubscribedUserId = userId;
+  const channelName = `user_sync_${userId}`;
   
   const originalSetItem = localStorage.setItem;
   const originalRemoveItem = localStorage.removeItem;
@@ -879,13 +878,7 @@ export const pushUnsyncedLocalData = async (forceAll: boolean = false) => {
   try {
     if (!navigator.onLine) return;
     const user = currentUser || getStoredUserCached();
-    if (!user) return;
-
-    // Verify active valid Supabase auth session to avoid 401 Unauthorized / RLS violation
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session || !session.user || session.user.id !== user.id) {
-      return;
-    }
+    const userId = user?.id || null;
 
     const originalGetItem = localStorage.getItem;
     const originalSetItem = localStorage.setItem;
@@ -900,10 +893,9 @@ export const pushUnsyncedLocalData = async (forceAll: boolean = false) => {
     for (const pKey of pendingKeys) {
       if (pKey.startsWith('__DELETE__:')) {
         const actualKey = pKey.replace('__DELETE__:', '');
-        const { error } = await supabase.from('user_backups').delete().match({
-          user_id: user.id,
-          key: actualKey
-        });
+        const query = supabase.from('user_backups').delete().eq('key', actualKey);
+        if (userId) query.eq('user_id', userId);
+        const { error } = await query;
         if (!error) {
           removePendingKey(pKey);
           pendingSet.delete(pKey);
@@ -940,7 +932,7 @@ export const pushUnsyncedLocalData = async (forceAll: boolean = false) => {
       if (value !== null) {
         if (forceAll || pendingSet.has(key) || !ts[key]) {
           rowsToUpsert.push({
-            user_id: user.id,
+            user_id: userId,
             key: key,
             value: value,
             updated_at: nowISO

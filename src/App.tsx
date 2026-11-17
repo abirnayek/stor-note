@@ -912,12 +912,6 @@ function App() {
   };
 
   const handleManualSync = async () => {
-    const hasAuth = !!session?.user || localStorage.getItem('cached_is_authenticated') === 'true';
-    if (!hasAuth) {
-      alert('অনলাইনে সিঙ্ক করার জন্য আপনার অ্যাকাউন্টে (ইমেইল) লগইন থাকা প্রয়োজন। দয়া করে উপরে "প্রবেশ করুন" বাটনে ক্লিক করে আপনার ইমেইল দিয়ে লগইন করুন।');
-      handleLogin();
-      return;
-    }
     setIsSyncing(true);
     try {
       await manualSyncNow();
