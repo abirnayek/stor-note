@@ -8,7 +8,7 @@ import { useHistory } from '../hooks/useHistory';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
-import { getLotStock, getLotPurchaseItems, getAllPurchaseItems, findMatchingStockItem, matchesFish, type LotStockSummary, type LotPurchaseFishItem } from '../utils/stockUtils';
+import { getLotStock, getLotPurchaseItems, getActivePurchaseItems, findMatchingStockItem, matchesFish, type LotStockSummary, type LotPurchaseFishItem } from '../utils/stockUtils';
 import { parseMemoMonthYear, getMemoExactTimestamp, MONTHS, enToBnDigits, bnToEnDigits } from '../utils/dateUtils';
 import { isPurchaseMemoData, type MemoPayment } from '../utils/dueSyncUtils';
 
@@ -542,7 +542,7 @@ const SalesMemoScreen: React.FC<SalesMemoScreenProps> = ({ onNavigate, lotNumber
     if (rawLot && !isNaN(rawLot) && rawLot > 0) {
       return getLotPurchaseItems(rawLot);
     }
-    return getAllPurchaseItems();
+    return getActivePurchaseItems();
   }, [memoState.lotNumberInput, lotNumber, stockVersion]);
 
   const findLotItemForEntry = (entry: FishEntry): LotPurchaseFishItem | null => {

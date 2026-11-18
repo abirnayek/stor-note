@@ -372,7 +372,7 @@ export const getAllActiveSalesMemos = (): ActiveSalesMemo[] => {
   return Array.from(memosMap.values());
 };
 
-const getAvailableLotNumbers = (): number[] => {
+export const getAvailableLotNumbers = (): number[] => {
   const lotNumbersSet = new Set<number>();
   const saved = localStorage.getItem('purchase_lots_list');
   if (saved) {
@@ -758,7 +758,26 @@ export const getLotPurchaseItems = (lotNumber: number | null): LotPurchaseFishIt
 };
 
 /**
- * Combines purchase items across all lots
+ * Retrieves purchase items exclusively from currently active/existing lots.
+ * Used for live sales memo creation and suggestions, so deleted/historical lots never appear.
+ */
+export const getActivePurchaseItems = (): LotPurchaseFishItem[] => {
+  const activeLotNumbers = getAvailableLotNumbers();
+  const items: LotPurchaseFishItem[] = [];
+
+  activeLotNumbers.forEach(lotNum => {
+    if (!isPurchaseLotDeleted(lotNum)) {
+      const lotItems = getLotPurchaseItems(lotNum);
+      items.push(...lotItems);
+    }
+  });
+
+  return items;
+};
+
+/**
+ * Combines purchase items across all lots, including historical archives
+ * for calculating past sales memo profit/loss and cost rates.
  */
 export const getAllPurchaseItems = (): LotPurchaseFishItem[] => {
   const allSummaries = getAllLotsStock();
