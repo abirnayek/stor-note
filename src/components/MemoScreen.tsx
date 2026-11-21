@@ -10,8 +10,8 @@ import { jsPDF } from 'jspdf';
 import CallMenu from './CallMenu';
 import { getLotStock, getFishSalesBreakdown, type LotStockSummary, type FishSalesSummary } from '../utils/stockUtils';
 import { bnToEnDigits, parseMemoMonthYear } from '../utils/dateUtils';
-import { isMemoEmpty, RECOVERED_LOT_2_MEMO } from '../utils/lotRecovery';
-import { isPurchaseLotDeleted, unmarkPurchaseLotDeleted } from '../utils/syncEngine';
+import { isMemoEmpty } from '../utils/lotRecovery';
+import { unmarkPurchaseLotDeleted } from '../utils/syncEngine';
 import { FishSalesModal } from './FishSalesModal';
 
 // Helper to convert date strings to YYYY-MM-DD for native <input type="date">
@@ -105,35 +105,6 @@ const MemoScreen: React.FC<MemoScreenProps> = ({ onNavigate, lotNumber, onBack, 
           }
         } catch(e) {}
       }
-    }
-    if (!saved && lotNumber) {
-      const hist = localStorage.getItem(`historical_purchase_lot_${lotNumber}`) || localStorage.getItem(`historical_purchase_lot_${String(lotNumber).padStart(2, '0')}`);
-      if (hist) saved = hist;
-    }
-    if (!saved && lotNumber) {
-      try {
-        const rawTrash = localStorage.getItem('trash_items');
-        if (rawTrash) {
-          const trashArr: any[] = JSON.parse(rawTrash);
-          const match = trashArr.find(t => 
-            t.id === `lot_${lotNumber}` || 
-            t.id === `purchase_lot_${lotNumber}` || 
-            (t.type === 'purchase_lot' && String(t.data?.lotNumber) === String(lotNumber))
-          );
-          if (match && match.data) {
-            saved = JSON.stringify(match.data);
-          }
-        }
-      } catch (e) {}
-    }
-
-    // Fallback specifically for Lot 2 only if missing and NOT deleted
-    if (lotNumber === 2 && !isPurchaseLotDeleted(2) && (!saved || (() => { try { return isMemoEmpty(JSON.parse(saved!)); } catch(e) { return true; } })())) {
-      return {
-        ...RECOVERED_LOT_2_MEMO,
-        receiverSignature: (RECOVERED_LOT_2_MEMO as any).receiverSignature || '',
-        sellerSignature: (RECOVERED_LOT_2_MEMO as any).sellerSignature || localStorage.getItem('default_seller_signature') || ''
-      } as MemoState;
     }
 
     if (saved) {

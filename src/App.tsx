@@ -30,7 +30,6 @@ import { LotPasswordManager } from './components/LotPasswordManager';
 
 import { restoreFromCloud, setupRealtimeSync, pushUnsyncedLocalData, manualSyncNow, getReadableDeviceName } from './utils/syncEngine';
 import { APP_VERSION, checkAppVersionAndSync } from './utils/versionCheck';
-import { runLotRecovery } from './utils/lotRecovery';
 import { getAllGlobalSalesMemos } from './utils/dueSyncUtils';
 import { getAllLotsStock } from './utils/stockUtils';
 
@@ -191,7 +190,7 @@ function App() {
   const [syncToast, setSyncToast] = useState<string | null>(null);
 
   useEffect(() => {
-    runLotRecovery();
+    // Component mounted
   }, []);
 
   useEffect(() => {
@@ -201,7 +200,6 @@ function App() {
       try {
         await pushUnsyncedLocalData(false);
         await restoreFromCloud();
-        runLotRecovery();
         setupRealtimeSync();
         setSyncToast(language === 'bn' ? 'সব মেমো সফলভাবে ক্লাউডে সিঙ্ক হয়েছে ✓' : 'All memos synced with cloud ✓');
         setTimeout(() => setSyncToast(null), 3500);
@@ -388,7 +386,6 @@ function App() {
           (async () => {
             try {
               await restoreFromCloud();
-              runLotRecovery();
               await pushUnsyncedLocalData(false);
               setupRealtimeSync();
               window.dispatchEvent(new Event('storage'));

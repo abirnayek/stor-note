@@ -4,7 +4,6 @@ import { Plus, ChevronLeft, Package, Calendar, Trash2, Search } from 'lucide-rea
 import { MemoLockIcon, ProtectedMemoWrapper } from './MemoLock';
 import { useLanguage } from '../i18n/LanguageContext';
 import { moveToTrash } from '../utils/trashUtils';
-import { runLotRecovery } from '../utils/lotRecovery';
 import { isPurchaseLotDeleted, markPurchaseLotDeleted, unmarkPurchaseLotDeleted } from '../utils/syncEngine';
 
 interface LotsScreenProps {
@@ -17,7 +16,6 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
   const [lots, setLots] = useState<number[]>([]);
   
   useEffect(() => {
-    runLotRecovery();
     const loadLots = () => {
       const lotNumbersSet = new Set<number>();
       const saved = localStorage.getItem('purchase_lots_list');
@@ -91,6 +89,14 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
     // Revive the lot if it was previously marked as deleted
     unmarkPurchaseLotDeleted(targetLot);
 
+    // If there was an old historical archive or trash for this lot number, clean it up so the new lot starts completely fresh
+    localStorage.removeItem(`historical_purchase_lot_${targetLot}`);
+    localStorage.removeItem(`historical_purchase_lot_${String(targetLot).padStart(2, '0')}`);
+    localStorage.removeItem(`memo_lot_${targetLot}`);
+    localStorage.removeItem(`memo_lot_${String(targetLot).padStart(2, '0')}`);
+    localStorage.removeItem(`due_memo_purchase_lot_${targetLot}`);
+    localStorage.removeItem(`due_memo_purchase_lot_${String(targetLot).padStart(2, '0')}`);
+
     if (!lots.includes(targetLot)) {
       const newLots = [...lots, targetLot].sort((a, b) => a - b);
       setLots(newLots);
@@ -162,36 +168,13 @@ const LotsScreen: React.FC<LotsScreenProps> = ({ onNavigate, onSelectLot, onBack
   const getLotMemoData = (lot: number): string | null => {
     let memoDataStr = localStorage.getItem(`memo_lot_${lot}`) || localStorage.getItem(`memo_lot_${String(lot).padStart(2, '0')}`);
     if (!memoDataStr) {
-      const dueSaved = localStorage.getItem(`due_memo_purchase_lot_${lot}`) || localStorage.getItem(`due_memo_purchase_lot_${String(lot).padStart(2, '0')}`);
-      if (dueSaved) {
+      memoDataStr = localStorage.getItem(`due_memo_purchase_lot_${lot}`) || localStorage.getItem(`due_memo_purchase_lot_${String(lot).padStart(2, '0')}`);
+      if (memoDataStr) {
         try {
-          const parsedDue = JSON.parse(dueSaved);
-          memoDataStr = parsedDue.memoState ? JSON.stringify(parsedDue.memoState) : dueSaved;
+          const parsedDue = JSON.parse(memoDataStr);
+          memoDataStr = parsedDue.memoState ? JSON.stringify(parsedDue.memoState) : memoDataStr;
         } catch(e) {}
       }
-    }
-    if (!memoDataStr) {
-      memoDataStr = localStorage.getItem(`historical_purchase_lot_${lot}`) || localStorage.getItem(`historical_purchase_lot_${String(lot).padStart(2, '0')}`);
-    }
-    if (!memoDataStr) {
-      try {
-        const rawTrash = localStorage.getItem('trash_items');
-        if (rawTrash) {
-          const trashArr: any[] = JSON.parse(rawTrash);
-          const match = trashArr.find(t => 
-            t.id === `lot_${lot}` || 
-            t.id === `purchase_lot_${lot}` || 
-            (t.type === 'purchase_lot' && String(t.data?.lotNumber) === String(lot))
-          );
-          if (match && match.data) {
-            memoDataStr = JSON.stringify(match.data);
-          }
-        }
-      } catch (e) {}
-    }
-    if (!memoDataStr && lot === 2 && !isPurchaseLotDeleted(2)) {
-      runLotRecovery();
-      memoDataStr = localStorage.getItem('memo_lot_2') || localStorage.getItem('memo_lot_02') || localStorage.getItem('due_memo_purchase_lot_2');
     }
     return memoDataStr;
   };
